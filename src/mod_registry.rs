@@ -70,15 +70,6 @@ impl ModRegistry {
         Ok(mod_registry)
     }
 
-    /// Search for mods
-    pub fn search(&self, query: &str) -> Vec<&RemoteModInfo> {
-        info!("Searching remote mod registry for mod: {}", query);
-        self.entries
-            .values()
-            .filter(|mod_info| mod_info.name.to_lowercase().contains(&query.to_lowercase()))
-            .collect()
-    }
-
     /// Get mod information
     pub fn get_mod_info(&self, name: &str) -> Option<&RemoteModInfo> {
         info!("Getting remote mod information for mod: {}", name);

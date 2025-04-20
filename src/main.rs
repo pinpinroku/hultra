@@ -65,39 +65,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
             match &cli.command {
-                Commands::Search(args) => {
-                    println!("Searching for mods matching '{}'...", args.query);
-                    let results = mod_registry.search(&args.query);
-                    if results.is_empty() {
-                        println!("No mods found matching the query: '{}'", args.query);
-                    } else {
-                        println!("Found {} matching mods:", results.len());
-                        for mod_info in results {
-                            println!("\n{} (version {})", mod_info.name, mod_info.version);
-                            println!(" - Updated at: {}", mod_info.updated_at);
-                            println!(
-                                " - Page: https://gamebanana.com/mods/{}",
-                                mod_info.gamebanana_id
-                            );
-                            println!(" - Download: {}", mod_info.download_url);
-                        }
-                    }
-                }
-                Commands::Info(args) => {
-                    println!("Looking up information for the mod '{}'...", args.name);
-                    if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
-                        println!("\n{} (version {})", mod_info.name, mod_info.version);
-                        println!(" - Updated at: {}", mod_info.updated_at);
-                        println!(
-                            " - Page: https://gamebanana.com/mods/{}",
-                            mod_info.gamebanana_id
-                        );
-                        println!(" - Download: {}", mod_info.download_url);
-                        println!(" - Hashes: {}", mod_info.checksums.join(", "));
-                    } else {
-                        println!("Mod '{}' not found", args.name);
-                    }
-                }
                 Commands::Install(args) => {
                     println!("Starting installation of the mod '{}'...", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
