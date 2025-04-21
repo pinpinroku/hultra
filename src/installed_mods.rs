@@ -65,6 +65,11 @@ pub struct LocalModInfo {
 }
 
 impl LocalModInfo {
+    /// Creates a new `LocalModInfo` instance.
+    ///
+    /// # Arguments
+    /// * `archive_path` - Path to the mod's zip archive.
+    /// * `manifest` - Parsed manifest information for the mod.
     pub fn new(archive_path: PathBuf, manifest: ModManifest) -> Self {
         Self {
             archive_path,
@@ -73,6 +78,11 @@ impl LocalModInfo {
         }
     }
 
+    /// Computes and retrieves the checksum of the mod archive.
+    ///
+    /// # Returns
+    /// * `Ok(&str)` - Computed checksum as a string reference.
+    /// * `Err(Error)` - If the file cannot be hashed.
     pub fn checksum(&mut self) -> Result<&str, Error> {
         if self.checksum.is_none() {
             let computed_hash = hash_file(&self.archive_path)?;
@@ -83,7 +93,14 @@ impl LocalModInfo {
     }
 }
 
-/// List installed mods which has valid manifest file
+/// List installed mods with valid manifest files.
+///
+/// # Arguments
+/// * `mods_dir` - Path to the directory containing mod archives.
+///
+/// # Returns
+/// * `Ok(InstalledModList)` - List of installed mods with valid manifests.
+/// * `Err(Error)` - If there are issues reading the files or parsing the manifests.
 pub fn list_installed_mods(mods_dir: &Path) -> Result<InstalledModList, Error> {
     let archive_paths = find_installed_mod_archives(mods_dir)?;
     let mut installed_mods = Vec::with_capacity(archive_paths.len());
@@ -135,13 +152,20 @@ pub struct AvailableUpdateInfo {
     pub existing_path: PathBuf,
 }
 
-/// Check available updates for all installed mods
+/// Check available updates for all installed mods.
+///
+/// # Arguments
+/// * `mods_dir` - Path to the directory containing installed mods.
+/// * `mod_registry` - Registry containing remote mod information.
+///
+/// # Returns
+/// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
+/// * `Err(Error)` - If there are issues fetching or computing update information.
 pub fn check_updates(
     mods_dir: &Path,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
     let installed_mods = list_installed_mods(mods_dir)?;
-    // update_mod_hashes(&mut installed_mods);
 
     let mut available_updates = Vec::new();
     for mut local_mod in installed_mods {
