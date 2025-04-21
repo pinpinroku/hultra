@@ -54,9 +54,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Checking installed mod information...");
             let installed_mods = list_installed_mods(&mods_dir)?;
             if let Some(mod_info) = installed_mods.iter().find(|m| m.manifest.name == args.name) {
-                println!("Mod Information:");
+                println!("\nMod Information:");
                 println!("- Name: {}", mod_info.manifest.name);
                 println!("- Version: {}", mod_info.manifest.version);
+                if let Some(deps) = &mod_info.manifest.dependencies {
+                    println!("  Dependencies:");
+                    for dep in deps {
+                        if let Some(ver) = &dep.version {
+                            println!("  - Name: {}", dep.name);
+                            println!("  - Version: {}", ver);
+                        } else {
+                            println!("  - {}", dep.name);
+                        }
+                    }
+                }
+                if let Some(opt_deps) = &mod_info.manifest.optional_dependencies {
+                    println!("  OptionalDependencies:");
+                    for dep in opt_deps {
+                        if let Some(ver) = &dep.version {
+                            println!("  - Name: {}", dep.name);
+                            println!("  - Version: {}", ver);
+                        } else {
+                            println!("  - {}", dep.name);
+                        }
+                    }
+                }
             } else {
                 println!("The mod '{}' is not currently installed.", args.name);
             }
