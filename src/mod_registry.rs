@@ -43,9 +43,11 @@ impl RemoteModInfo {
     /// # Returns
     ///
     /// Returns `true` if the hash matches any of the checksums, otherwise `false`.
-    pub fn has_matching_hash(&self, computed_hash: &String) -> bool {
+    pub fn has_matching_hash(&self, computed_hash: &str) -> bool {
         // Check if the computed hash exists in the list of expected checksums
-        self.checksums.contains(computed_hash)
+        self.checksums
+            .iter()
+            .any(|checksum| checksum == computed_hash)
     }
 }
 

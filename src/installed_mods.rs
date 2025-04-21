@@ -61,7 +61,7 @@ pub struct LocalModInfo {
     pub manifest: ModManifest,
     /// Computed XXH64 hash of the mod archive for update verification
     #[serde(rename = "xxHash")]
-    pub checksum: Option<String>,
+    checksum: Option<String>,
 }
 
 impl LocalModInfo {
@@ -72,14 +72,14 @@ impl LocalModInfo {
             checksum: None,
         }
     }
-}
 
-pub fn update_mod_hashes(installed_mods: &mut [LocalModInfo]) {
-    for mod_info in installed_mods.iter_mut() {
-        // Compute the hash for the mod archive file.
-        if let Ok(hash) = hash_file(&mod_info.archive_path) {
-            mod_info.checksum = Some(hash);
+    pub fn checksum(&mut self) -> Result<&str, Error> {
+        if self.checksum.is_none() {
+            let computed_hash = hash_file(&self.archive_path)?;
+            self.checksum = Some(computed_hash);
         }
+        // unwrap is fine here
+        Ok(self.checksum.as_deref().unwrap())
     }
 }
 
@@ -140,14 +140,14 @@ pub fn check_updates(
     mods_dir: &Path,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    let mut installed_mods = list_installed_mods(mods_dir)?;
-    // Compute file hashes
-    update_mod_hashes(&mut installed_mods);
+    let installed_mods = list_installed_mods(mods_dir)?;
+    // update_mod_hashes(&mut installed_mods);
 
     let mut available_updates = Vec::new();
-    for local_mod in installed_mods {
+    for mut local_mod in installed_mods {
         if let Some(remote_mod) = mod_registry.get_mod_info(&local_mod.manifest.name) {
-            if let Some(computed_hash) = &local_mod.checksum {
+            // Compute hash on demand
+            if let Ok(computed_hash) = local_mod.checksum() {
                 if remote_mod.has_matching_hash(computed_hash) {
                     continue; // No update avilable
                 };
