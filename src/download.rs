@@ -47,7 +47,7 @@ impl ModDownloader {
         info!("Status code: {}", response.status().as_u16());
 
         let filename = util::determine_filename(&response)?;
-        let download_path = self.download_dir.join(format!("{}.zip", filename));
+        let download_path = self.download_dir.join(filename);
         info!("Destination: {}", download_path.display());
 
         let total_size = response.content_length().unwrap_or(0);
