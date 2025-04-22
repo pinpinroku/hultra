@@ -126,7 +126,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Commands::Install(args) => {
                     println!("Starting installation of the mod '{}'", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
-                        println!("Downloading mod files...");
                         downloader
                             .download_mod(
                                 &mod_info.download_url,
