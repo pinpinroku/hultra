@@ -124,6 +124,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 Commands::Install(args) => {
+                    let installed_mods = list_installed_mods(&mods_dir)?;
+                    if installed_mods
+                        .iter()
+                        .any(|mod_info| mod_info.manifest.name == args.name)
+                    {
+                        println!("You have already installed the mod {}", args.name);
+                        return Ok(());
+                    };
                     println!("Starting installation of the mod '{}'", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
                         downloader
