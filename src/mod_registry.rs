@@ -62,9 +62,10 @@ impl ModRegistry {
         let mut mod_registry: Self = serde_yaml_ng::from_slice(&data)?;
 
         // Set the name field for each ModInfo
-        for (key, mod_info) in mod_registry.entries.iter_mut() {
-            mod_info.name = key.clone();
-        }
+        mod_registry
+            .entries
+            .iter_mut()
+            .for_each(|(key, mod_info)| mod_info.name = key.clone());
 
         Ok(mod_registry)
     }
@@ -72,9 +73,11 @@ impl ModRegistry {
     /// Search for mods
     pub fn search(&self, query: &str) -> Vec<&RemoteModInfo> {
         info!("Searching remote mod registry for the mod: {}", query);
+        let query = query.to_lowercase();
         self.entries
-            .values()
-            .filter(|mod_info| mod_info.name.to_lowercase().contains(&query.to_lowercase()))
+            .iter()
+            .filter(|(_, mod_info)| mod_info.name.to_lowercase().contains(&query))
+            .map(|(_, mod_info)| mod_info)
             .collect()
     }
 
