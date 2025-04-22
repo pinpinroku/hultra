@@ -1,6 +1,6 @@
 [package]
 name = "everest-mod-cli"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2024"
 description = "A simple cli tool to manage mods for Celeste."
 authors = ["pinpinroku <pinpinroku11600@tutanota.com>"]
