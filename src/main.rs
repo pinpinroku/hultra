@@ -83,13 +83,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // For remaining commands, fetch the remote mod registry
-        _ => {
+        // Handle the Install command: Check if the mod is already installed locally. If not, fetch the mod registry.
+        Commands::Install(args) => {
+            let installed_mods = list_installed_mods(&mods_dir)?;
+
+            // Check if the mod is already installed
+            if installed_mods
+                .iter()
+                .any(|mod_info| mod_info.manifest.name == args.name)
+            {
+                println!("You already have '{}' installed.", args.name);
+                return Ok(());
+            }
+
+            // Fetch the remote mod registry since the mod is not installed.
             let downloader = ModDownloader::new(&mods_dir);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
-            match &cli.command {
+            println!("Starting installation of the mod '{}'", args.name);
+            if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
+                downloader
+                    .download_mod(&mod_info.download_url, &mod_info.name, &mod_info.checksums)
+                    .await?;
+                println!("Installation finished successfully!");
+            } else {
+                println!("The mod '{}' could not be found.", args.name);
+            }
+        }
+
+        // Fetch the mod registry for the Search, Info, and Update commands.
+        cmd @ (Commands::Search(_) | Commands::Info(_) | Commands::Update(_)) => {
+            let downloader = ModDownloader::new(&mods_dir);
+            let mod_registry_data = downloader.fetch_mod_registry().await?;
+            let mod_registry = ModRegistry::from(mod_registry_data).await?;
+
+            match cmd {
                 Commands::Search(args) => {
                     println!("Searching for mods matching '{}'", args.query);
                     let results = mod_registry.search(&args.query);
@@ -108,6 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
+
                 Commands::Info(args) => {
                     println!("Looking up information for the mod '{}'", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
@@ -123,21 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("Mod '{}' not found", args.name);
                     }
                 }
-                Commands::Install(args) => {
-                    println!("Starting installation of the mod '{}'", args.name);
-                    if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
-                        downloader
-                            .download_mod(
-                                &mod_info.download_url,
-                                &mod_info.name,
-                                &mod_info.checksums,
-                            )
-                            .await?;
-                        println!("Installation finished successfully!");
-                    } else {
-                        println!("The mod '{}' could not be found.", args.name);
-                    }
-                }
+
                 Commands::Update(args) => {
                     println!("Checking mod updates...");
                     let available_updates = check_updates(&mods_dir, &mod_registry)?;
@@ -165,7 +181,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     match result {
                                         Ok(_) => {
                                             println!(
-                                                "[Successs] Updated {} to version {}\n",
+                                                "[Success] Updated {} to version {}\n",
                                                 update.name, update.available_version
                                             );
                                             if update.existing_path.exists() {
@@ -202,8 +218,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
-                // Catch-all arm (should not be reached because all subcommands are handled)
                 _ => {
+                    // Default case: Should not be reached as all subcommands are explicitly handled.
                     println!("Use --help to see available commands");
                 }
             }
