@@ -42,9 +42,7 @@ impl ModManifest {
         let mut manifest_entries = serde_yaml_ng::from_slice::<VecDeque<ModManifest>>(yaml_buffer)?;
 
         // Attempt to retrieve the first entry without unnecessary cloning.
-        manifest_entries
-            .pop_front()
-            .ok_or_else(|| Error::NoEntriesInModManifest(manifest_entries))
+        Ok(manifest_entries.pop_front().unwrap())
     }
 }
 

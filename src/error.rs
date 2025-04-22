@@ -1,8 +1,6 @@
-use std::{collections::VecDeque, path::PathBuf};
+use std::path::PathBuf;
 
 use thiserror::Error;
-
-use crate::installed_mods::ModManifest;
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -12,7 +10,8 @@ pub enum Error {
     Zip(#[from] zip::result::ZipError),
     #[error(transparent)]
     Yaml(#[from] serde_yaml_ng::Error),
-
+    #[error(transparent)]
+    Request(#[from] reqwest::Error),
     #[error(
         "Could not determine home directory location!\
         Please specify the mods directory using --mods-dir"
@@ -24,11 +23,6 @@ pub enum Error {
     )]
     MissingModsDirectory,
     #[error(
-        "CRITICAL BUG!! NEVER GONNA HAPPEN!!\
-        SINCE PARSING SUCCEEDED!!\n{0:#?}"
-    )]
-    NoEntriesInModManifest(VecDeque<ModManifest>), // FIXME: Needless error
-    #[error(
         "Checksum verification failed for '{file}':\
         computed checksum '{computed}' does not match\
         expected checksums {expected:#?}"
@@ -38,8 +32,6 @@ pub enum Error {
         computed: String,
         expected: Vec<String>,
     },
-    #[error(transparent)]
-    Request(#[from] reqwest::Error),
     #[error("The file is not hashed. It seems the developer made mistake.")]
     FileIsNotHashed,
 }
