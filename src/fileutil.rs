@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 use std::{
+    collections::HashSet,
     env::home_dir,
     fs::{self, File},
     io::{BufRead, BufReader, Read},
@@ -84,19 +85,15 @@ pub fn hash_file(file_path: &Path) -> Result<String, Error> {
     Ok(hash_str)
 }
 
-/// Reads the updater blacklist file from the specified mods directory and returns a list of archive file names.
-///
-/// The file "updaterblacklist.txt" should be located inside the `mods_directory`. Lines starting
-/// with a `#` (comments) or blank lines are ignored. Each valid non-comment, non-empty line is
-/// assumed to be the name of an archive file and is returned in the resulting vector.
+/// Reads the updater blacklist file from the specified mods directory and returns a list of archive file paths.
 ///
 /// # Arguments
 /// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored.
 ///
 /// # Returns
-/// * `Ok(Vec<String>)` - A vector containing the archive file names if the file was read successfully.
+/// * `Ok(HashSet<PathBuf>)` - A HashSet containing the archive file paths if the file was read successfully.
 /// * `Err(io::Error)` - An error if there was an issue reading the file.
-pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Vec<String>, Error> {
+pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>, Error> {
     let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
     let file = File::open(path)?;
     let reader = BufReader::new(file);
@@ -110,7 +107,13 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Vec<String>, Erro
         }
     }
 
-    Ok(filenames)
+    // Convert blacklist entries to full paths and store in HashSet for O(1) lookups
+    let blacklisted_paths: HashSet<PathBuf> = filenames
+        .into_iter()
+        .map(|filename| mods_directory.join(filename))
+        .collect();
+
+    Ok(blacklisted_paths)
 }
 
 #[cfg(test)]

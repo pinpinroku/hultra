@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     path::{Path, PathBuf},
 };
 use tracing::{info, warn};
@@ -95,13 +95,13 @@ impl LocalModInfo {
 /// List installed mods with valid manifest files.
 ///
 /// # Arguments
-/// * `mods_dir` - Path to the directory containing mod archives.
+/// * `mods_directory` - Path to the directory containing mod archives.
 ///
 /// # Returns
 /// * `Ok(InstalledModList)` - List of installed mods with valid manifests.
 /// * `Err(Error)` - If there are issues reading the files or parsing the manifests.
-pub fn list_installed_mods(mods_dir: &Path) -> Result<InstalledModList, Error> {
-    let archive_paths = find_installed_mod_archives(mods_dir)?;
+pub fn list_installed_mods(mods_directory: &Path) -> Result<InstalledModList, Error> {
+    let archive_paths = find_installed_mod_archives(mods_directory)?;
     let mut installed_mods = Vec::with_capacity(archive_paths.len());
 
     for archive_path in archive_paths {
@@ -154,18 +154,20 @@ pub struct AvailableUpdateInfo {
 /// Check available updates for all installed mods.
 ///
 /// # Arguments
-/// * `mods_dir` - Path to the directory containing installed mods.
+/// * `mods_directory` - Path to the directory containing installed mods.
 /// * `mod_registry` - Registry containing remote mod information.
 ///
 /// # Returns
 /// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
 /// * `Err(Error)` - If there are issues fetching or computing update information.
 pub fn check_updates(
-    mods_dir: &Path,
+    mods_directory: &Path,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    let mut installed_mods = list_installed_mods(mods_dir)?;
-    remove_blacklisted_mods(&mut installed_mods, mods_dir)?;
+    let mut installed_mods = list_installed_mods(mods_directory)?;
+
+    let blacklist = read_updater_blacklist(mods_directory)?;
+    remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
 
     let mut available_updates = Vec::new();
     for mut local_mod in installed_mods {
@@ -197,27 +199,20 @@ pub fn check_updates(
 ///
 /// # Arguments
 /// * `installed_mods` - A mutable reference to a vector of installed mods
-/// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored and mods are located
+/// * `blacklist` - A reference to the `HashSet` which stored full path of the blacklisted files
 ///
 /// # Returns
 /// * `Result<(), Error>` - Result indicating success or error during blacklist processing
 fn remove_blacklisted_mods(
     installed_mods: &mut Vec<LocalModInfo>,
-    mods_directory: &Path,
+    blacklist: &HashSet<PathBuf>,
 ) -> Result<(), Error> {
-    let blacklist = read_updater_blacklist(mods_directory)?;
     if blacklist.is_empty() {
         return Ok(());
     }
 
-    // Convert blacklist entries to full paths and store in HashSet for O(1) lookups
-    let blacklisted_paths: std::collections::HashSet<PathBuf> = blacklist
-        .into_iter()
-        .map(|filename| mods_directory.join(filename))
-        .collect();
-
     // Remove mods whose archive_path matches any blacklisted path
-    installed_mods.retain(|mod_info| !blacklisted_paths.contains(&mod_info.archive_path));
+    installed_mods.retain(|mod_info| !blacklist.contains(&mod_info.archive_path));
 
     Ok(())
 }
