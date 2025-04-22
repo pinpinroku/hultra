@@ -1,8 +1,9 @@
 #![allow(deprecated)]
 use std::{
+    collections::HashSet,
     env::home_dir,
     fs::{self, File},
-    io::{BufReader, Read},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -10,7 +11,7 @@ use tracing::info;
 use xxhash_rust::xxh64::Xxh64;
 use zip::{ZipArchive, result::ZipError};
 
-use crate::constant::{MOD_MANIFEST_FILE, STEAM_MODS_DIRECTORY_PATH};
+use crate::constant::{MOD_MANIFEST_FILE, STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE};
 use crate::error::Error;
 
 /// Returns the path to the user's mods directory based on platform-specific conventions
@@ -82,6 +83,37 @@ pub fn hash_file(file_path: &Path) -> Result<String, Error> {
     }
     let hash_str = format!("{:016x}", hasher.digest());
     Ok(hash_str)
+}
+
+/// Reads the updater blacklist file from the specified mods directory and returns a list of archive file paths.
+///
+/// # Arguments
+/// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored.
+///
+/// # Returns
+/// * `Ok(HashSet<PathBuf>)` - A HashSet containing the archive file paths if the file was read successfully.
+/// * `Err(io::Error)` - An error if there was an issue reading the file.
+pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>, Error> {
+    let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+
+    let mut filenames = Vec::new();
+    for line_result in reader.lines() {
+        let line = line_result?; // Propagate any error.
+        let trimmed = line.trim();
+        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            filenames.push(trimmed.to_string());
+        }
+    }
+
+    // Convert blacklist entries to full paths and store in HashSet for O(1) lookups
+    let blacklisted_paths: HashSet<PathBuf> = filenames
+        .into_iter()
+        .map(|filename| mods_directory.join(filename))
+        .collect();
+
+    Ok(blacklisted_paths)
 }
 
 #[cfg(test)]
