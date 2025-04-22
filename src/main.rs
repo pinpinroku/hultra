@@ -83,8 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // For Install command: first check if the mod is installed locally, and only then
-        // proceed to fetch the mod registry
+        // Handle the Install command: Check if the mod is already installed locally. If not, fetch the mod registry.
         Commands::Install(args) => {
             let installed_mods = list_installed_mods(&mods_dir)?;
 
@@ -97,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
 
-            // Since it's not installed, fetch the remote mod registry
+            // Fetch the remote mod registry since the mod is not installed.
             let downloader = ModDownloader::new(&mods_dir);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
@@ -113,7 +112,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // Fetch mod registry for Search, Info and Update commands
+        // Fetch the mod registry for the Search, Info, and Update commands.
         cmd @ (Commands::Search(_) | Commands::Info(_) | Commands::Update(_)) => {
             let downloader = ModDownloader::new(&mods_dir);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
@@ -138,6 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
                 }
+
                 Commands::Info(args) => {
                     println!("Looking up information for the mod '{}'", args.name);
                     if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
@@ -153,6 +153,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!("Mod '{}' not found", args.name);
                     }
                 }
+
                 Commands::Update(args) => {
                     println!("Checking mod updates...");
                     let available_updates = check_updates(&mods_dir, &mod_registry)?;
@@ -218,6 +219,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 _ => {
+                    // Default case: Should not be reached as all subcommands are explicitly handled.
                     println!("Use --help to see available commands");
                 }
             }
