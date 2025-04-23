@@ -149,10 +149,8 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
     use std::io::Write;
-    use std::path::Path;
-    use tempfile::NamedTempFile;
+    use tempfile::{tempdir, NamedTempFile};
     use zip::write::{SimpleFileOptions, ZipWriter};
 
     const MOD_MANIFEST_FILE: &str = "everest.yaml";
@@ -173,6 +171,86 @@ mod tests {
         temp_file
     }
 
+    #[test]
+    fn test_get_mods_directory_success() {
+        let mods_dir = get_mods_directory();
+        assert!(mods_dir.is_ok());
+        let path = mods_dir.unwrap();
+        assert!(path.ends_with(STEAM_MODS_DIRECTORY_PATH));
+    }
+
+    #[test]
+    fn test_find_installed_mod_archives_success() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test.zip");
+        File::create(&file_path).unwrap();
+
+        let result = find_installed_mod_archives(temp_dir.path());
+
+        assert!(result.is_ok());
+        let archives = result.unwrap();
+        assert_eq!(archives.len(), 1);
+        assert_eq!(archives[0], file_path);
+    }
+
+    #[test]
+    fn test_find_installed_mod_archives_missing_directory() {
+        let nonexistent_path = Path::new("nonexistent_directory");
+
+        let result = find_installed_mod_archives(nonexistent_path);
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::MissingModsDirectory));
+    }
+
+    #[test]
+    fn test_hash_file_success() {
+        let temp_file = NamedTempFile::new().unwrap();
+        write!(temp_file.as_file(), "test data").unwrap();
+
+        let result = hash_file(temp_file.path());
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 16); // Should return a valid 16-character hash
+    }
+
+    #[test]
+    fn test_hash_file_nonexistent() {
+        let nonexistent_path = Path::new("nonexistent_file");
+
+        let result = hash_file(nonexistent_path);
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::Io(_)));
+    }
+
+    #[test]
+    fn test_read_updater_blacklist_success() {
+        let temp_dir = tempdir().unwrap();
+        let blacklist_file = temp_dir.path().join(UPDATER_BLACKLIST_FILE);
+
+        let mut file = File::create(&blacklist_file).unwrap();
+        writeln!(file, "blacklisted_mod_1.zip").unwrap();
+        writeln!(file, "blacklisted_mod_2.zip").unwrap();
+
+        let result = read_updater_blacklist(temp_dir.path());
+
+        assert!(result.is_ok());
+        let blacklist = result.unwrap();
+        assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_1.zip")));
+        assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_2.zip")));
+    }
+
+    #[test]
+    fn test_read_updater_blacklist_missing() {
+        let temp_dir = tempdir().unwrap();
+
+        let result = read_updater_blacklist(temp_dir.path());
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), Error::Io(_)));
+    }
+    
     #[test]
     fn test_read_manifest_file_success() {
         let content = b"test manifest content".to_vec();

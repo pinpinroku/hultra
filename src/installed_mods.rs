@@ -216,3 +216,83 @@ fn remove_blacklisted_mods(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod test_helpers {
+    use std::io::Write;
+
+    use super::*;
+    use tempfile::tempdir;
+
+    pub fn generate_test_mod_manifest(name: &str, version: &str) -> ModManifest {
+        ModManifest {
+            name: name.to_string(),
+            version: version.to_string(),
+            dll: None,
+            dependencies: None,
+            optional_dependencies: None,
+        }
+    }
+
+    pub fn create_test_mod_archive(mods_dir: &Path, manifest: &ModManifest) -> PathBuf {
+        let archive_path = mods_dir.join(format!("{}.zip", manifest.name));
+        let file = std::fs::File::create(&archive_path).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+
+        // Serialize the manifest to YAML as a sequence
+        let manifest_yaml = serde_yaml_ng::to_string(&vec![manifest]).unwrap();
+
+        zip.start_file("everest.yaml", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(manifest_yaml.as_bytes()).unwrap();
+        zip.finish().unwrap();
+
+        archive_path
+    }
+
+    #[test]
+    fn test_parse_mod_manifest_from_yaml() {
+        let yaml = r#"
+        - Name: TestMod
+          Version: "1.0.0"
+        "#;
+
+        let result = ModManifest::parse_mod_manifest_from_yaml(yaml.as_bytes());
+        assert!(result.is_ok());
+        let manifest = result.unwrap();
+
+        assert_eq!(manifest.name, "TestMod");
+        assert_eq!(manifest.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_list_installed_mods() {
+        let temp_dir = tempdir().unwrap();
+        let mods_dir = temp_dir.path();
+        let manifest = generate_test_mod_manifest("TestMod", "1.0.0");
+        create_test_mod_archive(mods_dir, &manifest);
+
+        let result = list_installed_mods(mods_dir);
+        assert!(result.is_ok());
+
+        let installed_mods = result.unwrap();
+        assert_eq!(installed_mods.len(), 1);
+        assert_eq!(installed_mods[0].manifest.name, "TestMod");
+    }
+
+    #[test]
+    fn test_remove_blacklisted_mods() {
+        let temp_dir = tempdir().unwrap();
+        let mods_dir = temp_dir.path();
+
+        let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
+        let archive_path = create_test_mod_archive(mods_dir, &manifest);
+
+        let mut installed_mods = vec![LocalModInfo::new(archive_path.clone(), manifest)];
+        let blacklist: HashSet<PathBuf> = vec![archive_path].into_iter().collect();
+
+        let result = remove_blacklisted_mods(&mut installed_mods, &blacklist);
+        assert!(result.is_ok());
+        assert!(installed_mods.is_empty());
+    }
+}
