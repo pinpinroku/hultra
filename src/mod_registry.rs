@@ -70,17 +70,6 @@ impl ModRegistry {
         Ok(mod_registry)
     }
 
-    /// Search for mods
-    pub fn search(&self, query: &str) -> Vec<&RemoteModInfo> {
-        info!("Searching remote mod registry for the mod: {}", query);
-        let query = query.to_lowercase();
-        self.entries
-            .iter()
-            .filter(|(_, mod_info)| mod_info.name.to_lowercase().contains(&query))
-            .map(|(_, mod_info)| mod_info)
-            .collect()
-    }
-
     /// Get mod information
     pub fn get_mod_info(&self, name: &str) -> Option<&RemoteModInfo> {
         info!("Getting remote mod information for the mod: {}", name);

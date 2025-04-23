@@ -112,115 +112,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // Fetch the mod registry for the Search, Info, and Update commands.
-        cmd @ (Commands::Search(_) | Commands::Info(_) | Commands::Update(_)) => {
+        Commands::Update(args) => {
             let downloader = ModDownloader::new(&mods_dir);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
-            match cmd {
-                Commands::Search(args) => {
-                    println!("Searching for mods matching '{}'", args.query);
-                    let results = mod_registry.search(&args.query);
-                    if results.is_empty() {
-                        println!("No mods found matching the query: '{}'", args.query);
-                    } else {
-                        println!("Found {} matching mods:", results.len());
-                        for mod_info in results {
-                            println!("\n{} (version {})", mod_info.name, mod_info.version);
-                            println!(" - Updated at: {}", mod_info.updated_at);
-                            println!(
-                                " - Page: https://gamebanana.com/mods/{}",
-                                mod_info.gamebanana_id
-                            );
-                            println!(" - Download: {}", mod_info.download_url);
-                        }
-                    }
+            println!("Checking mod updates...");
+            let available_updates = check_updates(&mods_dir, &mod_registry)?;
+            if available_updates.is_empty() {
+                println!("All mods are up to date!");
+            } else {
+                println!("Available updates:");
+                for update_info in &available_updates {
+                    println!("\n{}", update_info.name);
+                    println!(" - Current version: {}", update_info.current_version);
+                    println!(" - Available version: {}", update_info.available_version);
                 }
+                if args.install {
+                    println!("\nInstalling updates...");
+                    let mut handles = Vec::new();
 
-                Commands::Info(args) => {
-                    println!("Looking up information for the mod '{}'", args.name);
-                    if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
-                        println!("\n{} (version {})", mod_info.name, mod_info.version);
-                        println!(" - Updated at: {}", mod_info.updated_at);
-                        println!(
-                            " - Page: https://gamebanana.com/mods/{}",
-                            mod_info.gamebanana_id
-                        );
-                        println!(" - Download: {}", mod_info.download_url);
-                        println!(" - Hashes: {}", mod_info.checksums.join(", "));
-                    } else {
-                        println!("Mod '{}' not found", args.name);
-                    }
-                }
+                    for update in available_updates {
+                        let downloader = downloader.clone();
 
-                Commands::Update(args) => {
-                    println!("Checking mod updates...");
-                    let available_updates = check_updates(&mods_dir, &mod_registry)?;
-                    if available_updates.is_empty() {
-                        println!("All mods are up to date!");
-                    } else {
-                        println!("Available updates:");
-                        for update_info in &available_updates {
-                            println!("\n{}", update_info.name);
-                            println!(" - Current version: {}", update_info.current_version);
-                            println!(" - Available version: {}", update_info.available_version);
-                        }
-                        if args.install {
-                            println!("\nInstalling updates...");
-                            let mut handles = Vec::new();
+                        let handle = tokio::spawn(async move {
+                            let result = downloader
+                                .download_mod(&update.url, &update.name, &update.hash)
+                                .await;
 
-                            for update in available_updates {
-                                let downloader = downloader.clone();
-
-                                let handle = tokio::spawn(async move {
-                                    let result = downloader
-                                        .download_mod(&update.url, &update.name, &update.hash)
-                                        .await;
-
-                                    match result {
-                                        Ok(_) => {
-                                            println!(
-                                                "[Success] Updated {} to version {}\n",
-                                                update.name, update.available_version
-                                            );
-                                            if update.existing_path.exists() {
-                                                if let Err(e) =
-                                                    tokio::fs::remove_file(&update.existing_path)
-                                                        .await
-                                                {
-                                                    eprintln!(
-                                                        "Failed to remove outdated file: {}.\nPlease remove it manually. File path: {}",
-                                                        e,
-                                                        update.existing_path.display()
-                                                    );
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
+                            match result {
+                                Ok(_) => {
+                                    println!(
+                                        "[Success] Updated {} to version {}\n",
+                                        update.name, update.available_version
+                                    );
+                                    if update.existing_path.exists() {
+                                        if let Err(e) =
+                                            tokio::fs::remove_file(&update.existing_path).await
+                                        {
                                             eprintln!(
-                                                "[Error] Failed to update {}: {}",
-                                                update.name, e
+                                                "Failed to remove outdated file: {}.\nPlease remove it manually. File path: {}",
+                                                e,
+                                                update.existing_path.display()
                                             );
                                         }
                                     }
-                                });
-                                handles.push(handle);
+                                }
+                                Err(e) => {
+                                    eprintln!("[Error] Failed to update {}: {}", update.name, e);
+                                }
                             }
-
-                            for handle in handles {
-                                handle.await?;
-                            }
-
-                            println!("\nAll updates installed successfully!");
-                        } else {
-                            println!("\nRun with --install to install these updates");
-                        }
+                        });
+                        handles.push(handle);
                     }
-                }
-                _ => {
-                    // Default case: Should not be reached as all subcommands are explicitly handled.
-                    println!("Use --help to see available commands");
+
+                    for handle in handles {
+                        handle.await?;
+                    }
+
+                    println!("\nAll updates installed successfully!");
+                } else {
+                    println!("\nRun with --install to install these updates");
                 }
             }
         }

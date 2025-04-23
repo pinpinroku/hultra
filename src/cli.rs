@@ -15,10 +15,6 @@ pub struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Search for mods
-    Search(SearchArgs),
-    /// Show mod information from the remote mod registry
-    Info(InfoArgs),
     /// Install a mod
     Install(InstallArgs),
     /// List installed mods
@@ -27,18 +23,6 @@ pub enum Commands {
     Show(ShowArgs),
     /// Check for updates
     Update(UpdateArgs),
-}
-
-#[derive(Debug, Args)]
-pub struct SearchArgs {
-    /// Search query
-    pub query: String,
-}
-
-#[derive(Debug, Args)]
-pub struct InfoArgs {
-    /// Mod name
-    pub name: String,
 }
 
 #[derive(Debug, Args)]

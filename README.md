@@ -13,8 +13,6 @@ This project currently targets **Linux** installation. The **Flatpak** version i
 - [Usage](#usage)
   - [list](#list)
   - [show](#show)
-  - [search](#search-query)
-  - [info](#info-mod_name)
   - [install](#install-mod_name)
   - [update](#update)
 - [Motivation](#motivation)
@@ -24,11 +22,9 @@ This project currently targets **Linux** installation. The **Flatpak** version i
 
 ## Features
 
-- **Seamless Mod Installation and Management**: Easily install and manage mods directly from the terminal.
+- **Seamless Mod Management**: Easily manage mods directly from the terminal.
 - **Install Mods by Name**: No need for Olympus or a web browser—just type the mod name to install.
 - **Comprehensive Mod Listing**: View all installed mods along with their names and versions at a glance.
-- **Quick Mod Search**: Effortlessly find mods in the Everest online database without the hassle of navigating a browser.
-- **Detailed Mod Information**: Access in-depth details about specific mods, perfect for manual downloads using external tools like `wget` or `aria2c`.
 - **Installed Mod Details**: Easily check the dependencies of your installed mods for better management.
 - **Automatic Update Checks**: Stay up-to-date with available updates for your installed mods, which can be installed automatically while you play—running in the background!
 - **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience. 
@@ -99,45 +95,6 @@ everest-mod-cli show "Iceline_silentriver"
 #  - Everest v1.4.0.0
 #  - SkinModHelper v0.6.1
 #  - IcelineLoadingAnim v1.0.0
-```
-
-### `search <query>`
-
-Search for mods in the online database using a search query.
-```bash
-everest-mod-cli search "shrimp"
-# Searching for mods matching 'shrimp'...
-# Found 8 matching mods:
-# 
-# ShrimpGlider (version 1.0.0)
-#  - Updated at: 1680913152
-#  - Page: https://gamebanana.com/mods/436804
-#  - Download: https://gamebanana.com/mmdl/962758
-# 
-# Shrimptember2nd (version 1.0.0)
-#  - Updated at: 1730077291
-#  - Page: https://gamebanana.com/mods/521722
-#  - Download: https://gamebanana.com/mmdl/1309084
-# 
-# ShrimpHelper (version 1.2.3)
-#  - Updated at: 1743778527
-#  - Page: https://gamebanana.com/mods/435408
-#  - Download: https://gamebanana.com/mmdl/1414732
-# ...
-```
-
-### `info <mod_name>`
-
-Display detailed information about a specific mod.
-```bash
-everest-mod-cli info "zbs_Crystal"
-# Looking up information for the mod 'zbs_Crystal'...
-# 
-# zbs_Crystal (version 1.2.8)
-#  - Updated at: 1735987004
-#  - Page: https://gamebanana.com/mods/468140
-#  - Download: https://gamebanana.com/mmdl/1356216
-#  - Hashes: c122676ef89c310d
 ```
 
 ### `install <mod_name>`
