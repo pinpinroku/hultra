@@ -91,3 +91,64 @@ impl ModRegistry {
         self.entries.get(name)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    /// Generates a `RemoteModInfo` instance with default or specified values.
+    pub fn generate_remote_mod_info(
+        name: &str,
+        version: &str,
+        checksums: Vec<String>,
+    ) -> RemoteModInfo {
+        RemoteModInfo {
+            name: name.to_string(),
+            version: version.to_string(),
+            file_size: 1024,
+            updated_at: 1234567890,
+            download_url: "https://gamebanana.com/mmdl/123456".to_string(),
+            checksums,
+            gamebanana_type: "Tool".to_string(),
+            gamebanana_id: 123,
+        }
+    }
+
+    /// Generates a `ModRegistry` instance with default or specified mod entries.
+    pub fn generate_mod_registry(entries: Vec<(&str, RemoteModInfo)>) -> ModRegistry {
+        let mut registry_entries = HashMap::new();
+        for (name, mod_info) in entries {
+            registry_entries.insert(name.to_string(), mod_info);
+        }
+        ModRegistry {
+            entries: registry_entries,
+        }
+    }
+
+    #[test]
+    fn test_remote_mod_info_has_matching_hash() {
+        let mod_info = generate_remote_mod_info(
+            "Test Mod",
+            "1.0.0",
+            vec![String::from("abcd1234"), String::from("efgh5678")],
+        );
+
+        assert!(mod_info.has_matching_hash("abcd1234"));
+        assert!(!mod_info.has_matching_hash("xyz9876"));
+    }
+
+    #[test]
+    fn test_mod_registry_get_mod_info() {
+        let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
+        let mod2 = generate_remote_mod_info("Mod2", "2.0.0", vec![String::from("hash2")]);
+        let registry = generate_mod_registry(vec![("Mod1", mod1.clone()), ("Mod2", mod2.clone())]);
+
+        let mod_info = registry.get_mod_info("Mod1");
+        assert!(mod_info.is_some());
+        assert_eq!(mod_info.unwrap().version, "1.0.0");
+
+        let nonexistent_mod = registry.get_mod_info("Nonexistent");
+        assert!(nonexistent_mod.is_none());
+    }
+}
