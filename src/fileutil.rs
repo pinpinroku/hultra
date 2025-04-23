@@ -125,7 +125,16 @@ pub fn hash_file(file_path: &Path) -> Result<String, Error> {
 /// * `Err(io::Error)` - An error if there was an issue reading the file.
 pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>, Error> {
     let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
-    let file = File::open(path)?;
+
+    // If the blacklist file is missing, return empty HashSet
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(err) => match err.kind() {
+            std::io::ErrorKind::NotFound => return Ok(HashSet::new()),
+            _ => return Err(Error::Io(err)),
+        },
+    };
+
     let reader = BufReader::new(file);
 
     let mut filenames = Vec::new();
@@ -150,7 +159,7 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
 mod tests {
     use super::*;
     use std::io::Write;
-    use tempfile::{tempdir, NamedTempFile};
+    use tempfile::{NamedTempFile, tempdir};
     use zip::write::{SimpleFileOptions, ZipWriter};
 
     const MOD_MANIFEST_FILE: &str = "everest.yaml";
@@ -247,10 +256,10 @@ mod tests {
 
         let result = read_updater_blacklist(temp_dir.path());
 
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Io(_)));
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty())
     }
-    
+
     #[test]
     fn test_read_manifest_file_success() {
         let content = b"test manifest content".to_vec();
