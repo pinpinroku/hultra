@@ -14,7 +14,11 @@ use zip::{ZipArchive, result::ZipError};
 use crate::constant::{MOD_MANIFEST_FILE, STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE};
 use crate::error::Error;
 
-/// Returns the path to the user's mods directory based on platform-specific conventions
+/// Returns the path to the user's mods directory based on platform-specific conventions.
+///
+/// # Returns
+/// * `Ok(PathBuf)` - The path to the mods directory if detected successfully.
+/// * `Err(Error)` - An error if the home directory could not be determined.
 pub fn get_mods_directory() -> Result<PathBuf, Error> {
     info!("Detecting Celeste/Mods directory...");
     // NOTE: `std::env::home_dir()` will be undeprecated in rust 1.87.0
@@ -24,6 +28,13 @@ pub fn get_mods_directory() -> Result<PathBuf, Error> {
 }
 
 /// Scans the mods directory and returns a list of all installed mod archive files.
+///
+/// # Arguments
+/// * `mods_directory` - A reference to the `Path` representing the mods directory.
+///
+/// # Returns
+/// * `Ok(Vec<PathBuf>)` - A vector containing paths to all mod archive files found.
+/// * `Err(Error)` - An error if the mods directory does not exist or cannot be read.
 pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>, Error> {
     if !mods_directory.exists() {
         return Err(Error::MissingModsDirectory);
@@ -49,6 +60,14 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
 }
 
 /// Reads the mod manifest file from a given ZIP archive.
+///
+/// # Arguments
+/// * `zip_path` - A reference to the `Path` of the ZIP archive.
+///
+/// # Returns
+/// * `Ok(Some(Vec<u8>))` - The content of the manifest file if found.
+/// * `Ok(None)` - If the manifest file is not present in the archive.
+/// * `Err(Error)` - An error if the ZIP archive could not be read.
 pub fn read_manifest_file_from_zip(zip_path: &Path) -> Result<Option<Vec<u8>>, Error> {
     let zip_file = File::open(zip_path)?;
     let reader = BufReader::new(zip_file);
@@ -72,7 +91,14 @@ pub fn read_manifest_file_from_zip(zip_path: &Path) -> Result<Option<Vec<u8>>, E
     }
 }
 
-/// Compute xxhash of a given file, return hexadicimal string.
+/// Computes the xxhash of a given file and returns it as a hexadecimal string.
+///
+/// # Arguments
+/// * `file_path` - A reference to the `Path` of the file to be hashed.
+///
+/// # Returns
+/// * `Ok(String)` - The hexadecimal representation of the file hash.
+/// * `Err(Error)` - An error if the file could not be read.
 pub fn hash_file(file_path: &Path) -> Result<String, Error> {
     let file = std::fs::File::open(file_path)?;
     let mut reader = std::io::BufReader::new(file);
@@ -89,7 +115,7 @@ pub fn hash_file(file_path: &Path) -> Result<String, Error> {
     Ok(hash_str)
 }
 
-/// Reads the updater blacklist file from the specified mods directory and returns a list of archive file paths.
+/// Reads the updater blacklist file from the specified mods directory and returns a set of archive file paths.
 ///
 /// # Arguments
 /// * `mods_directory` - A reference to the `Path` where the updater blacklist file is stored.

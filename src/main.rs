@@ -14,8 +14,17 @@ use installed_mods::{check_updates, list_installed_mods};
 use mod_registry::ModRegistry;
 use tracing::info;
 
+/// The main function initializes the application, sets up tracing for logging, and parses CLI arguments.
+///
+/// Based on the provided commands, it performs actions like listing mods, showing mod details,
+/// installing mods, or updating mods.
+///
+/// # Errors
+/// Returns an error if there are issues with parsing arguments, accessing the mods directory,
+/// or performing mod-related operations.
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize the tracing subscriber for logging.
     tracing_subscriber::fmt()
         .compact()
         .with_max_level(tracing::Level::ERROR)
@@ -27,13 +36,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Application starts");
 
+    // Parse CLI arguments.
     let cli = Cli::parse();
     info!("Command passed: {:#?}", &cli.command);
 
+    // Determine the mods directory.
     let mods_dir = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
 
+    // Handle commands based on user input.
     match &cli.command {
         Commands::List => {
+            // List all installed mods in the mods directory.
             let installed_mods = list_installed_mods(&mods_dir)?;
             if installed_mods.is_empty() {
                 println!("No mods are currently installed.");
@@ -50,6 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::Show(args) => {
+            // Show details of a specific mod if it is installed.
             println!("Checking installed mod information...");
             let installed_mods = list_installed_mods(&mods_dir)?;
             if let Some(mod_info) = installed_mods.iter().find(|m| m.manifest.name == args.name) {
@@ -68,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
                 if let Some(opt_deps) = &mod_info.manifest.optional_dependencies {
-                    println!("  OptionalDependencies:");
+                    println!("  Optional Dependencies:");
                     for dep in opt_deps {
                         if let Some(ver) = &dep.version {
                             println!("  - Name: {}", dep.name);
@@ -83,11 +97,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
 
-        // Handle the Install command: Check if the mod is already installed locally. If not, fetch the mod registry.
         Commands::Install(args) => {
+            // Install a mod by fetching its information from the mod registry.
             let installed_mods = list_installed_mods(&mods_dir)?;
 
-            // Check if the mod is already installed
             if installed_mods
                 .iter()
                 .any(|mod_info| mod_info.manifest.name == args.name)
@@ -96,7 +109,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
 
-            // Fetch the remote mod registry since the mod is not installed.
             let downloader = ModDownloader::new(&mods_dir);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
@@ -113,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Commands::Update(args) => {
+            // Update installed mods by checking for available updates in the mod registry.
             let downloader = ModDownloader::new(&mods_dir);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;

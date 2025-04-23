@@ -116,7 +116,7 @@ pub fn list_installed_mods(mods_directory: &Path) -> Result<InstalledModList, Er
                 let debug_path = archive_path
                     .file_name()
                     .and_then(|path| path.to_str())
-                    .expect("File name shoud be exist");
+                    .expect("File name should be exist");
                 warn!(
                     "No mod manifest file (everest.yaml) found in {}.\n\
                 \t# The file might be named 'everest.yml' or located in a subdirectory.\n\
@@ -175,7 +175,7 @@ pub fn check_updates(
             // Compute hash on demand
             if let Ok(computed_hash) = local_mod.checksum() {
                 if remote_mod.has_matching_hash(computed_hash) {
-                    continue; // No update avilable
+                    continue; // No update available
                 };
                 let available_mod = remote_mod.clone();
                 available_updates.push(AvailableUpdateInfo {

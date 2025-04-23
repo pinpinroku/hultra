@@ -4,7 +4,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-/// Each entry in `everest_update.yaml` containing information about a mod
+/// Each entry in `everest_update.yaml` containing information about a mod.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RemoteModInfo {
     /// Actual mod name (not filename)
@@ -13,22 +13,22 @@ pub struct RemoteModInfo {
     /// Version string
     #[serde(rename = "Version")]
     pub version: String,
-    /// File size
+    /// File size in bytes
     #[serde(rename = "Size")]
     pub file_size: u64,
-    /// Timestamp of last update
+    /// Timestamp of the last update
     #[serde(rename = "LastUpdate")]
     pub updated_at: u64,
-    /// Download link
+    /// Download link for the mod file
     #[serde(rename = "URL")]
     pub download_url: String,
-    /// Checksums
+    /// xxHash checksums for the file
     #[serde(rename = "xxHash")]
     pub checksums: Vec<String>,
-    /// Category for a mod
+    /// Category for the mod (e.g., GameBanana type)
     #[serde(rename = "GameBananaType")]
     pub gamebanana_type: String,
-    /// Reference ID of gamebanana page
+    /// Reference ID of the GameBanana page
     #[serde(rename = "GameBananaId")]
     pub gamebanana_id: u32,
 }
@@ -48,20 +48,28 @@ impl RemoteModInfo {
     }
 }
 
-/// Represents the complete `everest_update.yaml` containing all available remote mods
+/// Represents the complete `everest_update.yaml` containing all available remote mods.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ModRegistry {
+    /// A mapping of mod names to their metadata
     #[serde(flatten)]
     pub entries: HashMap<String, RemoteModInfo>,
 }
 
 impl ModRegistry {
-    /// Initialize ModRegistry instance from raw binary data
+    /// Initializes a `ModRegistry` instance from raw binary data.
+    ///
+    /// # Arguments
+    /// * `data` - Raw binary data representing the mod registry.
+    ///
+    /// # Returns
+    /// * `Ok(Self)` - Parsed mod registry.
+    /// * `Err(serde_yaml_ng::Error)` - If parsing fails.
     pub async fn from(data: Bytes) -> Result<Self, serde_yaml_ng::Error> {
         info!("Parsing remote mod registry data");
         let mut mod_registry: Self = serde_yaml_ng::from_slice(&data)?;
 
-        // Set the name field for each ModInfo
+        // Set the name field for each ModInfo.
         mod_registry
             .entries
             .iter_mut()
@@ -70,7 +78,14 @@ impl ModRegistry {
         Ok(mod_registry)
     }
 
-    /// Get mod information
+    /// Retrieves mod information by name.
+    ///
+    /// # Arguments
+    /// * `name` - The name of the mod to retrieve.
+    ///
+    /// # Returns
+    /// * `Some(&RemoteModInfo)` - If the mod is found.
+    /// * `None` - If the mod is not found.
     pub fn get_mod_info(&self, name: &str) -> Option<&RemoteModInfo> {
         info!("Getting remote mod information for the mod: {}", name);
         self.entries.get(name)
