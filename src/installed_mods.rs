@@ -95,13 +95,12 @@ impl LocalModInfo {
 /// List installed mods with valid manifest files.
 ///
 /// # Arguments
-/// * `mods_directory` - Path to the directory containing mod archives.
+/// * `archive_paths` - A list of all installed mod archive paths.
 ///
 /// # Returns
 /// * `Ok(InstalledModList)` - List of installed mods with valid manifests.
 /// * `Err(Error)` - If there are issues reading the files or parsing the manifests.
-pub fn list_installed_mods(mods_directory: &Path) -> Result<InstalledModList, Error> {
-    let archive_paths = find_installed_mod_archives(mods_directory)?;
+pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModList, Error> {
     let mut installed_mods = Vec::with_capacity(archive_paths.len());
 
     for archive_path in archive_paths {
@@ -164,7 +163,9 @@ pub fn check_updates(
     mods_directory: &Path,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    let mut installed_mods = list_installed_mods(mods_directory)?;
+    // TODO: take archive_paths and filtered_intalled_mods as arguments
+    let archive_paths = find_installed_mod_archives(mods_directory)?;
+    let mut installed_mods = list_installed_mods(archive_paths)?;
 
     let blacklist = read_updater_blacklist(mods_directory)?;
     remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
@@ -218,13 +219,16 @@ fn remove_blacklisted_mods(
 }
 
 #[cfg(test)]
-mod test_helpers {
+mod tests {
     use std::io::Write;
 
     use super::*;
     use tempfile::tempdir;
 
-    pub fn generate_test_mod_manifest(name: &str, version: &str) -> ModManifest {
+    const VALID_MANIFEST_FILE: &str = "everest.yaml";
+    const INVALID_MANIFEST_FILE: &str = "everest.yml";
+
+    fn generate_test_mod_manifest(name: &str, version: &str) -> ModManifest {
         ModManifest {
             name: name.to_string(),
             version: version.to_string(),
@@ -234,7 +238,11 @@ mod test_helpers {
         }
     }
 
-    pub fn create_test_mod_archive(mods_dir: &Path, manifest: &ModManifest) -> PathBuf {
+    fn create_test_mod_archive(
+        mods_dir: &Path,
+        manifest: &ModManifest,
+        manifest_file_name: &str,
+    ) -> PathBuf {
         let archive_path = mods_dir.join(format!("{}.zip", manifest.name));
         let file = std::fs::File::create(&archive_path).unwrap();
         let mut zip = zip::ZipWriter::new(file);
@@ -242,7 +250,7 @@ mod test_helpers {
         // Serialize the manifest to YAML as a sequence
         let manifest_yaml = serde_yaml_ng::to_string(&vec![manifest]).unwrap();
 
-        zip.start_file("everest.yaml", zip::write::SimpleFileOptions::default())
+        zip.start_file(manifest_file_name, zip::write::SimpleFileOptions::default())
             .unwrap();
         zip.write_all(manifest_yaml.as_bytes()).unwrap();
         zip.finish().unwrap();
@@ -266,13 +274,15 @@ mod test_helpers {
     }
 
     #[test]
-    fn test_list_installed_mods() {
+    fn test_list_installed_mods_with_valid_manifest() {
         let temp_dir = tempdir().unwrap();
         let mods_dir = temp_dir.path();
         let manifest = generate_test_mod_manifest("TestMod", "1.0.0");
-        create_test_mod_archive(mods_dir, &manifest);
+        let path = create_test_mod_archive(mods_dir, &manifest, VALID_MANIFEST_FILE);
 
-        let result = list_installed_mods(mods_dir);
+        let archive_paths = vec![path];
+
+        let result = list_installed_mods(archive_paths);
         assert!(result.is_ok());
 
         let installed_mods = result.unwrap();
@@ -281,12 +291,28 @@ mod test_helpers {
     }
 
     #[test]
+    fn test_list_installed_mods_with_invalid_manifest() {
+        let temp_dir = tempdir().unwrap();
+        let mods_dir = temp_dir.path();
+        let manifest = generate_test_mod_manifest("TestMod", "1.0.0");
+        let path = create_test_mod_archive(mods_dir, &manifest, INVALID_MANIFEST_FILE);
+
+        let archive_paths = vec![path];
+
+        let result = list_installed_mods(archive_paths);
+        assert!(result.is_ok());
+
+        let installed_mods = result.unwrap();
+        assert_eq!(installed_mods.len(), 0);
+    }
+
+    #[test]
     fn test_remove_blacklisted_mods() {
         let temp_dir = tempdir().unwrap();
         let mods_dir = temp_dir.path();
 
         let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
-        let archive_path = create_test_mod_archive(mods_dir, &manifest);
+        let archive_path = create_test_mod_archive(mods_dir, &manifest, VALID_MANIFEST_FILE);
 
         let mut installed_mods = vec![LocalModInfo::new(archive_path.clone(), manifest)];
         let blacklist: HashSet<PathBuf> = vec![archive_path].into_iter().collect();
