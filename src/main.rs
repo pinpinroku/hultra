@@ -11,8 +11,8 @@ mod mod_registry;
 use cli::{Cli, Commands};
 use download::ModDownloader;
 use error::Error;
-use fileutil::find_installed_mod_archives;
-use installed_mods::{check_updates, list_installed_mods};
+use fileutil::{find_installed_mod_archives, read_updater_blacklist};
+use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
 use mod_registry::ModRegistry;
 use tracing::info;
 
@@ -136,8 +136,13 @@ async fn main() -> Result<(), Error> {
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
+            // Filter installed mods by using the blacklist
+            let mut installed_mods = list_installed_mods(archive_paths)?;
+            let blacklist = read_updater_blacklist(&mods_directory)?;
+            remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
+
             println!("Checking mod updates...");
-            let available_updates = check_updates(&mods_directory, &mod_registry)?;
+            let available_updates = check_updates(installed_mods, &mod_registry)?;
             if available_updates.is_empty() {
                 println!("All mods are up to date!");
             } else {
