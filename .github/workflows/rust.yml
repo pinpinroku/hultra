@@ -1,10 +1,10 @@
 name: Rust CI
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+    types: [opened, synchronize]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,12 +16,15 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-  
-    - name: Run Clippy (Linting)
+
+    - name: Run cargo fmt
+      run: cargo fmt -- --check --verbose
+
+    - name: Run cargo clippy
       run: cargo clippy --all-targets --all-features -- -D warnings
 
-    - name: Build
-      run: cargo build --verbose
+    - name: Run cargo build
+      run: cargo build --release --verbose
 
-    - name: Run tests
+    - name: Run cargo tests
       run: cargo test --verbose
