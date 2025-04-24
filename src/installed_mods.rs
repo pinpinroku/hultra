@@ -1,15 +1,13 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 use tracing::{info, warn};
 
 use crate::{
     error::Error,
-    fileutil::{
-        find_installed_mod_archives, hash_file, read_manifest_file_from_zip, read_updater_blacklist,
-    },
+    fileutil::{hash_file, read_manifest_file_from_zip},
     mod_registry::ModRegistry,
 };
 
@@ -153,23 +151,16 @@ pub struct AvailableUpdateInfo {
 /// Check available updates for all installed mods.
 ///
 /// # Arguments
-/// * `mods_directory` - Path to the directory containing installed mods.
+/// * `installed_mods` - A list of information about installed mods.
 /// * `mod_registry` - Registry containing remote mod information.
 ///
 /// # Returns
 /// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
 /// * `Err(Error)` - If there are issues fetching or computing update information.
 pub fn check_updates(
-    mods_directory: &Path,
+    installed_mods: Vec<LocalModInfo>,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    // TODO: take archive_paths and filtered_intalled_mods as arguments
-    let archive_paths = find_installed_mod_archives(mods_directory)?;
-    let mut installed_mods = list_installed_mods(archive_paths)?;
-
-    let blacklist = read_updater_blacklist(mods_directory)?;
-    remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
-
     let mut available_updates = Vec::new();
     for mut local_mod in installed_mods {
         if let Some(remote_mod) = mod_registry.get_mod_info(&local_mod.manifest.name) {
@@ -204,7 +195,7 @@ pub fn check_updates(
 ///
 /// # Returns
 /// * `Result<(), Error>` - Result indicating success or error during blacklist processing
-fn remove_blacklisted_mods(
+pub fn remove_blacklisted_mods(
     installed_mods: &mut Vec<LocalModInfo>,
     blacklist: &HashSet<PathBuf>,
 ) -> Result<(), Error> {
@@ -221,6 +212,7 @@ fn remove_blacklisted_mods(
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::path::Path;
 
     use super::*;
     use tempfile::tempdir;
