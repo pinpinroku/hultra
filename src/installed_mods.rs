@@ -3,7 +3,7 @@ use std::{
     collections::{HashSet, VecDeque},
     path::PathBuf,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::{
     error::Error,
@@ -61,13 +61,20 @@ pub struct LocalModInfo {
     checksum: Option<String>,
 }
 
-impl LocalModInfo {
+pub trait GenerateLocalDatabase {
+    fn new(archive_path: PathBuf, manifest: ModManifest) -> Self;
+    fn archive_path(&self) -> PathBuf;
+    fn manifest(&self) -> ModManifest;
+    fn checksum(&mut self) -> Result<&str, Error>;
+}
+
+impl GenerateLocalDatabase for LocalModInfo {
     /// Creates a new `LocalModInfo` instance.
     ///
     /// # Arguments
     /// * `archive_path` - Path to the mod's zip archive.
     /// * `manifest` - Parsed manifest information for the mod.
-    pub fn new(archive_path: PathBuf, manifest: ModManifest) -> Self {
+    fn new(archive_path: PathBuf, manifest: ModManifest) -> Self {
         Self {
             archive_path,
             manifest,
@@ -75,14 +82,24 @@ impl LocalModInfo {
         }
     }
 
+    fn archive_path(&self) -> PathBuf {
+        self.archive_path.clone()
+    }
+
+    fn manifest(&self) -> ModManifest {
+        self.manifest.clone()
+    }
+
     /// Computes and retrieves the checksum of the mod archive.
     ///
     /// # Returns
     /// * `Ok(&str)` - Computed checksum as a string reference.
     /// * `Err(Error)` - If the file cannot be hashed.
-    pub fn checksum(&mut self) -> Result<&str, Error> {
+    fn checksum(&mut self) -> Result<&str, Error> {
+        debug!("Checksum of the mod: {:#?}", self.checksum);
         if self.checksum.is_none() {
             let computed_hash = hash_file(&self.archive_path)?;
+            debug!("Computed hash of the mod: {:#?}", computed_hash);
             self.checksum = Some(computed_hash);
         }
         // unwrap is fine here
@@ -148,6 +165,52 @@ pub struct AvailableUpdateInfo {
     pub existing_path: PathBuf,
 }
 
+/// Checks for an available update for a single installed mod.
+///
+/// This function compares the local mod's checksum with the checksum provided by the remote mod registry.
+/// If the checksums differ, it indicates that an update is available. If the remote registry does not contain information
+/// for the mod, or the checksums match, no update is reported.
+///
+/// # Arguments
+/// * `local_mod` - Information about the locally installed mod, including its current version and checksum.
+/// * `mod_registry` - A reference to the mod registry that holds remote mod information.
+///
+/// # Returns
+/// * `Ok(Some(AvailableUpdateInfo))` if an update is available, containing update details.
+/// * `Ok(None)` if no update is available (either because the mod is up-to-date or remote info is missing).
+/// * `Err(Error)` if there is an error computing the mod's checksum.
+fn check_update(
+    mut local_mod: impl GenerateLocalDatabase,
+    mod_registry: &ModRegistry,
+) -> Result<Option<AvailableUpdateInfo>, Error> {
+    // Look up remote mod info
+    let manifest = local_mod.manifest();
+    let remote_mod = match mod_registry.get_mod_info(&manifest.name) {
+        Some(info) => info,
+        None => return Ok(None), // No remote info, skip update check.
+    };
+
+    // Compute checksum
+    let computed_hash = local_mod.checksum()?;
+
+    // Continue only if the hash doesn't match
+    if remote_mod.has_matching_hash(computed_hash) {
+        return Ok(None);
+    }
+
+    let remote_mod = remote_mod.clone();
+    let manifest = local_mod.manifest();
+
+    Ok(Some(AvailableUpdateInfo {
+        name: manifest.name,
+        current_version: manifest.version,
+        available_version: remote_mod.version,
+        url: remote_mod.download_url,
+        hash: remote_mod.checksums,
+        existing_path: local_mod.archive_path(),
+    }))
+}
+
 /// Check available updates for all installed mods.
 ///
 /// # Arguments
@@ -158,33 +221,18 @@ pub struct AvailableUpdateInfo {
 /// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
 /// * `Err(Error)` - If there are issues fetching or computing update information.
 pub fn check_updates(
-    installed_mods: Vec<LocalModInfo>,
+    installed_mods: Vec<impl GenerateLocalDatabase>,
     mod_registry: &ModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    let mut available_updates = Vec::new();
-    for mut local_mod in installed_mods {
-        if let Some(remote_mod) = mod_registry.get_mod_info(&local_mod.manifest.name) {
-            // Compute hash on demand
-            if let Ok(computed_hash) = local_mod.checksum() {
-                if remote_mod.has_matching_hash(computed_hash) {
-                    continue; // No update available
-                };
-                let available_mod = remote_mod.clone();
-                available_updates.push(AvailableUpdateInfo {
-                    name: local_mod.manifest.name,
-                    current_version: local_mod.manifest.version,
-                    available_version: available_mod.version,
-                    url: available_mod.download_url,
-                    hash: available_mod.checksums,
-                    existing_path: local_mod.archive_path,
-                });
-            } else {
-                return Err(Error::FileIsNotHashed);
-            }
-        }
-    }
-
-    Ok(available_updates)
+    // Use iterator combinators to process each mod gracefully.
+    let updates = installed_mods
+        .into_iter()
+        .map(|local_mod| check_update(local_mod, mod_registry))
+        .collect::<Result<Vec<Option<AvailableUpdateInfo>>, Error>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
+    Ok(updates)
 }
 
 /// Removes mods whose archive paths match entries in the updater blacklist from the provided vector.
@@ -210,7 +258,7 @@ pub fn remove_blacklisted_mods(
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_for_files {
     use std::io::Write;
     use std::path::Path;
 
@@ -312,5 +360,216 @@ mod tests {
         let result = remove_blacklisted_mods(&mut installed_mods, &blacklist);
         assert!(result.is_ok());
         assert!(installed_mods.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests_for_updates {
+    use crate::mod_registry::RemoteModInfo;
+
+    use super::*;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+
+    // Fake LocalModInfo for tests
+    struct FakeLocalModInfo {
+        archive_path: PathBuf,
+        manifest: ModManifest,
+        checksum: Option<String>,
+    }
+
+    impl GenerateLocalDatabase for FakeLocalModInfo {
+        fn new(archive_path: PathBuf, manifest: ModManifest) -> Self {
+            Self {
+                archive_path,
+                manifest,
+                checksum: None,
+            }
+        }
+
+        fn archive_path(&self) -> PathBuf {
+            self.archive_path.clone()
+        }
+
+        fn manifest(&self) -> ModManifest {
+            self.manifest.clone()
+        }
+
+        // dummy-hash method for tests
+        fn checksum(&mut self) -> Result<&str, Error> {
+            if self.checksum.is_none() {
+                self.checksum = Some("dummy-hash".to_string());
+            }
+            Ok(self.checksum.as_deref().unwrap())
+        }
+    }
+
+    // Helper function to create a FakeLocalModInfo.
+    fn create_local_mod(
+        name: &str,
+        version: &str,
+        archive: &str,
+        precomputed_hash: Option<&str>,
+    ) -> FakeLocalModInfo {
+        let manifest = ModManifest {
+            name: name.to_string(),
+            version: version.to_string(),
+            dll: None,
+            dependencies: None,
+            optional_dependencies: None,
+        };
+        let mut local_mod = FakeLocalModInfo::new(PathBuf::from(archive), manifest);
+        if let Some(hash) = precomputed_hash {
+            local_mod.checksum = Some(hash.to_string());
+        }
+        local_mod
+    }
+
+    // Helper function to create a dummy RemoteModInfo.
+    fn create_remote_mod(
+        name: &str,
+        version: &str,
+        download_url: &str,
+        checksums: Vec<&str>,
+    ) -> RemoteModInfo {
+        RemoteModInfo {
+            name: name.to_string(),
+            version: version.to_string(),
+            file_size: 12345,
+            updated_at: 0,
+            download_url: download_url.to_string(),
+            checksums: checksums.into_iter().map(|s| s.to_string()).collect(),
+            gamebanana_type: "dummy".to_string(),
+            gamebanana_id: 1,
+        }
+    }
+
+    // Helper function to create a dummy ModRegistry.
+    fn create_mod_registry(entries: Vec<RemoteModInfo>) -> ModRegistry {
+        let mut registry_map = HashMap::new();
+        for remote_mod in entries {
+            let name = remote_mod.name.clone();
+            registry_map.insert(name, remote_mod);
+        }
+        ModRegistry {
+            entries: registry_map,
+        }
+    }
+
+    #[test]
+    fn test_check_update_no_update_if_checksum_matches() {
+        // Create a local mod whose checksum matches the remote mod registry.
+        let local_mod_name = "TestMod";
+        let local_mod_version = "1.0.0";
+        let archive_path = "path/to/testmod.zip";
+        let dummy_hash = "dummy-hash";
+
+        // Create local mod with a checksum that matches the expected one.
+        let local_mod = create_local_mod(
+            local_mod_name,
+            local_mod_version,
+            archive_path,
+            Some(dummy_hash),
+        );
+
+        // Create remote mod info with matching hash.
+        let remote_mod = create_remote_mod(
+            local_mod_name,
+            "1.0.0",
+            "http://example.com/testmod.zip",
+            vec![dummy_hash],
+        );
+        let registry = create_mod_registry(vec![remote_mod]);
+
+        // When the hashes match, check_update should return Ok(None)
+        let result = check_update(local_mod, &registry).expect("check_update failed");
+        assert!(
+            result.is_none(),
+            "Expected no update info when checksums match"
+        );
+    }
+
+    #[test]
+    fn test_check_update_with_update_available() {
+        // Create a local mod whose checksum does not match the remote mod registry.
+        let local_mod_name = "TestMod";
+        let local_mod_version = "1.0.0";
+        let archive_path = "path/to/testmod.zip";
+        let dummy_hash = "dummy-hash";
+
+        // Create local mod with a checksum that doesn't match the remote mod's expected hash.
+        let local_mod = create_local_mod(
+            local_mod_name,
+            local_mod_version,
+            archive_path,
+            Some(dummy_hash),
+        );
+
+        // Create remote mod info with a different hash indicating an update.
+        let updated_hash = "updated-dummy-hash";
+        let remote_mod = create_remote_mod(
+            local_mod_name,
+            "1.1.0",
+            "http://example.com/testmod_v1.1.zip",
+            vec![updated_hash],
+        );
+        let registry = create_mod_registry(vec![remote_mod.clone()]);
+
+        // When the hashes do not match, check_update should return Some(AvailableUpdateInfo)
+        let update_info = check_update(local_mod, &registry).expect("check_update failed");
+        assert!(
+            update_info.is_some(),
+            "Expected update info when checksums do not match"
+        );
+        let info = update_info.unwrap();
+        assert_eq!(info.name, local_mod_name);
+        assert_eq!(info.current_version, local_mod_version);
+        assert_eq!(info.available_version, remote_mod.version);
+        assert_eq!(info.url, remote_mod.download_url);
+        assert_eq!(info.hash, remote_mod.checksums);
+    }
+
+    #[test]
+    fn test_check_updates_with_mixed_mods() {
+        // Create two local mods; one up-to-date and one outdated.
+        let mod_name1 = "TestMod1";
+        let mod_name2 = "TestMod2";
+        let version1 = "1.0.0";
+        let version2 = "2.0.0";
+        let archive_path1 = "path/to/testmod1.zip";
+        let archive_path2 = "path/to/testmod2.zip";
+
+        // Both local mods will have dummy-hash from our dummy_hash_file.
+        let dummy_hash = "dummy-hash";
+        let local_mod1 = create_local_mod(mod_name1, version1, archive_path1, Some(dummy_hash));
+        let local_mod2 = create_local_mod(mod_name2, version2, archive_path2, Some(dummy_hash));
+
+        // Create a remote registry where:
+        // For TestMod1, the hash matches (no update).
+        // For TestMod2, the hash is different (update available).
+        let remote_mod1 = create_remote_mod(
+            mod_name1,
+            version1,
+            "http://example.com/testmod1.zip",
+            vec![dummy_hash],
+        );
+        let remote_mod2 = create_remote_mod(
+            mod_name2,
+            "2.1.0",
+            "http://example.com/testmod2_v2.1.zip",
+            vec!["updated-dummy-hash"],
+        );
+        let registry = create_mod_registry(vec![remote_mod1, remote_mod2]);
+
+        // Collect installed mods.
+        let installed_mods = vec![local_mod1, local_mod2];
+        let updates = check_updates(installed_mods, &registry).expect("check_updates failed");
+
+        // Only TestMod2 should have an update
+        assert_eq!(updates.len(), 1, "Expected one update available");
+        let update = &updates[0];
+        assert_eq!(update.name, mod_name2);
+        assert_eq!(update.current_version, version2);
+        assert_eq!(update.available_version, "2.1.0");
     }
 }

@@ -53,8 +53,4 @@ pub enum Error {
         /// A list of expected checksums for the file
         expected: Vec<String>,
     },
-
-    /// Error indicating that a file is not hashed
-    #[error("The file is not hashed. It seems the developer made mistake.")]
-    FileIsNotHashed,
 }
