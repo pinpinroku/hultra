@@ -4,7 +4,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use std::path::{Path, PathBuf};
 use tokio::{fs, io::AsyncWriteExt};
-use tracing::info;
+use tracing::{error, info};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{constant::MOD_REGISTRY_URL, error::Error};
@@ -61,65 +61,95 @@ impl ModDownloader {
         name: &str,
         expected_hash: &[String],
     ) -> Result<(), Error> {
-        println!("\nDownloading {}:", name);
-
+        // TODO: Handling errors like 404 or 500+
         let response = self.client.get(url).send().await?.error_for_status()?;
-        info!("Status code: {:#?}", response.status());
+        info!("[{}] Status code: {:#?}", name, response.status());
 
         let filename = util::determine_filename(response.url(), response.headers());
         let download_path = self.download_dir.join(filename);
-        info!("Destination: {:#?}", download_path);
+        info!("[{}] Destination: {:#?}", name, download_path);
 
+        // NOTE: From here, no self is used, so no need to implement these within the struct
         let total_size = response.content_length().unwrap_or(0);
-        info!("Total file size: {}", total_size);
+        info!("[{}] Total file size: {}", name, total_size);
 
-        let pb = ProgressBar::new(total_size);
-        pb.set_style(
-            ProgressStyle::default_bar()
-                .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({eta})")
-                .unwrap()
-                .progress_chars("#>-"),
-        );
+        let pb = set_progress_bar_style(name, total_size);
 
-        let mut stream = response.bytes_stream();
-        let mut hasher = Xxh64::new(0);
-        let mut file = fs::File::create(&download_path).await?;
-        let mut downloaded: u64 = 0;
+        let computed_hash = download_and_write(response, &download_path, &pb).await?;
 
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk?;
-            file.write_all(&chunk).await?;
-            hasher.update(&chunk);
-            let new = std::cmp::min(downloaded + (chunk.len() as u64), total_size);
-            downloaded = new;
-            pb.set_position(new);
-        }
+        pb.finish();
 
-        pb.finish_with_message("Download complete");
-
-        let hash = hasher.digest();
-        let hash_str = format!("{:016x}", hash);
-        info!(
-            "Xxhash in u64: {:#?}, formatted string: {:#?}",
-            hash, hash_str
-        );
-
-        // Verify checksum
-        println!("\n🔍 Verifying checksum of the mod '{}'", name);
-        if expected_hash.contains(&hash_str) {
-            println!("✅ Checksum verified!");
-        } else {
-            println!("❌ Checksum verification failed!");
-            fs::remove_file(&download_path).await?;
-            println!("[Cleanup] Downloaded file removed 🗑️");
-            return Err(Error::InvalidChecksum {
-                file: download_path,
-                computed: hash_str,
-                expected: expected_hash.to_vec(),
-            });
-        }
+        info!("\n[{}] 🔍 Verifying checksum...", name);
+        verify_checksum(computed_hash, expected_hash, &download_path).await?;
 
         Ok(())
+    }
+}
+
+fn set_progress_bar_style(name: &str, total_size: u64) -> ProgressBar {
+    let pb = ProgressBar::new(total_size);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{msg:<} {total_bytes:>40.1.cyan/blue} {bytes_per_sec:.2} {eta_precise:} {bar:60} {percent:}%",
+        )
+        .expect("Invalid progress bar style. Should be configured properly.")
+    );
+
+    let mut name = name.to_string();
+    let max_size = 40;
+    if !name.len() <= max_size {
+        name = format!("{}...", &name[..max_size - 3])
+    }
+    pb.set_message(name);
+    pb
+}
+
+/// Downloads the mod and writes it to a file, updating the progress bar.
+async fn download_and_write(
+    response: reqwest::Response,
+    download_path: &Path,
+    pb: &ProgressBar,
+) -> Result<u64, Error> {
+    let mut stream = response.bytes_stream();
+    let mut hasher = Xxh64::new(0);
+    let mut file = fs::File::create(download_path).await?;
+    let mut downloaded: u64 = 0;
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk?;
+        file.write_all(&chunk).await?;
+        hasher.update(&chunk);
+        downloaded = downloaded.saturating_add(chunk.len() as u64);
+        pb.set_position(downloaded);
+    }
+
+    Ok(hasher.digest())
+}
+
+/// Verifies the checksum of the downloaded file.
+async fn verify_checksum(
+    computed_hash: u64,
+    expected_hash: &[String],
+    download_path: &Path,
+) -> Result<(), Error> {
+    let hash_str = format!("{:016x}", computed_hash);
+    info!(
+        "Xxhash in u64: {:#?}, formatted string: {:#?}",
+        computed_hash, hash_str
+    );
+
+    if expected_hash.contains(&hash_str) {
+        info!("✅ Checksum verified!");
+        Ok(())
+    } else {
+        error!("❌ Checksum verification failed!");
+        fs::remove_file(&download_path).await?;
+        info!("[Cleanup] Downloaded file removed 🗑️");
+        Err(Error::InvalidChecksum {
+            file: download_path.to_path_buf(),
+            computed: hash_str,
+            expected: expected_hash.to_vec(),
+        })
     }
 }
 

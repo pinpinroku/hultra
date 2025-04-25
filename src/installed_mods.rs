@@ -98,11 +98,11 @@ impl GenerateLocalDatabase for LocalModInfo {
     fn checksum(&mut self) -> Result<&str, Error> {
         debug!("Checksum of the mod: {:#?}", self.checksum);
 
-        self.checksum
-            .is_none()
-            .then_some(hash_file(&self.archive_path)?);
-
-        debug!("Computed hash of the mod: {:#?}", self.checksum);
+        if self.checksum.is_none() {
+            let computed_hash = hash_file(&self.archive_path)?;
+            debug!("Computed hash of the mod: {:#?}", computed_hash);
+            self.checksum = Some(computed_hash);
+        }
 
         // unwrap is fine here
         Ok(self.checksum.as_deref().unwrap())
@@ -399,7 +399,9 @@ mod tests_for_updates {
 
         // dummy-hash method for tests
         fn checksum(&mut self) -> Result<&str, Error> {
-            self.checksum.is_none().then_some("dummy-hash");
+            if self.checksum.is_none() {
+                self.checksum = Some("dummy-hash".to_string());
+            }
             Ok(self.checksum.as_deref().unwrap())
         }
     }

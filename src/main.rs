@@ -119,12 +119,10 @@ async fn main() -> Result<(), Error> {
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
-            println!("Starting installation of the mod '{}'", args.name);
             if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
                 downloader
                     .download_mod(&mod_info.download_url, &mod_info.name, &mod_info.checksums)
                     .await?;
-                println!("Installation finished successfully!");
             } else {
                 println!("The mod '{}' could not be found.", args.name);
             }
