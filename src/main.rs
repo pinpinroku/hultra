@@ -1,4 +1,6 @@
 use clap::Parser;
+use reqwest::Url;
+use tracing::info;
 
 mod cli;
 mod constant;
@@ -14,7 +16,6 @@ use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist};
 use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
 use mod_registry::ModRegistry;
-use tracing::info;
 
 /// The main function initializes the application, sets up tracing for logging, and parses CLI arguments.
 ///
@@ -107,24 +108,44 @@ async fn main() -> Result<(), Error> {
         Commands::Install(args) => {
             let installed_mods = list_installed_mods(archive_paths)?;
 
-            if installed_mods
-                .iter()
-                .any(|mod_info| mod_info.manifest.name == args.name)
-            {
-                println!("You already have '{}' installed.", args.name);
-                return Ok(());
-            }
-
+            // HACK: If args.url_or_name is a name, check if alread installed to prevent unnecessary fetching
+            // If args.url_or_name is an URL, fetch mod registry to get actual download URL
             let downloader = ModDownloader::new(&mods_directory);
             let mod_registry_data = downloader.fetch_mod_registry().await?;
             let mod_registry = ModRegistry::from(mod_registry_data).await?;
 
-            if let Some(mod_info) = mod_registry.get_mod_info(&args.name) {
-                downloader
-                    .download_mod(&mod_info.download_url, &mod_info.name, &mod_info.checksums)
-                    .await?;
-            } else {
-                println!("The mod '{}' could not be found.", args.name);
+            // Determine if the input is a URL or a mod name
+            let name_or_url = &args.name_or_url;
+            let mod_info = Url::parse(name_or_url)
+                .is_ok_and(|url| {
+                    url.host_str()
+                        .is_some_and(|host| host.contains("gamebanana.com"))
+                })
+                // Valid GameBanana URL
+                .then(|| mod_registry.get_mod_info_from_url(name_or_url))
+                // Not a valid GameBanana URL, treat as mod name
+                .unwrap_or_else(|| mod_registry.get_mod_info_by_name(name_or_url));
+
+            match mod_info {
+                Some(mod_info) => {
+                    // Check if already installed
+                    if installed_mods
+                        .iter()
+                        .any(|installed| installed.manifest.name == mod_info.name)
+                    {
+                        println!("You already have [{}] installed.", mod_info.name);
+                        return Ok(());
+                    }
+
+                    downloader
+                        .download_mod(&mod_info.download_url, &mod_info.name, &mod_info.checksums)
+                        .await?;
+
+                    info!("[{}] installation complete.", mod_info.name);
+                }
+                None => {
+                    println!("Could not find a mod matching [{}].", name_or_url);
+                }
             }
         }
 

@@ -86,9 +86,32 @@ impl ModRegistry {
     /// # Returns
     /// * `Some(&RemoteModInfo)` - If the mod is found.
     /// * `None` - If the mod is not found.
-    pub fn get_mod_info(&self, name: &str) -> Option<&RemoteModInfo> {
+    pub fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
         info!("Getting remote mod information for the mod: {}", name);
         self.entries.get(name)
+    }
+
+    /// Retrieves mod information by game page URL.
+    ///
+    /// # Arguments
+    /// * `url` - The URL of the mod to retrieve.
+    ///
+    /// # Returns
+    /// * `Some(&RemoteModInfo)` - If the mod is found.
+    /// * `None` - If the mod is not found.
+    pub fn get_mod_info_from_url(&self, url: &str) -> Option<&RemoteModInfo> {
+        info!("Getting remote mod information for the URL: {}", url);
+        let id = url
+            .split("/")
+            .last()
+            .and_then(|id_str| id_str.parse::<u32>().ok());
+        if let Some(id) = id {
+            self.entries
+                .values()
+                .find(|manifest| manifest.gamebanana_id == id)
+        } else {
+            None
+        }
     }
 }
 
@@ -108,10 +131,10 @@ mod tests {
             version: version.to_string(),
             file_size: 1024,
             updated_at: 1234567890,
-            download_url: "https://gamebanana.com/mmdl/123456".to_string(),
+            download_url: "https://gamebanana.com/mmdl/567812".to_string(),
             checksums,
             gamebanana_type: "Tool".to_string(),
-            gamebanana_id: 123,
+            gamebanana_id: 123456,
         }
     }
 
@@ -139,16 +162,33 @@ mod tests {
     }
 
     #[test]
-    fn test_mod_registry_get_mod_info() {
+    fn test_mod_registry_get_mod_info_by_name() {
         let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
         let mod2 = generate_remote_mod_info("Mod2", "2.0.0", vec![String::from("hash2")]);
         let registry = generate_mod_registry(vec![("Mod1", mod1.clone()), ("Mod2", mod2.clone())]);
 
-        let mod_info = registry.get_mod_info("Mod1");
+        let mod_info = registry.get_mod_info_by_name("Mod1");
         assert!(mod_info.is_some());
         assert_eq!(mod_info.unwrap().version, "1.0.0");
 
-        let nonexistent_mod = registry.get_mod_info("Nonexistent");
+        let nonexistent_mod = registry.get_mod_info_by_name("Nonexistent");
         assert!(nonexistent_mod.is_none());
+    }
+
+    #[test]
+    fn test_mod_registry_get_mod_info_from_url() {
+        let mod1 = generate_remote_mod_info("Mod1", "1.0.0", vec![String::from("hash1")]);
+        let registry = generate_mod_registry(vec![("Mod1", mod1.clone())]);
+
+        let mod_info = registry.get_mod_info_from_url("https://gamebanan.com/mods/123456");
+        assert!(mod_info.is_some());
+        assert_eq!(mod_info.unwrap().gamebanana_id, 123456);
+        assert_eq!(
+            mod_info.unwrap().download_url,
+            "https://gamebanana.com/mmdl/567812"
+        );
+
+        let not_url = registry.get_mod_info_from_url("Mod 1");
+        assert!(not_url.is_none());
     }
 }

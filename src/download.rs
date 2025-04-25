@@ -39,7 +39,7 @@ impl ModDownloader {
     /// - `Ok(Bytes)`: The raw bytes of the registry file upon success.
     /// - `Err(Error)`: An error if the request or parsing fails.
     pub async fn fetch_mod_registry(&self) -> Result<Bytes, Error> {
-        info!("Fetching remote mod registry...");
+        println!("Fetching online database...");
         let response = self.client.get(&self.registry_url).send().await?;
         let yaml_data = response.bytes().await?;
         Ok(yaml_data)
@@ -69,15 +69,12 @@ impl ModDownloader {
         let download_path = self.download_dir.join(filename);
         info!("[{}] Destination: {:#?}", name, download_path);
 
-        // NOTE: From here, no self is used, so no need to implement these within the struct
         let total_size = response.content_length().unwrap_or(0);
         info!("[{}] Total file size: {}", name, total_size);
 
         let pb = set_progress_bar_style(name, total_size);
 
-        let computed_hash = download_and_write(response, &download_path, &pb).await?;
-
-        pb.finish();
+        let computed_hash = download_and_write(response, &download_path, pb).await?;
 
         info!("\n[{}] 🔍 Verifying checksum...", name);
         verify_checksum(computed_hash, expected_hash, &download_path).await?;
@@ -86,6 +83,7 @@ impl ModDownloader {
     }
 }
 
+/// Set up progress bar style using template.
 fn set_progress_bar_style(name: &str, total_size: u64) -> ProgressBar {
     let pb = ProgressBar::new(total_size);
     pb.set_style(
@@ -95,20 +93,22 @@ fn set_progress_bar_style(name: &str, total_size: u64) -> ProgressBar {
         .expect("Invalid progress bar style. Should be configured properly.")
     );
 
+    // If the name is too long, truncate it and add an elipsis at the end.
     let mut name = name.to_string();
     let max_size = 40;
     if !name.len() <= max_size {
         name = format!("{}...", &name[..max_size - 3])
     }
+
     pb.set_message(name);
     pb
 }
 
-/// Downloads the mod and writes it to a file, updating the progress bar.
+/// Downloads the mod and writes it to a file, updating the progress bar. Returns computed_hash.
 async fn download_and_write(
     response: reqwest::Response,
     download_path: &Path,
-    pb: &ProgressBar,
+    pb: ProgressBar,
 ) -> Result<u64, Error> {
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
@@ -122,6 +122,8 @@ async fn download_and_write(
         downloaded = downloaded.saturating_add(chunk.len() as u64);
         pb.set_position(downloaded);
     }
+
+    pb.finish();
 
     Ok(hasher.digest())
 }
