@@ -13,11 +13,11 @@ This project currently targets **Linux** installation. **macOS** might work, but
 - [Usage](#usage)
   - [list](#list)
   - [show](#show)
-  - [install](#install-mod_name)
+  - [install](#install)
   - [update](#update)
 - [Motivation](#motivation)
 - [Notes](#notes)
-- [Bug-Reports](#bug-reports)
+- [Bug Reports](#bug-reports)
 - [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
@@ -38,9 +38,7 @@ This project currently targets **Linux** installation. **macOS** might work, but
 
 ## Installation
 
-Just download the binary from the [release](https://github.com/pinpinroku/everest-mod-cli/releases) page. You don't need to do any extra installation steps, just put it in `~/.local/bin`, etc. Then add that directory to the PATH.
-
-> Please wait a little bit for the binary release.
+Once downloaded, move it to `~/.local/bin` (or another directory of your choice). Then, give it execution permissions by running `chmod u+x ./everest-mod-cli`. Finally, add that directory to your PATH if it isn’t already included.
 
 ### Build yourself
 
@@ -63,6 +61,12 @@ Just download the binary from the [release](https://github.com/pinpinroku/everes
 
 ## Usage
 
+- Show Help
+```bash
+everest-mod-cli --help
+```
+
+- Run a Command:
 ```bash
 everest-mod-cli [OPTIONS] [COMMAND] 
 ```
@@ -89,7 +93,9 @@ everest-mod-cli list
 # ...
 ```
 
-### `show <mod_name>`
+### `show`
+
+`everest-mod-cli show [mod_name]`
 
 Show the details of a specific mod that have been installed.
 ```bash
@@ -106,18 +112,20 @@ everest-mod-cli show "zbs_Crystal"
 #   - Name: SaladimHelper
 ```
 
-### `install <mod_name> | <page_url>`
+### `install`
+
+`everest-mod-cli install [mod_name|page_url]`
 
 Install a mod by its name or the URL of the game page. The mod will be downloaded and installed in the appropriate directory.
 Checksum verification is performed automatically to ensure the integrity of the downloaded mod.
 ```bash
 everest-mod-cli install "SpeedrunTool"
-# SpeedrunTool                         245.41 KiB 39.92 KiB/s 00:00:00 ████████████████████████████████████████████████████████████ 100%
+# SpeedrunTool 245.41 KiB 39.92 KiB/s 00:00:00 ███████████████████████████████████████ 100%
 ```
 Download the mod by specifying its URL.
 ```bash
 everest-mod-cli install "https://gamebanana.com/mods/589514"
-# AIRTH                                 9.84 MiB 232.26 KiB/s 00:00:00 ████████████████████████████████████████████████████████████ 100%
+# AIRTH         9.84 MiB 232.26 KiB/s 00:00:00 ███████████████████████████████████████ 100%
 ```
 
 ### `update`
