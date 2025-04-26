@@ -40,7 +40,7 @@ This project currently targets **Linux** installation. **macOS** might work, but
 
 Just download the binary from the [release](https://github.com/pinpinroku/everest-mod-cli/releases) page.
 
-Once downloaded, move it to `~/.local/bin` (or another directory of your choice). Then, give it execution permissions by running `chmod u+x ./everest-mod-cli`. Finally, add that directory to your PATH if it isn’t already included.
+Once downloaded, give it execution permissions by running `chmod u+x everest-mod-cli`. Then, move it to `~/.local/bin` (or another directory of your choice). Finally, add that directory to your PATH if it isn’t already included.
 
 ### Build yourself
 
