@@ -106,18 +106,18 @@ everest-mod-cli show "zbs_Crystal"
 #   - Name: SaladimHelper
 ```
 
-### `install <mod_name>`
+### `install <mod_name> | <page_url>`
 
-Install a mod by its name. The mod will be downloaded and installed in the appropriate directory.
+Install a mod by its name or the URL of the game page. The mod will be downloaded and installed in the appropriate directory.
 Checksum verification is performed automatically to ensure the integrity of the downloaded mod.
 ```bash
 everest-mod-cli install "SpeedrunTool"
-# Starting installation of the mod 'SpeedrunTool'
-# Downloading mod files...
-#   [00:00:08] [################################################] 245.41 KiB/245.41 KiB (0s)
-# Verifying checksum...
-# Checksum verified
-# Installation finished successfully!
+# SpeedrunTool                         245.41 KiB 39.92 KiB/s 00:00:00 ████████████████████████████████████████████████████████████ 100%
+```
+Download the mod by specifying its URL.
+```bash
+everest-mod-cli install "https://gamebanana.com/mods/589514"
+# AIRTH                                 9.84 MiB 232.26 KiB/s 00:00:00 ████████████████████████████████████████████████████████████ 100%
 ```
 
 ### `update`

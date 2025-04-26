@@ -187,7 +187,7 @@ fn check_update(
 ) -> Result<Option<AvailableUpdateInfo>, Error> {
     // Look up remote mod info
     let manifest = local_mod.manifest();
-    let remote_mod = match mod_registry.get_mod_info(&manifest.name) {
+    let remote_mod = match mod_registry.get_mod_info_by_name(&manifest.name) {
         Some(info) => info,
         None => return Ok(None), // No remote info, skip update check.
     };

@@ -31,8 +31,8 @@ pub enum Commands {
 /// Arguments for the `install` subcommand
 #[derive(Debug, Args)]
 pub struct InstallArgs {
-    /// The name of the mod to install
-    pub name: String,
+    /// The name of the mod to install or a GameBanana URL
+    pub name_or_url: String,
 }
 
 /// Arguments for the `show` subcommand
