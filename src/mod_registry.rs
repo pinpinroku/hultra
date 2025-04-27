@@ -1,8 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use tracing::info;
+
+use crate::download::Downloadable;
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -33,6 +35,24 @@ pub struct RemoteModInfo {
     pub gamebanana_id: u32,
 }
 
+impl Downloadable for RemoteModInfo {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn url(&self) -> &str {
+        &self.download_url
+    }
+    fn checksums(&self) -> &[String] {
+        &self.checksums
+    }
+    fn version(&self) -> &str {
+        &self.version
+    }
+    fn existing_path(&self) -> Option<&Path> {
+        None
+    }
+}
+
 impl RemoteModInfo {
     /// Checks if the provided hash matches any of the expected checksums.
     ///
@@ -47,6 +67,9 @@ impl RemoteModInfo {
             .any(|checksum| checksum == computed_hash)
     }
 }
+
+// HACK: Replace ModRegistry to this simple type
+// type Entries = HashMap<String, RemoteModInfo>;
 
 /// Represents the complete `everest_update.yaml` containing all available remote mods.
 #[derive(Debug, Serialize, Deserialize, Clone)]

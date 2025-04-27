@@ -2,12 +2,24 @@ use bytes::Bytes;
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{error, info};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{constant::MOD_REGISTRY_URL, error::Error};
+
+/// Downloadable trait
+pub trait Downloadable {
+    fn name(&self) -> &str;
+    fn url(&self) -> &str;
+    fn checksums(&self) -> &[String];
+    fn version(&self) -> &str;
+    fn existing_path(&self) -> Option<&Path>;
+}
 
 /// Manages mod downloads and registry fetching.
 #[derive(Debug, Clone)]
@@ -48,19 +60,19 @@ impl ModDownloader {
     /// Downloads a mod file, saves it locally, and verifies its integrity.
     ///
     /// # Parameters
-    /// - `url`: The URL to download the mod from.
-    /// - `name`: The mod's name (used for logging).
-    /// - `expected_hash`: Slice of acceptable xxHash checksum strings (in hexadecimal).
+    /// - `target`: Downloadable object which contains name, url, and expected_hashes
     ///
     /// # Returns
     /// - `Ok(())` if the download and checksum verification succeed.
     /// - `Err(Error)` if an error occurs during download or checksum verification.
-    pub async fn download_mod(
+    pub async fn download_mod<D: Downloadable>(
         &self,
-        url: &str,
-        name: &str,
-        expected_hash: &[String],
+        target: &D,
+        pb: ProgressBar,
     ) -> Result<(), Error> {
+        let name = target.name();
+        let url = target.url();
+        let expected_hash = target.checksums();
         // TODO: Handling errors like 404 or 500+
         let response = self.client.get(url).send().await?.error_for_status()?;
         info!("[{}] Status code: {:#?}", name, response.status());
@@ -72,7 +84,7 @@ impl ModDownloader {
         let total_size = response.content_length().unwrap_or(0);
         info!("[{}] Total file size: {}", name, total_size);
 
-        let pb = set_progress_bar_style(name, total_size);
+        pb.set_length(total_size);
 
         let computed_hash = download_and_write(response, &download_path, pb).await?;
 
@@ -83,24 +95,24 @@ impl ModDownloader {
     }
 }
 
-/// Set up progress bar style using template.
-fn set_progress_bar_style(name: &str, total_size: u64) -> ProgressBar {
-    let pb = ProgressBar::new(total_size);
-    pb.set_style(
-        ProgressStyle::with_template(
-            "{msg:<} {total_bytes:>40.1.cyan/blue} {bytes_per_sec:.2} {eta_precise:} {bar:60} {percent:}%",
-        )
-        .expect("Invalid progress bar style. Should be configured properly.")
-    );
+/// Build progress bar
+pub fn build_progress_bar(name: &str, total_size: Option<u64>) -> ProgressBar {
+    let pb = ProgressBar::new(total_size.unwrap_or(0));
+
+    let style = ProgressStyle::with_template(
+        "{msg:<} {total_bytes:>40.1.cyan/blue} {bytes_per_sec:.2} {eta_precise:} {bar:60} {percent:}%"
+    ).unwrap_or_else(|_| ProgressStyle::default_bar());
+    pb.set_style(style);
 
     // If the name is too long, truncate it and add an ellipsis at the end.
-    let mut name = name.to_string();
     let max_size = 40;
-    if !name.len() <= max_size {
-        name = format!("{}...", &name[..max_size - 3])
-    }
+    let msg: Cow<str> = if name.len() > max_size {
+        Cow::Owned(format!("{}...", &name[..max_size - 3]))
+    } else {
+        Cow::Borrowed(name)
+    };
+    pb.set_message(msg.to_string());
 
-    pb.set_message(name);
     pb
 }
 

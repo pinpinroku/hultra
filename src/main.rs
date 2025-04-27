@@ -1,8 +1,10 @@
 use clap::Parser;
+use indicatif::MultiProgress;
 use reqwest::Url;
 use tracing::info;
 
 mod cli;
+mod client;
 mod constant;
 mod download;
 mod error;
@@ -11,7 +13,7 @@ mod installed_mods;
 mod mod_registry;
 
 use cli::{Cli, Commands};
-use download::ModDownloader;
+use download::{ModDownloader, build_progress_bar};
 use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist};
 use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
@@ -136,10 +138,9 @@ async fn main() -> Result<(), Error> {
                         println!("You already have [{}] installed.", mod_info.name);
                         return Ok(());
                     }
+                    let pb = build_progress_bar(&mod_info.name, Some(mod_info.file_size));
 
-                    downloader
-                        .download_mod(&mod_info.download_url, &mod_info.name, &mod_info.checksums)
-                        .await?;
+                    downloader.download_mod(mod_info, pb).await?;
 
                     info!("[{}] installation complete.", mod_info.name);
                 }
@@ -174,14 +175,14 @@ async fn main() -> Result<(), Error> {
                 if args.install {
                     println!("\nInstalling updates...");
                     let mut handles = Vec::new();
+                    let multi_progress = MultiProgress::new();
 
                     for update in available_updates {
                         let downloader = downloader.clone();
+                        let pb = multi_progress.add(build_progress_bar(&update.name, None));
 
                         let handle = tokio::spawn(async move {
-                            let result = downloader
-                                .download_mod(&update.url, &update.name, &update.hash)
-                                .await;
+                            let result = downloader.download_mod(&update, pb).await;
 
                             match result {
                                 Ok(_) => {

@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use tracing::{debug, info, warn};
 
 use crate::{
+    download::Downloadable,
     error::Error,
     fileutil::{hash_file, read_manifest_file_from_zip},
     mod_registry::ModRegistry,
@@ -63,8 +64,8 @@ pub struct LocalModInfo {
 
 pub trait GenerateLocalDatabase {
     fn new(archive_path: PathBuf, manifest: ModManifest) -> Self;
-    fn archive_path(&self) -> PathBuf;
-    fn manifest(&self) -> ModManifest;
+    fn archive_path(&self) -> &Path;
+    fn manifest(&self) -> &ModManifest;
     fn checksum(&mut self) -> Result<&str, Error>;
 }
 
@@ -82,12 +83,12 @@ impl GenerateLocalDatabase for LocalModInfo {
         }
     }
 
-    fn archive_path(&self) -> PathBuf {
-        self.archive_path.clone()
+    fn archive_path(&self) -> &Path {
+        &self.archive_path
     }
 
-    fn manifest(&self) -> ModManifest {
-        self.manifest.clone()
+    fn manifest(&self) -> &ModManifest {
+        &self.manifest
     }
 
     /// Computes and retrieves the checksum of the mod archive.
@@ -151,7 +152,7 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
 }
 
 /// Update information about the mod
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AvailableUpdateInfo {
     /// The Mod name
     pub name: String,
@@ -165,6 +166,24 @@ pub struct AvailableUpdateInfo {
     pub hash: Vec<String>,
     /// Outdated file
     pub existing_path: PathBuf,
+}
+
+impl Downloadable for AvailableUpdateInfo {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn url(&self) -> &str {
+        &self.url
+    }
+    fn checksums(&self) -> &[String] {
+        &self.hash
+    }
+    fn version(&self) -> &str {
+        &self.available_version
+    }
+    fn existing_path(&self) -> Option<&Path> {
+        Some(&self.existing_path)
+    }
 }
 
 /// Checks for an available update for a single installed mod.
@@ -204,12 +223,12 @@ fn check_update(
     let manifest = local_mod.manifest();
 
     Ok(Some(AvailableUpdateInfo {
-        name: manifest.name,
-        current_version: manifest.version,
+        name: manifest.name.to_string(),
+        current_version: manifest.version.to_string(),
         available_version: remote_mod.version,
         url: remote_mod.download_url,
         hash: remote_mod.checksums,
-        existing_path: local_mod.archive_path(),
+        existing_path: local_mod.archive_path().to_path_buf(),
     }))
 }
 
@@ -389,12 +408,12 @@ mod tests_for_updates {
             }
         }
 
-        fn archive_path(&self) -> PathBuf {
-            self.archive_path.clone()
+        fn archive_path(&self) -> &Path {
+            &self.archive_path
         }
 
-        fn manifest(&self) -> ModManifest {
-            self.manifest.clone()
+        fn manifest(&self) -> &ModManifest {
+            &self.manifest
         }
 
         // dummy-hash method for tests
