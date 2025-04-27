@@ -178,12 +178,6 @@ impl Downloadable for AvailableUpdateInfo {
     fn checksums(&self) -> &[String] {
         &self.hash
     }
-    fn version(&self) -> &str {
-        &self.available_version
-    }
-    fn existing_path(&self) -> Option<&Path> {
-        Some(&self.existing_path)
-    }
 }
 
 /// Checks for an available update for a single installed mod.

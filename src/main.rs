@@ -177,7 +177,7 @@ async fn main() -> Result<(), Error> {
                     let mut handles = Vec::new();
                     let multi_progress = MultiProgress::new();
 
-                    for update in available_updates {
+                    available_updates.into_iter().for_each(|update| {
                         let downloader = downloader.clone();
                         let pb = multi_progress.add(build_progress_bar(&update.name, None));
 
@@ -208,7 +208,7 @@ async fn main() -> Result<(), Error> {
                             }
                         });
                         handles.push(handle);
-                    }
+                    });
 
                     for handle in handles {
                         handle.await?;

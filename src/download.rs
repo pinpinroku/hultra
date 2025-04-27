@@ -17,8 +17,6 @@ pub trait Downloadable {
     fn name(&self) -> &str;
     fn url(&self) -> &str;
     fn checksums(&self) -> &[String];
-    fn version(&self) -> &str;
-    fn existing_path(&self) -> Option<&Path>;
 }
 
 /// Manages mod downloads and registry fetching.

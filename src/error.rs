@@ -25,10 +25,6 @@ pub enum Error {
     #[error(transparent)]
     TokioTask(#[from] tokio::task::JoinError),
 
-    /// Multiple errors for spawning tasks
-    #[error("Error")]
-    MultipleErrors(Vec<Error>),
-
     /// Error indicating that the home directory could not be determined
     #[error(
         "Could not determine home directory location!\
