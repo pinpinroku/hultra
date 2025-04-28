@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::info;
+use tracing::{debug, info};
 use xxhash_rust::xxh64::Xxh64;
 use zip::{ZipArchive, result::ZipError};
 
@@ -40,17 +40,25 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
         return Err(Error::MissingModsDirectory);
     }
 
-    info!("Scanning installed mod archives in {:#?}", mods_directory);
+    info!(
+        "Scanning the installed mod archives in {:?}",
+        format!(
+            "~{}",
+            mods_directory
+                .strip_prefix(home_dir().unwrap()) // unwrap is fine because `mods_directory` is constructed
+                .unwrap_or(mods_directory)
+                .display()
+        )
+    );
 
     let mut mod_archives = Vec::new();
-    let entries = fs::read_dir(mods_directory)?;
-    for entry in entries {
+    for entry in fs::read_dir(mods_directory)? {
         let entry = entry?;
         let path = entry.path();
-        if path.is_file()
-            && path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+        if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+            && path.is_file()
         {
             mod_archives.push(path);
         }
@@ -124,6 +132,7 @@ pub fn hash_file(file_path: &Path) -> Result<String, Error> {
 /// * `Ok(HashSet<PathBuf>)` - A HashSet containing the archive file paths if the file was read successfully.
 /// * `Err(io::Error)` - An error if there was an issue reading the file.
 pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>, Error> {
+    info!("Checking the updater blacklist...");
     let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
 
     // If the blacklist file is missing, return empty HashSet
@@ -148,6 +157,7 @@ pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>,
             filenames.insert(filename);
         }
     }
+    debug!("Detected filenames: {:#?}", filenames);
 
     Ok(filenames)
 }

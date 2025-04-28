@@ -144,7 +144,7 @@ pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModLi
         }
     }
     // Sort by name
-    info!("Sorting results by name...");
+    info!("Sorting the installed mods by name...");
     installed_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
 
     Ok(installed_mods)

@@ -1,7 +1,7 @@
 use clap::Parser;
 use indicatif::MultiProgress;
 use reqwest::Client;
-use tracing::info;
+use tracing::{debug, info, level_filters::LevelFilter};
 
 mod cli;
 mod client;
@@ -17,7 +17,38 @@ use download::build_progress_bar;
 use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist};
 use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
-use mod_registry::{fetch_remote_mod_registry, get_mod_info_from_url};
+
+/// Initialize logging with a level based on CLI flags.
+/// --verbose sets the level to DEBUG with extra details enabled.
+/// --quiet disables logging.
+/// Otherwise default level INFO is selected without extra details.
+fn init_tracing(cli: &Cli) {
+    use tracing_subscriber::fmt;
+
+    let (max_level, extra_details) = match (cli.quiet, cli.verbose) {
+        (true, _) => (LevelFilter::OFF, false),
+        (_, true) => (LevelFilter::DEBUG, true),
+        _ => (LevelFilter::INFO, false),
+    };
+
+    let builder = fmt().compact().with_max_level(max_level);
+
+    let builder = if extra_details {
+        builder
+            .with_file(true)
+            .with_line_number(true)
+            .with_thread_ids(true)
+            .with_target(true)
+    } else {
+        builder
+            .with_file(false)
+            .with_line_number(false)
+            .with_thread_ids(false)
+            .with_target(false)
+    };
+
+    builder.init();
+}
 
 /// The main function initializes the application, sets up tracing for logging, and parses CLI arguments.
 ///
@@ -29,21 +60,14 @@ use mod_registry::{fetch_remote_mod_registry, get_mod_info_from_url};
 /// or performing mod-related operations.
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    // Initialize the tracing subscriber for logging.
-    tracing_subscriber::fmt()
-        .compact()
-        .with_max_level(tracing::Level::ERROR)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_ids(true)
-        .with_target(true)
-        .init();
-
-    info!("Application starts");
-
     // Parse CLI arguments.
     let cli = Cli::parse();
-    info!("Command passed: {:#?}", &cli.command);
+
+    // Initialize the tracing subscriber for logging based on user flags.
+    init_tracing(&cli);
+
+    debug!("Application starts");
+    debug!("Command passed: {:#?}", &cli.command);
 
     // Determine the mods directory.
     let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
@@ -55,14 +79,14 @@ async fn main() -> Result<(), Error> {
     match &cli.command {
         Commands::List => {
             if archive_paths.is_empty() {
-                println!("No mods are currently installed.");
+                info!("No mods are currently installed.");
                 return Ok(());
             }
 
             // List all installed mods in the mods directory.
             let installed_mods = list_installed_mods(archive_paths)?;
 
-            println!("\nInstalled mods ({} found):", installed_mods.len());
+            info!("\nInstalled mods ({} found):", installed_mods.len());
             for mod_info in installed_mods {
                 println!(
                     "- {} (version {})",
@@ -109,8 +133,9 @@ async fn main() -> Result<(), Error> {
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
             // Fetching the mod information
-            let mod_registry = fetch_remote_mod_registry().await?;
-            let mod_info = get_mod_info_from_url(&mod_registry, &args.mod_page_url);
+            let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
+            let mod_info = mod_registry::get_mod_info_by_url(&mod_registry, &args.mod_page_url);
+            debug!("Matched entry: {:#?}", mod_info);
 
             // Determine if the input is a URL or a mod name
             match mod_info {
@@ -118,7 +143,7 @@ async fn main() -> Result<(), Error> {
                     // Check if already installed
                     let installed_mods = list_installed_mods(archive_paths)?;
                     if installed_mods
-                        .iter()
+                        .into_iter()
                         .any(|installed| installed.manifest.name == *mod_info.0)
                     {
                         println!("You already have [{}] installed.", mod_info.0);
@@ -154,7 +179,7 @@ async fn main() -> Result<(), Error> {
 
         Commands::Update(args) => {
             // Update installed mods by checking for available updates in the mod registry.
-            let mod_registry = fetch_remote_mod_registry().await?;
+            let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
 
             // Filter installed mods by using the blacklist
             let mut installed_mods = list_installed_mods(archive_paths)?;

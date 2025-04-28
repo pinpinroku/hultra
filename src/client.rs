@@ -5,20 +5,29 @@ use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use reqwest::Client;
 use tokio::{fs, io::AsyncWriteExt};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::error::Error;
 
 /// Get the file size
 pub async fn get_file_size(client: Client, url: &str) -> Result<u64, Error> {
+    debug!(
+        "Get the file size by sending HEAD request to the server: {}",
+        url
+    );
+
     let response = client.head(url).send().await?.error_for_status()?;
+    debug!("Status code: {:#?}", response.status());
+
     let total_size = response
         .headers()
         .get(reqwest::header::CONTENT_LENGTH)
         .and_then(|length_header| length_header.to_str().ok())
         .and_then(|length_str| length_str.parse::<u64>().ok())
         .unwrap_or(0);
+    debug!("Total size: {}", total_size);
+
     Ok(total_size)
 }
 
@@ -33,7 +42,7 @@ pub async fn download_file(
 ) -> Result<(), Error> {
     // TODO: Handling errors like 404 or 500+
     let response = client.get(url).send().await?.error_for_status()?;
-    info!("[{}] Status code: {:#?}", name, response.status());
+    debug!("[{}] Status code: {:#?}", name, response.status());
 
     let filename = crate::download::util::determine_filename(response.url(), response.headers());
     let download_path = download_dir.join(filename);
