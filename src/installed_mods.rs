@@ -7,7 +7,6 @@ use std::{
 use tracing::{debug, warn};
 
 use crate::{
-    download::Downloadable,
     error::Error,
     fileutil::{hash_file, read_manifest_file_from_zip, replace_home_dir_with_tilde},
     mod_registry::{RemoteModRegistry, get_mod_info_by_name},
@@ -178,20 +177,6 @@ pub struct AvailableUpdateInfo {
     pub hash: Vec<String>,
     /// Outdated file
     pub existing_path: PathBuf,
-}
-
-impl Downloadable for AvailableUpdateInfo {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn url(&self) -> &str {
-        &self.url
-    }
-
-    fn checksums(&self) -> &[String] {
-        &self.hash
-    }
 }
 
 /// Checks for an available update for a single installed mod.

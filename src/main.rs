@@ -1,6 +1,6 @@
 use clap::Parser;
 use reqwest::Client;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 mod cli;
 mod constant;
@@ -45,14 +45,6 @@ fn setup_logging(verbose: bool) {
     }
 }
 
-/// The main function initializes the application, sets up tracing for logging, and parses CLI arguments.
-///
-/// Based on the provided commands, it performs actions like listing mods, showing mod details,
-/// installing mods, or updating mods.
-///
-/// # Errors
-/// Returns an error if there are issues with parsing arguments, accessing the mods directory,
-/// or performing mod-related operations.
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     debug!("Application starts");
@@ -78,7 +70,6 @@ async fn main() -> Result<(), Error> {
                 return Ok(());
             }
 
-            // List all installed mods in the mods directory.
             let installed_mods = list_installed_mods(archive_paths)?;
 
             for mod_info in installed_mods.iter() {
@@ -169,10 +160,10 @@ async fn main() -> Result<(), Error> {
             let blacklist = read_updater_blacklist(&mods_directory)?;
             remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
 
-            println!("Checking mod updates...");
+            info!("Checking mod updates...");
             let available_updates = check_updates(installed_mods, &mod_registry)?;
             if available_updates.is_empty() {
-                println!("All mods are up to date!");
+                info!("All mods are up to date!");
             } else {
                 println!("Available updates:");
                 for update_info in &available_updates {
@@ -181,46 +172,12 @@ async fn main() -> Result<(), Error> {
                     println!(" - Available version: {}", update_info.available_version);
                 }
                 if args.install {
-                    println!("\nInstalling updates...");
-                    let mut handles = Vec::new();
+                    info!("\nInstalling updates...");
                     let client = Client::new();
-
-                    available_updates.into_iter().for_each(|update| {
-                        let client = client.clone();
-                        let mods_directory = mods_directory.clone();
-
-                        let handle = tokio::spawn(async move {
-                            download::update::update(&client, &update, &mods_directory).await
-                        });
-                        handles.push(handle);
-                    });
-
-                    // Collect all errors instead of stopping at the first one
-                    let mut errors = Vec::new();
-                    for handle in handles {
-                        match handle.await {
-                            Ok(Ok(())) => (),                              // Task completed successfully
-                            Ok(Err(err)) => errors.push(err),              // Task returned an error
-                            Err(err) => errors.push(Error::TaskJoin(err)), // Task panicked
-                        }
-                    }
-
-                    // Actually handle the errors
-                    if errors.is_empty() {
-                        info!("\nAll updates installed successfully!");
-                    } else {
-                        // Log all errors
-                        for (i, err) in errors.iter().enumerate() {
-                            error!("Error {}: {}", i + 1, err);
-                        }
-                        // Return multiple update errors
-                        return Err(Error::MultipleUpdate(errors));
-                    }
-
-                    // Finally, print the success message.
-                    info!("\nAll updates installed successfully!");
+                    download::update::download_all(&client, &mods_directory, available_updates)
+                        .await?;
                 } else {
-                    println!("\nRun with --install to install these updates");
+                    info!("\nRun with --install to install these updates");
                 }
             }
         }

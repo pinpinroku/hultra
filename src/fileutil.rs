@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::{debug, info};
+use tracing::debug;
 use xxhash_rust::xxh64::Xxh64;
 use zip::{ZipArchive, result::ZipError};
 
@@ -164,7 +164,7 @@ pub fn hash_file(file_path: &Path) -> Result<String, Error> {
 /// * `Ok(HashSet<PathBuf>)` - A HashSet containing the archive file paths if the file was read successfully.
 /// * `Err(io::Error)` - An error if there was an issue reading the file.
 pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>, Error> {
-    info!("Checking the updater blacklist...");
+    debug!("Checking the updater blacklist...");
     let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
 
     // If the blacklist file is missing, return empty HashSet

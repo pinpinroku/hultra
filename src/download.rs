@@ -1,15 +1,18 @@
 use futures_util::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
-use std::{borrow::Cow, path::Path};
+use std::path::Path;
 use tokio::{fs, io::AsyncWriteExt};
 use tracing::{debug, error, info};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::error::Error;
+use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
 
+pub mod install;
+pub mod update;
+
+#[allow(dead_code)] // NOTE: Maybe use this for progress bar in the future.
 /// Get the file size
-pub async fn get_file_size(client: Client, url: &str) -> Result<u64, Error> {
+async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
     debug!(
         "Get the file size by sending HEAD request to the server: {}",
         url
@@ -29,31 +32,32 @@ pub async fn get_file_size(client: Client, url: &str) -> Result<u64, Error> {
     Ok(total_size)
 }
 
-/// Download an archived file from gamebanana server
-pub async fn download_file(
-    client: Client,
-    name: &str,
+/// Download a single mod file
+pub async fn download_mod(
+    client: &Client,
+    mod_name: &str,
     url: &str,
     expected_hashes: &[String],
     download_dir: &Path,
-    pb: ProgressBar,
 ) -> Result<(), Error> {
-    // TODO: Handling errors like 404 or 500+
+    // User-friendly status at info level
+    info!("📥 Downloading {}", mod_name);
+
+    // Debug details only shown in verbose mode
+    debug!("URL: {}", url);
+    debug!("Destination directory: {}", download_dir.display()); // Attempt to download the file
+
     let response = client.get(url).send().await?.error_for_status()?;
-    debug!("[{}] Status code: {:#?}", name, response.status());
+    debug!("Response status: {}", response.status());
 
     let filename = util::determine_filename(response.url(), response.headers());
-    let download_path = download_dir.join(filename);
-    info!("[{}] Destination: {:#?}", name, download_path);
+    let download_path = download_dir.join(&filename);
 
-    let total_size = response.content_length().unwrap_or(0);
-    info!("[{}] Total file size: {}", name, total_size);
+    info!("Saving as: {}", filename);
+    debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
 
-    pb.set_length(total_size);
+    let computed_hash = download_and_write(response, &download_path).await?;
 
-    let computed_hash = download_and_write(response, &download_path, pb).await?;
-
-    info!("\n[{}] 🔍 Verifying checksum...", name);
     verify_checksum(computed_hash, expected_hashes, &download_path).await?;
 
     Ok(())
@@ -62,22 +66,20 @@ pub async fn download_file(
 async fn download_and_write(
     response: reqwest::Response,
     download_path: &Path,
-    pb: ProgressBar,
 ) -> Result<u64, Error> {
+    info!(
+        "Start writing data to the destination: {}",
+        download_path.display()
+    );
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
     let mut file = fs::File::create(download_path).await?;
-    let mut downloaded: u64 = 0;
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         hasher.update(&chunk);
-        downloaded = downloaded.saturating_add(chunk.len() as u64);
-        pb.set_position(downloaded);
     }
-
-    pb.finish();
 
     Ok(hasher.digest())
 }
@@ -85,49 +87,33 @@ async fn download_and_write(
 /// Verifies the checksum of the downloaded file.
 async fn verify_checksum(
     computed_hash: u64,
-    expected_hash: &[String],
+    expected_hashes: &[String],
     download_path: &Path,
 ) -> Result<(), Error> {
     let hash_str = format!("{:016x}", computed_hash);
-    info!(
+    info!("🔍 Verifying checksum...");
+    debug!(
         "Xxhash in u64: {:#?}, formatted string: {:#?}",
         computed_hash, hash_str
     );
+    debug!(
+        "Checking computed hash: {} against expected: {:?}",
+        computed_hash, expected_hashes
+    );
 
-    if expected_hash.contains(&hash_str) {
+    if expected_hashes.contains(&hash_str) {
         info!("✅ Checksum verified!");
         Ok(())
     } else {
         error!("❌ Checksum verification failed!");
         fs::remove_file(&download_path).await?;
-        info!("[Cleanup] Downloaded file removed 🗑️");
+        info!("🗑️ Downloaded file removed.");
         Err(Error::InvalidChecksum {
             file: download_path.to_path_buf(),
             computed: hash_str,
-            expected: expected_hash.to_vec(),
+            expected: expected_hashes.to_vec(),
         })
     }
-}
-
-/// Build progress bar
-pub fn build_progress_bar(name: &str, total_size: Option<u64>) -> ProgressBar {
-    let pb = ProgressBar::new(total_size.unwrap_or(0));
-
-    let style = ProgressStyle::with_template(
-        "{msg:<} {total_bytes:>40.1.cyan/blue} {bytes_per_sec:.2} {eta_precise:} {bar:60} {percent:}%"
-    ).unwrap_or_else(|_| ProgressStyle::default_bar());
-    pb.set_style(style);
-
-    // If the name is too long, truncate it and add an ellipsis at the end.
-    let max_size = 40;
-    let msg: Cow<str> = if name.len() > max_size {
-        Cow::Owned(format!("{}...", &name[..max_size - 3]))
-    } else {
-        Cow::Borrowed(name)
-    };
-    pb.set_message(msg.to_string());
-
-    pb
 }
 
 /// Utility functions for determining filenames and handling mod download metadata.
@@ -161,7 +147,7 @@ mod util {
         headers
             .get(reqwest::header::ETAG)
             .and_then(|etag_value| etag_value.to_str().ok())
-            .map(|etag| etag.trim_matches('"').to_string())
+            .map(|etag| etag.trim_matches('"'))
             .map(|etag| format!("{}.zip", etag))
     }
 
