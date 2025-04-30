@@ -51,7 +51,7 @@ pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 /// Fetching the remote mod registry, then parsed and deserialize into RemoteModRegistry type
 pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
-    info!("Fetching online database...");
+    info!("🌐 Fetching online database...");
     let client = reqwest::ClientBuilder::new()
         .http2_prior_knowledge()
         .gzip(true)
@@ -65,7 +65,7 @@ pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
     debug!("Response headers: {:#?}", response.headers());
     let data = response.bytes().await?;
 
-    info!("Parsing remote mod registry data.");
+    debug!("Parsing remote mod registry data.");
     let mod_registry: RemoteModRegistry = serde_yaml_ng::from_slice(&data)?;
 
     Ok(mod_registry)
