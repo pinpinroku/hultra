@@ -11,12 +11,8 @@ pub struct Cli {
     pub mods_dir: Option<PathBuf>,
 
     /// Verbose mode: Display verbose outputs
-    #[arg(short = 'v', long = "verbose", conflicts_with = "quiet")]
+    #[arg(short, long)]
     pub verbose: bool,
-
-    /// Quiet mode: Display only minimal outputs
-    #[arg(short = 'q', long = "quiet", conflicts_with = "verbose")]
-    pub quiet: bool,
 
     /// The subcommand to execute
     #[command(subcommand)]
