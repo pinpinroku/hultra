@@ -49,6 +49,38 @@ impl RemoteModInfo {
 /// Represents the complete `everest_update.yaml` containing all available remote mods.
 pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
+// NOTE: This is necessary because direct implementation for std::collection::HashMap is not allowed.
+pub trait ModRegistryQuery {
+    fn get_mod_info_by_name<'a>(&'a self, name: &str) -> Option<(&'a String, &'a RemoteModInfo)>;
+    fn get_mod_info_by_url<'a>(
+        &'a self,
+        game_page_url: &str,
+    ) -> Option<(&'a String, &'a RemoteModInfo)>;
+}
+
+// NOTE: If you want to use these method, you need to introduce this trait in the scope
+impl ModRegistryQuery for RemoteModRegistry {
+    /// Gets the mod registry entry that corresponds to the provided name.
+    fn get_mod_info_by_name<'a>(&'a self, name: &str) -> Option<(&'a String, &'a RemoteModInfo)> {
+        debug!("Getting the mod information matching the name: {}", name);
+        self.get_key_value(name)
+    }
+
+    /// Gets the mod registry entry that corresponds to the provided URL.
+    fn get_mod_info_by_url<'a>(
+        &'a self,
+        game_page_url: &str,
+    ) -> Option<(&'a String, &'a RemoteModInfo)> {
+        debug!(
+            "Getting the remote mod information by mod page URL: {}",
+            game_page_url
+        );
+        let id = game_page_url.split('/').next_back()?.parse::<u32>().ok()?;
+        self.iter()
+            .find(|(_, manifest)| manifest.gamebanana_id == id)
+    }
+}
+
 /// Fetching the remote mod registry, then parsed and deserialize into RemoteModRegistry type
 pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
     info!("🌐 Fetching online database...");
@@ -69,30 +101,6 @@ pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
     let mod_registry: RemoteModRegistry = serde_yaml_ng::from_slice(&data)?;
 
     Ok(mod_registry)
-}
-
-/// Gets the mod registry entry that corresponds to the provided name.
-pub fn get_mod_info_by_name<'a>(
-    mod_registry: &'a RemoteModRegistry,
-    name: &str,
-) -> Option<(&'a String, &'a RemoteModInfo)> {
-    debug!("Get the mod information matching the name: {}", name);
-    mod_registry.get_key_value(name)
-}
-
-/// Gets the mod registry entry that corresponds to the provided URL.
-pub fn get_mod_info_by_url<'a>(
-    mod_registry: &'a RemoteModRegistry,
-    game_page_url: &str,
-) -> Option<(&'a String, &'a RemoteModInfo)> {
-    debug!(
-        "Getting the remote mod information by mod page URL: {}",
-        game_page_url
-    );
-    let id = game_page_url.split('/').next_back()?.parse::<u32>().ok()?;
-    mod_registry
-        .iter()
-        .find(|(_, manifest)| manifest.gamebanana_id == id)
 }
 
 #[cfg(test)]
@@ -131,7 +139,7 @@ mod tests {
 
         // Test URL that should match gamebanana_id 42
         let test_url = "https://gamebanana.com/members/42";
-        let result = get_mod_info_by_url(&mod_registry, test_url);
+        let result = mod_registry.get_mod_info_by_url(test_url);
         assert!(result.is_some());
         let (found_key, found_mod) = result.unwrap();
         // The found mod should have gamebanana_id 42 and the key should be "mod1"
@@ -140,7 +148,7 @@ mod tests {
 
         // Test URL that does not match any entry
         let invalid_url = "https://gamebanana.com/members/12345";
-        let result_invalid = get_mod_info_by_url(&mod_registry, invalid_url);
+        let result_invalid = mod_registry.get_mod_info_by_url(invalid_url);
         assert!(result_invalid.is_none());
     }
 
@@ -149,7 +157,7 @@ mod tests {
     fn test_get_mod_info_from_url_invalid_url() {
         let mod_registry: RemoteModRegistry = HashMap::new();
         let malformed_url = "not a valid url";
-        let result = get_mod_info_by_url(&mod_registry, malformed_url);
+        let result = mod_registry.get_mod_info_by_url(malformed_url);
         assert!(result.is_none());
     }
 
