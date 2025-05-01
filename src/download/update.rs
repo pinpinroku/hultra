@@ -2,7 +2,10 @@ use reqwest::Client;
 use std::path::Path;
 use tracing::{error, info};
 
-use crate::{download, error::Error, installed_mods::AvailableUpdateInfo};
+use crate::{
+    download, error::Error, fileutil::replace_home_dir_with_tilde,
+    installed_mods::AvailableUpdateInfo,
+};
 
 /// Update a mod
 pub async fn update(
@@ -14,14 +17,17 @@ pub async fn update(
         client,
         &update_info.name,
         &update_info.url,
-        &update_info.hash,
+        &update_info.hashes,
         download_dir,
     )
     .await?;
 
-    // Remove outdated file when download succeed.
     if update_info.existing_path.exists() {
         tokio::fs::remove_file(&update_info.existing_path).await?;
+        info!(
+            "🗑️ The previous version has been deleted. {}",
+            replace_home_dir_with_tilde(&update_info.existing_path)
+        );
     }
 
     info!(
