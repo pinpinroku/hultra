@@ -40,12 +40,13 @@ pub async fn download_mod(
     expected_hashes: &[String],
     download_dir: &Path,
 ) -> Result<PathBuf, Error> {
-    // User-friendly status at info level
     info!("📥 Downloading {}", mod_name);
 
-    // Debug details only shown in verbose mode
     debug!("URL: {}", url);
-    debug!("Destination directory: {}", download_dir.display()); // Attempt to download the file
+    debug!(
+        "Destination directory: {}",
+        replace_home_dir_with_tilde(download_dir)
+    );
 
     let response = client.get(url).send().await?.error_for_status()?;
     debug!("Response status: {}", response.status());
@@ -98,7 +99,7 @@ async fn verify_checksum(
     );
     debug!(
         "Checking computed hash: {} against expected: {:?}",
-        computed_hash, expected_hashes
+        hash_str, expected_hashes
     );
 
     if expected_hashes.contains(&hash_str) {
