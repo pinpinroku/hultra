@@ -1,7 +1,8 @@
 use futures_util::StreamExt;
 use reqwest::Client;
 use std::path::{Path, PathBuf};
-use tokio::{fs, io::AsyncWriteExt};
+use tempfile::NamedTempFile;
+use tokio::io::AsyncWriteExt;
 use tracing::{debug, error, info};
 use xxhash_rust::xxh64::Xxh64;
 
@@ -32,7 +33,7 @@ async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
     Ok(total_size)
 }
 
-/// Download a single mod file
+/// Download a single mod file, return the file path.
 pub async fn download_mod(
     client: &Client,
     mod_name: &str,
@@ -57,40 +58,32 @@ pub async fn download_mod(
     info!("Saving as: {}", filename);
     debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
 
-    let computed_hash = download_and_write(response, &download_path).await?;
-
-    verify_checksum(computed_hash, expected_hashes, &download_path).await?;
+    download_and_write(response, &download_path, expected_hashes).await?;
 
     Ok(download_path)
 }
 
+// Download the file, verify the checksum when it is complete, and then move it to the destination.
 async fn download_and_write(
     response: reqwest::Response,
     download_path: &Path,
-) -> Result<u64, Error> {
-    info!(
-        "Start writing data to the destination: {}",
-        replace_home_dir_with_tilde(download_path)
-    );
+    expected_hashes: &[String],
+) -> Result<(), Error> {
+    info!("Start writing data to the temporary file.");
+
+    let temp_file = NamedTempFile::new()?;
+
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
-    let mut file = fs::File::create(download_path).await?;
+    let mut file = tokio::fs::File::create(&temp_file).await?;
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         hasher.update(&chunk);
     }
+    let computed_hash = hasher.digest();
 
-    Ok(hasher.digest())
-}
-
-/// Verifies the checksum of the downloaded file.
-async fn verify_checksum(
-    computed_hash: u64,
-    expected_hashes: &[String],
-    download_path: &Path,
-) -> Result<(), Error> {
     let hash_str = format!("{:016x}", computed_hash);
     info!("🔍 Verifying checksum...");
     debug!(
@@ -104,11 +97,16 @@ async fn verify_checksum(
 
     if expected_hashes.contains(&hash_str) {
         info!("✅ Checksum verified!");
+        info!(
+            "Moving the file to the destination: {}",
+            replace_home_dir_with_tilde(download_path)
+        );
+        // NOTE: The permissions are set to 0600
+        tokio::fs::copy(temp_file, download_path).await?;
         Ok(())
     } else {
         error!("❌ Checksum verification failed!");
-        fs::remove_file(&download_path).await?;
-        info!("🗑️ Downloaded file removed.");
+        // NOTE: The temp file will be removed automatically
         Err(Error::InvalidChecksum {
             file: download_path.to_path_buf(),
             computed: hash_str,
