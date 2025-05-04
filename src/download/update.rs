@@ -8,7 +8,7 @@ use crate::{
 };
 
 /// Update a mod
-pub async fn update(
+async fn update(
     client: &Client,
     update_info: &AvailableUpdateInfo,
     download_dir: &Path,
