@@ -28,6 +28,10 @@ pub enum Error {
     #[error(transparent)]
     TaskJoin(#[from] tokio::task::JoinError),
 
+    /// Represents a semaphore acquier error, transparently wrapping `tokio::sync::AcquireError`
+    #[error(transparent)]
+    SemaphoreAcquire(#[from] tokio::sync::AcquireError),
+
     /// Multiple update failures
     #[error("multiple update errors occurred: {0:?}")]
     MultipleUpdate(Vec<Error>),

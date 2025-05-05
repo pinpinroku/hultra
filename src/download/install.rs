@@ -1,10 +1,11 @@
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Url};
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     path::Path,
+    sync::Arc,
 };
+use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -102,16 +103,15 @@ async fn resolve_dependencies(
     missing_dependencies: Vec<&String>,
 ) -> Result<(), Error> {
     let mp = MultiProgress::new();
-    let style = ProgressStyle::with_template(
-        "{wide_msg} {total_bytes:>9.1.cyan/blue} {bytes_per_sec:>12.2} {eta_precise:>9} [{bar:>40}] {percent:>4}%",
-    )
-    .unwrap_or_else(|_| ProgressStyle::default_bar())
-    .progress_chars("#>-");
+    let style = super::pb_style::new();
 
+    let semaphore = Arc::new(Semaphore::new(6));
     let mut handles = Vec::with_capacity(missing_dependencies.len());
 
     for dependency in missing_dependencies {
         if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency) {
+            let semaphore = Arc::clone(&semaphore);
+
             let mp = mp.clone();
             let style = style.clone();
 
@@ -122,19 +122,16 @@ async fn resolve_dependencies(
             debug!("Manifest of dependency: {}\n{:#?}", dependency, manifest);
 
             let handle = tokio::spawn(async move {
+                let _permit = semaphore.acquire().await?;
+
                 let total_size = super::get_file_size(&client, &manifest.download_url).await?;
                 let pb = mp.add(ProgressBar::new(total_size));
                 pb.set_style(style);
-                // If the name is too long, truncate it and add an ellipsis at the end.
-                let max_size = 40;
-                let msg: Cow<str> = if dependency.len() > max_size {
-                    Cow::Owned(format!("{}...", &dependency[..max_size - 3]))
-                } else {
-                    Cow::Borrowed(&dependency)
-                };
+
+                let msg = super::pb_style::truncate_msg(&dependency);
                 pb.set_message(msg.to_string());
 
-                download::download_mod(
+                let saved_path = download::download_mod(
                     &client,
                     &dependency,
                     &manifest.download_url,
@@ -142,7 +139,11 @@ async fn resolve_dependencies(
                     &download_dir,
                     &pb,
                 )
-                .await
+                .await?;
+
+                drop(_permit);
+
+                Ok(saved_path)
             });
 
             handles.push(handle);
