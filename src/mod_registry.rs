@@ -81,7 +81,7 @@ pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
     Ok(mod_registry)
 }
 
-/// Parses a binary data from the resopnse into the remote mod registry.
+/// Parses a binary data from the response into the remote mod registry.
 fn parse_response_bytes(
     bytes: &[u8],
 ) -> Result<HashMap<String, RemoteModInfo>, serde_yaml_ng::Error> {
