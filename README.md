@@ -116,19 +116,34 @@ everest-mod-cli show "zbs_Crystal"
 
 ### `install`
 
-`everest-mod-cli install [mod_name|page_url]`
+`everest-mod-cli install [page_url]`
 
-Install a mod by its name or the URL of the game page. The mod will be downloaded and installed in the appropriate directory.
+Install a mod by the URL of the page where the mod is featured on.
+
 Checksum verification is performed automatically to ensure the integrity of the downloaded mod.
+
+If there are missing dependencies, it will automatically download and install them.
 ```bash
-everest-mod-cli install "SpeedrunTool"
-# SpeedrunTool 245.41 KiB 39.92 KiB/s 00:00:00 ███████████████████████████████████████ 100%
+everest-mod-cli install "https://gamebanana.com/mods/592695"
+# 🌐 Fetching online database...
+# 🍓 kit                                                                          5.55 MiB  21.89 KiB/s  00:00:00 [########################################]  100%
+# Checking for missing dependencies...
+# Start downloading the dependencies...
+# 
+# 🍓 CommunalHelper                                                              19.25 MiB   4.40 MiB/s  00:00:00 [########################################]  100%
+# 🍓 GravityHelper                                                              706.45 KiB  97.16 KiB/s  00:00:00 [########################################]  100%
+# 🍓 OutbackHelper                                                               45.12 KiB  61.97 KiB/s  00:00:00 [########################################]  100%
+# 🍓 VivHelper                                                                    6.24 MiB   2.54 MiB/s  00:00:00 [########################################]  100%
+# 🍓 AdventureHelper                                                             86.87 KiB  86.80 KiB/s  00:00:00 [########################################]  100%
+# 🍓 MaxHelpingHand                                                             987.20 KiB 594.86 KiB/s  00:00:00 [########################################]  100%
+# 🍓 ShroomHelper                                                                 1.74 MiB   1.15 MiB/s  00:00:00 [########################################]  100%
+# 🍓 VortexHelper                                                                 2.09 MiB   1.36 MiB/s  00:00:00 [########################################]  100%
+# 🍓 XaphanHelper                                                                 6.62 MiB   5.01 MiB/s  00:00:00 [########################################]  100%
+# 🍓 DJMapHelper                                                                422.93 KiB 629.41 KiB/s  00:00:00 [########################################]  100%
+# All required dependencies installed successfully!
 ```
-Download the mod by specifying its URL.
-```bash
-everest-mod-cli install "https://gamebanana.com/mods/589514"
-# AIRTH         9.84 MiB 232.26 KiB/s 00:00:00 ███████████████████████████████████████ 100%
-```
+
+> Attached berry indicates download completed.
 
 ### `update`
 
