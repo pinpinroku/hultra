@@ -11,8 +11,8 @@ use tracing::{debug, error, info, warn};
 use crate::{
     download,
     error::Error,
-    fileutil::{read_manifest_file_from_zip, replace_home_dir_with_tilde},
-    installed_mods::ModManifest,
+    fileutil,
+    local::ModManifest,
     mod_registry::{ModRegistryQuery, RemoteModInfo, RemoteModRegistry},
 };
 
@@ -77,7 +77,7 @@ pub async fn install(
     debug!(
         "[{}] is now installed in {}.",
         name,
-        replace_home_dir_with_tilde(&downloaded_file_path)
+        fileutil::replace_home_dir_with_tilde(&downloaded_file_path)
     );
 
     if let Some(dependencies) = check_dependencies(&downloaded_file_path)? {
@@ -185,11 +185,10 @@ async fn resolve_dependencies(
 }
 
 /// Check for dependencies, if found return `HashSet<String>`, otherwise return `None`.
-fn check_dependencies(download_path: &Path) -> Result<Option<HashSet<String>>, Error> {
+fn check_dependencies(downloaded_file_path: &Path) -> Result<Option<HashSet<String>>, Error> {
     info!("\nChecking for missing dependencies...");
     // Attempt to read the manifest file. If it doesn't exist, return an error.
-    let buffer = read_manifest_file_from_zip(download_path)?
-        .ok_or_else(|| Error::MissingManifestFile(download_path.to_path_buf()))?;
+    let buffer = fileutil::read_manifest_file_from_archive(downloaded_file_path)?;
 
     // Parse the manifest file
     let manifest = ModManifest::from_yaml(&buffer)?;

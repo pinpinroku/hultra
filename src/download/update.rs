@@ -6,7 +6,7 @@ use tracing::{debug, error, info};
 
 use crate::{
     download, error::Error, fileutil::replace_home_dir_with_tilde,
-    installed_mods::AvailableUpdateInfo,
+    local::AvailableUpdateInfo,
 };
 
 /// Updates a mod, deletes the previous version of the file if the update succeeds.

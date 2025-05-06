@@ -4,15 +4,15 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::{
     error::Error,
-    fileutil::{hash_file, read_manifest_file_from_zip, replace_home_dir_with_tilde},
+    fileutil::{hash_file, read_manifest_file_from_archive},
     mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
-/// Represents the `everest.yaml` manifest file that defines a mod
+/// Represents the `everest.yaml` manifest file that defines a mod.
 #[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct ModManifest {
     #[serde(rename = "Name")]
@@ -20,20 +20,20 @@ pub struct ModManifest {
     #[serde(rename = "Version")]
     pub version: String,
     #[serde(rename = "DLL")]
-    pub dll: Option<String>,
+    dll: Option<String>,
     #[serde(rename = "Dependencies")]
     pub dependencies: Option<Vec<Dependency>>,
     #[serde(rename = "OptionalDependencies")]
     pub optional_dependencies: Option<Vec<Dependency>>,
 }
 
-/// Dependency specification for required or optional mod dependencies
+/// Dependency specification for required or optional mod dependencies.
 #[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct Dependency {
     #[serde(rename = "Name")]
     pub name: String,
     #[serde(rename = "Version")]
-    pub version: Option<String>,
+    pub version: String,
 }
 
 impl ModManifest {
@@ -42,7 +42,7 @@ impl ModManifest {
         // NOTE: We always need first entry from this collection since that is the primal mod, so we use the `VecDeque<T>` here instead of the `Vec<T>`.
         let mut manifest_entries = serde_yaml_ng::from_slice::<VecDeque<Self>>(yaml_buffer)?;
 
-        // Attempt to retrieve the first entry without unnecessary cloning or element shiting.
+        // Attempt to retrieve the first entry without unnecessary cloning or element shifting.
         let entry = manifest_entries
             .pop_front()
             .ok_or_else(|| Error::MissingManifestEntry(manifest_entries))?;
@@ -50,52 +50,43 @@ impl ModManifest {
     }
 }
 
-/// Collection of all installed mods and their metadata
-pub type InstalledModList = Vec<LocalModInfo>;
-
-/// Information about a locally installed mod
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-pub struct LocalModInfo {
-    /// Path to the zip file which contains the mod's assets and manifest
-    #[serde(rename = "Filename")]
-    pub archive_path: PathBuf,
-    /// Mod manifest
+/// Information about a locally installed mod.
+#[derive(Debug, Deserialize)]
+pub struct LocalMod {
+    /// Path to the local mod file which contains the mod's assets and manifest
+    pub file_path: PathBuf,
+    /// Mod manifest resides in the mod file
     pub manifest: ModManifest,
-    /// Computed XXH64 hash of the mod archive for update verification
-    #[serde(rename = "xxHash")]
+    /// Computed XXH64 hash of the file for update check
     checksum: Option<String>,
 }
 
-pub trait GenerateLocalDatabase {
-    fn new(archive_path: PathBuf, manifest: ModManifest) -> Self;
-    fn archive_path(&self) -> &Path;
+pub trait Generatable {
+    fn new(file_path: PathBuf, manifest: ModManifest) -> Self;
+    fn file_path(&self) -> &Path;
     fn manifest(&self) -> &ModManifest;
     fn checksum(&mut self) -> Result<&str, Error>;
 }
 
-impl GenerateLocalDatabase for LocalModInfo {
-    /// Creates a new `LocalModInfo` instance.
-    ///
-    /// # Arguments
-    /// * `archive_path` - Path to the mod's zip archive.
-    /// * `manifest` - Parsed manifest information for the mod.
-    fn new(archive_path: PathBuf, manifest: ModManifest) -> Self {
+impl Generatable for LocalMod {
+    /// Creates a new `LocalMod` instance.
+    fn new(file_path: PathBuf, manifest: ModManifest) -> Self {
         Self {
-            archive_path,
+            file_path,
             manifest,
             checksum: None,
         }
     }
 
-    fn archive_path(&self) -> &Path {
-        &self.archive_path
+    fn file_path(&self) -> &Path {
+        &self.file_path
     }
 
     fn manifest(&self) -> &ModManifest {
         &self.manifest
     }
 
-    /// Computes and retrieves the checksum of the mod archive.
+    /// Sets the checksum of the file by computing them if none.
     ///
     /// # Returns
     /// * `Ok(&str)` - Computed checksum as a string reference.
@@ -104,7 +95,7 @@ impl GenerateLocalDatabase for LocalModInfo {
         debug!("Checksum of the mod: {:#?}", self.checksum);
 
         if self.checksum.is_none() {
-            let computed_hash = hash_file(&self.archive_path)?;
+            let computed_hash = hash_file(&self.file_path)?;
             debug!("Computed hash of the mod: {:#?}", computed_hash);
             self.checksum = Some(computed_hash);
         }
@@ -114,52 +105,36 @@ impl GenerateLocalDatabase for LocalModInfo {
     }
 }
 
-/// List installed mods with valid manifest files.
+/// Load local mods with valid manifest files.
 ///
 /// # Arguments
-/// * `archive_paths` - A list of all installed mod archive paths.
+/// * `archive_paths` - A list of all local mod paths.
 ///
 /// # Returns
-/// * `Ok(InstalledModList)` - List of installed mods with valid manifests.
+/// * `Ok(Vec<LocalMod>)` - List of local mods with valid manifests.
 /// * `Err(Error)` - If there are issues reading the files or parsing the manifests.
-pub fn list_installed_mods(archive_paths: Vec<PathBuf>) -> Result<InstalledModList, Error> {
+pub fn load_local_mods(archive_paths: Vec<PathBuf>) -> Result<Vec<LocalMod>, Error> {
     debug!("Start parsing archive files.");
-    let mut installed_mods = Vec::with_capacity(archive_paths.len());
-
     let start = Instant::now();
-    for archive_path in archive_paths {
-        let debug_path = replace_home_dir_with_tilde(&archive_path);
-        debug!("Reading the file '{}'", debug_path);
 
-        let manifest_content = read_manifest_file_from_zip(&archive_path)?;
-        match manifest_content {
-            Some(buffer) => {
-                debug!("Manifest file detected. Trying to parse them.");
-                let manifest = ModManifest::from_yaml(&buffer)?;
-                let mod_info = LocalModInfo::new(archive_path, manifest);
-                installed_mods.push(mod_info);
-            }
-            None => {
-                warn!(
-                    "No mod manifest file (everest.[yaml|yml]) found in {}.\n\
-                \t# The file might be located in a subdirectory.\n\
-                \t# Please contact the mod creator about this issue or just ignore this message.\n\
-                \t# Updates will be skipped for this mod.",
-                    debug_path
-                )
-            }
-        }
+    let mut local_mods = Vec::with_capacity(archive_paths.len());
+
+    for archive_path in archive_paths {
+        let buffer = read_manifest_file_from_archive(&archive_path)?;
+        let manifest = ModManifest::from_yaml(&buffer)?;
+        let local_mod = LocalMod::new(archive_path, manifest);
+        local_mods.push(local_mod);
     }
     let duration = start.elapsed();
     debug!("Scanning manifest files took: {:#?}", duration);
 
-    // Sort by name
     debug!("Sorting the installed mods by name...");
-    installed_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
+    local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
 
-    Ok(installed_mods)
+    Ok(local_mods)
 }
 
+// HACK: Move these logic to `src/download/update.rs`
 /// Update information about the mod
 #[derive(Debug, Clone)]
 pub struct AvailableUpdateInfo {
@@ -192,7 +167,7 @@ pub struct AvailableUpdateInfo {
 /// * `Ok(None)` if no update is available (either because the mod is up-to-date or remote info is missing).
 /// * `Err(Error)` if there is an error computing the mod's checksum.
 fn check_update(
-    mut local_mod: impl GenerateLocalDatabase,
+    mut local_mod: impl Generatable,
     mod_registry: &RemoteModRegistry,
 ) -> Result<Option<AvailableUpdateInfo>, Error> {
     // Look up remote mod info
@@ -219,7 +194,7 @@ fn check_update(
         available_version: remote_mod.version,
         url: remote_mod.download_url,
         hashes: remote_mod.checksums,
-        existing_path: local_mod.archive_path().to_path_buf(),
+        existing_path: local_mod.file_path().to_path_buf(),
     }))
 }
 
@@ -233,7 +208,7 @@ fn check_update(
 /// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
 /// * `Err(Error)` - If there are issues fetching or computing update information.
 pub fn check_updates(
-    installed_mods: Vec<impl GenerateLocalDatabase>,
+    installed_mods: Vec<impl Generatable>,
     mod_registry: &RemoteModRegistry,
 ) -> Result<Vec<AvailableUpdateInfo>, Error> {
     // Use iterator combinators to process each mod gracefully.
@@ -256,7 +231,7 @@ pub fn check_updates(
 /// # Returns
 /// * `Result<(), Error>` - Result indicating success or error during blacklist processing
 pub fn remove_blacklisted_mods(
-    installed_mods: &mut Vec<LocalModInfo>,
+    installed_mods: &mut Vec<LocalMod>,
     blacklist: &HashSet<PathBuf>,
 ) -> Result<(), Error> {
     if blacklist.is_empty() {
@@ -264,7 +239,7 @@ pub fn remove_blacklisted_mods(
     }
 
     // Remove mods whose archive_path matches any blacklisted path
-    installed_mods.retain(|mod_info| !blacklist.contains(&mod_info.archive_path));
+    installed_mods.retain(|mod_info| !blacklist.contains(&mod_info.file_path));
 
     Ok(())
 }
@@ -333,7 +308,7 @@ mod tests_for_files {
 
         let archive_paths = vec![path];
 
-        let result = list_installed_mods(archive_paths);
+        let result = load_local_mods(archive_paths);
         assert!(result.is_ok());
 
         let installed_mods = result.unwrap();
@@ -349,7 +324,7 @@ mod tests_for_files {
         let manifest = generate_test_mod_manifest("BlacklistedMod", "1.0.0");
         let archive_path = create_test_mod_archive(mods_dir, &manifest, VALID_MANIFEST_FILE);
 
-        let mut installed_mods = vec![LocalModInfo::new(archive_path.to_path_buf(), manifest)];
+        let mut installed_mods = vec![LocalMod::new(archive_path.to_path_buf(), manifest)];
         let blacklist: HashSet<PathBuf> = vec![archive_path].into_iter().collect();
 
         let result = remove_blacklisted_mods(&mut installed_mods, &blacklist);

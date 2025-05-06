@@ -1,10 +1,7 @@
-use std::collections::HashSet;
-
 use clap::Parser;
-use download::install::parse_mod_page_url;
 use indicatif::ProgressBar;
-use mod_registry::ModRegistryQuery;
 use reqwest::Client;
+use std::collections::HashSet;
 use tracing::{debug, info};
 
 mod cli;
@@ -12,13 +9,15 @@ mod constant;
 mod download;
 mod error;
 mod fileutil;
-mod installed_mods;
+mod local;
 mod mod_registry;
 
 use cli::{Cli, Commands};
+use download::install::parse_mod_page_url;
 use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist, replace_home_dir_with_tilde};
-use installed_mods::{check_updates, list_installed_mods, remove_blacklisted_mods};
+use local::{check_updates, remove_blacklisted_mods};
+use mod_registry::ModRegistryQuery;
 
 fn setup_logging(verbose: bool) {
     use tracing_subscriber::{
@@ -79,47 +78,43 @@ async fn run() -> Result<(), Error> {
                 return Ok(());
             }
 
-            let installed_mods = list_installed_mods(archive_paths)?;
+            let local_mods = local::load_local_mods(archive_paths)?;
 
-            for mod_info in installed_mods.iter() {
+            for local_mod in local_mods.iter() {
                 info!(
                     "- {} (version {})",
-                    mod_info.manifest.name, mod_info.manifest.version
+                    local_mod.manifest.name, local_mod.manifest.version
                 );
             }
 
-            debug!("{} mods installed.", &installed_mods.len());
+            debug!("{} mods installed.", &local_mods.len());
         }
 
         // Show details of a specific mod if it is installed.
         Commands::Show(args) => {
             debug!("Checking installed mod information...");
 
-            let installed_mods = list_installed_mods(archive_paths)?;
+            let local_mods = local::load_local_mods(archive_paths)?;
 
-            if let Some(mod_info) = installed_mods.iter().find(|m| m.manifest.name == args.name) {
-                info!("- Name: {}", mod_info.manifest.name);
-                info!("- Version: {}", mod_info.manifest.version);
-                if let Some(deps) = &mod_info.manifest.dependencies {
+            if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
+                info!(
+                    "📂 {}\n",
+                    fileutil::replace_home_dir_with_tilde(&local_mod.file_path)
+                );
+                info!("- Name: {}", local_mod.manifest.name);
+                info!("  Version: {}", local_mod.manifest.version);
+                if let Some(deps) = &local_mod.manifest.dependencies {
                     info!("  Dependencies:");
                     for dep in deps {
-                        if let Some(ver) = &dep.version {
-                            info!("  - Name: {}", dep.name);
-                            info!("  - Version: {}", ver);
-                        } else {
-                            info!("  - {}", dep.name);
-                        }
+                        info!("    - Name: {}", dep.name);
+                        info!("      Version: {}", dep.version);
                     }
                 }
-                if let Some(opt_deps) = &mod_info.manifest.optional_dependencies {
+                if let Some(opt_deps) = &local_mod.manifest.optional_dependencies {
                     info!("  Optional Dependencies:");
                     for dep in opt_deps {
-                        if let Some(ver) = &dep.version {
-                            info!("  - Name: {}", dep.name);
-                            info!("  - Version: {}", ver);
-                        } else {
-                            info!("  - {}", dep.name);
-                        }
+                        info!("    - Name: {}", dep.name);
+                        info!("      Version: {}", dep.version);
                     }
                 }
             } else {
@@ -142,7 +137,7 @@ async fn run() -> Result<(), Error> {
                     debug!("Matched entry detail: {:#?}", manifest);
 
                     // Check if already installed
-                    let installed_mods = list_installed_mods(archive_paths)?;
+                    let installed_mods = local::load_local_mods(archive_paths)?;
 
                     // Create a vector of mod names.
                     let installed_names: HashSet<_> = installed_mods
@@ -181,7 +176,7 @@ async fn run() -> Result<(), Error> {
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
 
             // Filter installed mods by using the blacklist
-            let mut installed_mods = list_installed_mods(archive_paths)?;
+            let mut installed_mods = local::load_local_mods(archive_paths)?;
             let blacklist = read_updater_blacklist(&mods_directory)?;
             remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
 

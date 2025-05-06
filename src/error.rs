@@ -3,7 +3,7 @@ use std::{collections::VecDeque, path::PathBuf};
 use reqwest::Url;
 use thiserror::Error;
 
-use crate::installed_mods::ModManifest;
+use crate::local::ModManifest;
 
 /// The `Error` enum defines all possible error types that can occur in the application.
 #[derive(Debug, Error)]
@@ -65,8 +65,12 @@ pub enum Error {
         expected: Vec<String>,
     },
 
-    /// Missing manifest file in the download path
-    #[error("manifest file not found at path: {0}")]
+    /// Manifest file is missing
+    #[error(
+        "Could not find manifest file (everest.[yaml|yml]) in {0:?}. \n\
+        The file might be located in a subdirectory. \n\
+        Please contact the mod creator about this issue."
+    )]
     MissingManifestFile(PathBuf),
 
     /// Missing entry in the manifest file "everest.yaml"

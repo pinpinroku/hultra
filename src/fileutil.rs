@@ -1,7 +1,8 @@
 #![allow(deprecated)]
 use std::{
+    borrow::Cow,
     collections::HashSet,
-    env::home_dir,
+    env,
     fs::{self, File},
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
@@ -22,25 +23,23 @@ use crate::error::Error;
 pub fn get_mods_directory() -> Result<PathBuf, Error> {
     debug!("Detecting Celeste/Mods directory...");
     // NOTE: `std::env::home_dir()` will be undeprecated in rust 1.87.0
-    home_dir()
+    env::home_dir()
         .map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
         .ok_or(Error::CouldNotDetermineHomeDir)
 }
 
-/// Replace `/home/user/` with `~/`
-pub fn replace_home_dir_with_tilde(destination: &Path) -> String {
-    let fallback = destination.to_string_lossy().into_owned();
-
+/// Replaces `/home/user/` with `~/`
+pub fn replace_home_dir_with_tilde(destination: &Path) -> Cow<'_, str> {
     // Get the home directory
-    let home = match home_dir() {
+    let home = match env::home_dir() {
         Some(h) => h,
-        None => return fallback,
+        None => return destination.to_string_lossy(),
     };
 
     // Try to strip the home directory prefix
     match destination.strip_prefix(&home) {
-        Ok(relative_path) => format!("~/{}", relative_path.display()),
-        Err(_) => fallback,
+        Ok(relative_path) => Cow::Owned(format!("~/{}", relative_path.display())),
+        Err(_) => destination.to_string_lossy(),
     }
 }
 
@@ -82,7 +81,7 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
 ///
 /// # Arguments
 /// * `zip_archive` - A mutable reference to the `ZipArchive`.
-/// * `filename` - A manifest filename which should be "everest.[yaml|yml]"
+/// * `filename` - A manifest filename which should be "^everest\.[yaml|yml]$"
 ///
 /// # Returns
 /// * `Ok(Some(Vec<u8>))` - The content of the manifest file if found.
@@ -109,26 +108,29 @@ fn read_manifest_from_zip(
     }
 }
 
-/// Reads the mod manifest file from a given ZIP archive.
+/// Reads the mod manifest file from a given ZIP archive path.
 ///
 /// # Arguments
-/// * `zip_path` - A reference to the `Path` of the ZIP archive.
+/// * `archive_path` - A reference to the `Path` of the ZIP archive.
 ///
 /// # Returns
 /// * `Ok(Some(Vec<u8>))` - The content of the manifest file if found.
-/// * `Ok(None)` - If the manifest file is not present in the archive.
+/// * `Ok(None)` - If the manifest file is not present in the ZIP archive.
 /// * `Err(Error)` - An error if the ZIP archive could not be read.
-pub fn read_manifest_file_from_zip(zip_path: &Path) -> Result<Option<Vec<u8>>, Error> {
-    let zip_file = File::open(zip_path)?;
-    let reader = BufReader::new(zip_file);
+pub fn read_manifest_file_from_archive(archive_path: &Path) -> Result<Vec<u8>, Error> {
+    let file = File::open(archive_path)?;
+    let reader = BufReader::new(file);
     let mut zip_archive = ZipArchive::new(reader)?;
 
     if let Some(content) = read_manifest_from_zip(&mut zip_archive, "everest.yaml")? {
-        return Ok(Some(content)); // Return early if found, to prevent duplicate mutable borrows
+        return Ok(content); // Return early if found, to prevent duplicate mutable borrows
     }
 
     // Fallback to alternative filename
-    read_manifest_from_zip(&mut zip_archive, "everest.yml")
+    match read_manifest_from_zip(&mut zip_archive, "everest.yml")? {
+        Some(content) => Ok(content),
+        None => Err(Error::MissingManifestFile(archive_path.to_path_buf())),
+    }
 }
 
 /// Computes the xxhash of a given file and returns it as a hexadecimal string.
@@ -235,7 +237,7 @@ mod tests_fileutil {
 
     #[test]
     fn test_replace_home_dir() {
-        let home = home_dir().unwrap();
+        let home = env::home_dir().unwrap();
         let path = home.join("documents/file.txt");
         assert_eq!(replace_home_dir_with_tilde(&path), "~/documents/file.txt");
     }
@@ -323,10 +325,10 @@ mod tests_fileutil {
         let content = b"test manifest content".to_vec();
         let temp_zip = create_test_zip(Some(&content));
 
-        let result = read_manifest_file_from_zip(temp_zip.path());
+        let result = read_manifest_file_from_archive(temp_zip.path());
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Some(content));
+        assert_eq!(result.unwrap(), content);
     }
 
     #[test]
@@ -336,20 +338,19 @@ mod tests_fileutil {
         let expected_content = b"test manifest content".to_vec();
         let temp_zip = create_test_zip(Some(&content));
 
-        let result = read_manifest_file_from_zip(temp_zip.path());
+        let result = read_manifest_file_from_archive(temp_zip.path());
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Some(expected_content));
+        assert_eq!(result.unwrap(), expected_content);
     }
 
     #[test]
     fn test_read_manifest_file_not_found() {
         let temp_zip = create_test_zip(None);
 
-        let result = read_manifest_file_from_zip(temp_zip.path());
+        let result = read_manifest_file_from_archive(temp_zip.path());
 
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), None);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -360,7 +361,7 @@ mod tests_fileutil {
             .write_all(b"not a zip file")
             .unwrap();
 
-        let result = read_manifest_file_from_zip(temp_file.path());
+        let result = read_manifest_file_from_archive(temp_file.path());
 
         assert!(result.is_err());
         assert!(matches!(
@@ -373,7 +374,7 @@ mod tests_fileutil {
     fn test_read_nonexistent_file() {
         let nonexistent_path = Path::new("nonexistent.zip");
 
-        let result = read_manifest_file_from_zip(nonexistent_path);
+        let result = read_manifest_file_from_archive(nonexistent_path);
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::Io(_)));
