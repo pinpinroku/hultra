@@ -9,7 +9,6 @@ use tracing::debug;
 use crate::{
     error::Error,
     fileutil::{hash_file, read_manifest_file_from_archive},
-    mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod.
@@ -132,94 +131,6 @@ pub fn load_local_mods(archive_paths: Vec<PathBuf>) -> Result<Vec<LocalMod>, Err
     local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
 
     Ok(local_mods)
-}
-
-// HACK: Move these logic to `src/download/update.rs`
-/// Update information about the mod
-#[derive(Debug, Clone)]
-pub struct AvailableUpdateInfo {
-    /// The Mod name
-    pub name: String,
-    /// Current version (from LocalModInfo)
-    pub current_version: String,
-    /// Available version (from RemoteModInfo)
-    pub available_version: String,
-    /// Download URL of the Mod
-    pub url: String,
-    /// xxHashes of the file
-    pub hashes: Vec<String>,
-    /// Outdated file
-    pub existing_path: PathBuf,
-}
-
-/// Checks for an available update for a single installed mod.
-///
-/// This function compares the local mod's checksum with the checksum provided by the remote mod registry.
-/// If the checksums differ, it indicates that an update is available. If the remote registry does not contain information
-/// for the mod, or the checksums match, no update is reported.
-///
-/// # Arguments
-/// * `local_mod` - Information about the locally installed mod, including its current version and checksum.
-/// * `mod_registry` - A reference to the mod registry that holds remote mod information.
-///
-/// # Returns
-/// * `Ok(Some(AvailableUpdateInfo))` if an update is available, containing update details.
-/// * `Ok(None)` if no update is available (either because the mod is up-to-date or remote info is missing).
-/// * `Err(Error)` if there is an error computing the mod's checksum.
-fn check_update(
-    mut local_mod: impl Generatable,
-    mod_registry: &RemoteModRegistry,
-) -> Result<Option<AvailableUpdateInfo>, Error> {
-    // Look up remote mod info
-    let manifest = local_mod.manifest();
-    let remote_mod = match mod_registry.get_mod_info_by_name(&manifest.name) {
-        Some(info) => info,
-        None => return Ok(None), // No remote info, skip update check.
-    };
-
-    // Compute checksum
-    let computed_hash = local_mod.checksum()?;
-
-    // Continue only if the hash doesn't match
-    if remote_mod.has_matching_hash(computed_hash) {
-        return Ok(None);
-    }
-
-    let remote_mod = remote_mod.clone();
-    let manifest = local_mod.manifest();
-
-    Ok(Some(AvailableUpdateInfo {
-        name: manifest.name.to_string(),
-        current_version: manifest.version.to_string(),
-        available_version: remote_mod.version,
-        url: remote_mod.download_url,
-        hashes: remote_mod.checksums,
-        existing_path: local_mod.file_path().to_path_buf(),
-    }))
-}
-
-/// Check available updates for all installed mods.
-///
-/// # Arguments
-/// * `installed_mods` - A list of information about installed mods.
-/// * `mod_registry` - Registry containing remote mod information.
-///
-/// # Returns
-/// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
-/// * `Err(Error)` - If there are issues fetching or computing update information.
-pub fn check_updates(
-    installed_mods: Vec<impl Generatable>,
-    mod_registry: &RemoteModRegistry,
-) -> Result<Vec<AvailableUpdateInfo>, Error> {
-    // Use iterator combinators to process each mod gracefully.
-    let updates = installed_mods
-        .into_iter()
-        .map(|local_mod| check_update(local_mod, mod_registry))
-        .collect::<Result<Vec<Option<AvailableUpdateInfo>>, Error>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
-    Ok(updates)
 }
 
 /// Removes mods whose archive paths match entries in the updater blacklist from the provided vector.

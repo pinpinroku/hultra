@@ -14,9 +14,10 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use download::install::parse_mod_page_url;
+use download::update::check_updates;
 use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist, replace_home_dir_with_tilde};
-use local::{check_updates, remove_blacklisted_mods};
+use local::remove_blacklisted_mods;
 use mod_registry::ModRegistryQuery;
 
 fn setup_logging(verbose: bool) {
