@@ -1,9 +1,10 @@
 use futures_util::StreamExt;
+use indicatif::ProgressBar;
 use reqwest::Client;
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
@@ -11,8 +12,7 @@ use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
 pub mod install;
 pub mod update;
 
-#[allow(dead_code)] // NOTE: Maybe use this for progress bar in the future.
-/// Get the file size
+/// Retrieves the file size of the file from the response header by sending a HEAD request to the target URL.
 async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
     debug!(
         "Get the file size by sending HEAD request to the server: {}",
@@ -33,16 +33,15 @@ async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
     Ok(total_size)
 }
 
-/// Download a single mod file, return the file path.
+/// Downloads a mod file, returns the file path.
 pub async fn download_mod(
     client: &Client,
     mod_name: &str,
     url: &str,
     expected_hashes: &[String],
     download_dir: &Path,
+    pb: &ProgressBar,
 ) -> Result<PathBuf, Error> {
-    info!("📥 Downloading {}", mod_name);
-
     debug!("URL: {}", url);
     debug!(
         "Destination directory: {}",
@@ -55,22 +54,21 @@ pub async fn download_mod(
     let filename = util::determine_filename(response.url(), response.headers());
     let download_path = download_dir.join(&filename);
 
-    info!("Saving as: {}", filename);
     debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
 
-    download_and_write(response, &download_path, expected_hashes).await?;
+    download_and_write(response, &download_path, expected_hashes, pb).await?;
 
+    pb.finish_with_message(format!("🍓 {}", mod_name));
     Ok(download_path)
 }
 
-// Download the file, verify the checksum when it is complete, and then move it to the destination.
+// Writes all bytes to the temporary file, verifies the checksum when the write is complete, and then moves them to the destination.
 async fn download_and_write(
     response: reqwest::Response,
     download_path: &Path,
     expected_hashes: &[String],
+    pb: &ProgressBar,
 ) -> Result<(), Error> {
-    info!("Start writing data to the temporary file.");
-
     let temp_file = NamedTempFile::new()?;
 
     let mut stream = response.bytes_stream();
@@ -81,11 +79,12 @@ async fn download_and_write(
         let chunk = chunk?;
         file.write_all(&chunk).await?;
         hasher.update(&chunk);
+        pb.inc(chunk.len() as u64);
     }
     let computed_hash = hasher.digest();
 
     let hash_str = format!("{:016x}", computed_hash);
-    info!("🔍 Verifying checksum...");
+    pb.set_message("🔍 Verifying checksum...");
     debug!(
         "Xxhash in u64: {:#?}, formatted string: {:#?}",
         computed_hash, hash_str
@@ -96,7 +95,7 @@ async fn download_and_write(
     );
 
     if expected_hashes.contains(&hash_str) {
-        info!("✅ Checksum verified!");
+        pb.set_message("✅ Checksum verified!");
         debug!(
             "Moving the file to the destination: {}",
             replace_home_dir_with_tilde(download_path)
@@ -112,6 +111,79 @@ async fn download_and_write(
             computed: hash_str,
             expected: expected_hashes.to_vec(),
         })
+    }
+}
+
+mod pb_style {
+    use indicatif::ProgressStyle;
+    use std::borrow::Cow;
+
+    const MAX_MSG_LENGTH: usize = 40;
+    const ELLIPSIS: &str = "...";
+
+    /// Builds a ProgressBar style, fallbacks to the default.
+    pub fn new() -> ProgressStyle {
+        ProgressStyle::with_template(
+        "{wide_msg} {total_bytes:>9.1.cyan/blue} {bytes_per_sec:>12.2} {eta_precise:>9} [{bar:>40}] {percent:>4}%",
+    )
+    .unwrap_or_else(|_| ProgressStyle::default_bar())
+    .progress_chars("#>-")
+    }
+
+    /// Truncates a given string and adds an ellipsis at the end if the length exceeds `MAX_MSG_LENGTH`.
+    pub fn truncate_msg(msg: &str) -> Cow<'_, str> {
+        if msg.len() > MAX_MSG_LENGTH {
+            Cow::Owned(format!(
+                "{}{}",
+                &msg[..MAX_MSG_LENGTH - ELLIPSIS.len()],
+                ELLIPSIS
+            ))
+        } else {
+            Cow::Borrowed(msg)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_truncate_msg_no_truncation() {
+            let msg = "Short message";
+            // The message length is less than MAX_MSG_LENGTH.
+            let result = truncate_msg(msg);
+            assert_eq!(result, msg);
+        }
+
+        #[test]
+        fn test_truncate_msg_exact_length() {
+            let msg = "a".repeat(MAX_MSG_LENGTH);
+            // If the message length is exactly MAX_MSG_LENGTH,
+            // then it should not be truncated.
+            let result = truncate_msg(&msg);
+            assert_eq!(result, msg);
+        }
+
+        #[test]
+        fn test_truncate_msg_with_truncation() {
+            let original =
+                "This is a very long message that definitely exceeds the maximum allowed length.";
+            let result = truncate_msg(original);
+            // Expected: first (MAX_MSG_LENGTH - ELLIPSIS.len()) characters plus ELLIPSIS.
+            let expected = format!(
+                "{}{}",
+                &original[..(MAX_MSG_LENGTH - ELLIPSIS.len())],
+                ELLIPSIS
+            );
+            assert_eq!(result, expected);
+        }
+
+        #[test]
+        fn test_truncate_msg_empty_string() {
+            let msg = "";
+            let result = truncate_msg(msg);
+            assert_eq!(result, msg);
+        }
     }
 }
 

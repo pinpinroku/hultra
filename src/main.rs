@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use clap::Parser;
 use download::install::parse_mod_page_url;
+use indicatif::ProgressBar;
 use mod_registry::ModRegistryQuery;
 use reqwest::Client;
 use tracing::{debug, info};
@@ -157,6 +158,7 @@ async fn run() -> Result<(), Error> {
 
                     // Install the new mod
                     let client = Client::new();
+                    let pb = ProgressBar::new(manifest.file_size);
                     let mod_registry = mod_registry.clone();
                     download::install::install(
                         &client,
@@ -164,6 +166,7 @@ async fn run() -> Result<(), Error> {
                         &mod_registry,
                         &mods_directory,
                         installed_names,
+                        &pb,
                     )
                     .await?;
                 }

@@ -13,6 +13,9 @@ pub struct RemoteModInfo {
     /// Download link for the mod file
     #[serde(rename = "URL")]
     pub download_url: String,
+    /// File size
+    #[serde(rename = "Size")]
+    pub file_size: u64,
     /// xxHash checksums for the file
     #[serde(rename = "xxHash")]
     pub checksums: Vec<String>,
@@ -78,7 +81,7 @@ pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
     Ok(mod_registry)
 }
 
-/// Parses a binary data from the resopnse into the remote mod registry.
+/// Parses a binary data from the response into the remote mod registry.
 fn parse_response_bytes(
     bytes: &[u8],
 ) -> Result<HashMap<String, RemoteModInfo>, serde_yaml_ng::Error> {

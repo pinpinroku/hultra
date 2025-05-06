@@ -1,8 +1,11 @@
+use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Url};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
+    sync::Arc,
 };
+use tokio::sync::Semaphore;
 use tracing::{debug, error, info, warn};
 
 use crate::{
@@ -53,17 +56,25 @@ pub async fn install(
     mod_registry: &RemoteModRegistry,
     download_dir: &Path,
     installed_mod_names: HashSet<String>,
+    pb: &ProgressBar,
 ) -> Result<(), Error> {
+    let style = super::pb_style::new();
+    pb.set_style(style);
+
+    let msg = super::pb_style::truncate_msg(name);
+    pb.set_message(msg.into_owned());
+
     let download_path = download::download_mod(
         client,
         name,
         &manifest.download_url,
         &manifest.checksums,
         download_dir,
+        pb,
     )
     .await?;
 
-    info!(
+    debug!(
         "[{}] is now installed in {}.",
         name,
         replace_home_dir_with_tilde(&download_path)
@@ -77,7 +88,7 @@ pub async fn install(
             return Ok(());
         }
 
-        info!("Start downloading the dependencies...");
+        info!("Start downloading the dependencies...\n");
         resolve_dependencies(client, mod_registry, download_dir, missing_dependencies).await?;
     }
 
@@ -91,10 +102,19 @@ async fn resolve_dependencies(
     download_dir: &Path,
     missing_dependencies: Vec<&String>,
 ) -> Result<(), Error> {
+    let mp = MultiProgress::new();
+    let style = super::pb_style::new();
+
+    let semaphore = Arc::new(Semaphore::new(6));
     let mut handles = Vec::with_capacity(missing_dependencies.len());
 
     for dependency in missing_dependencies {
         if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency) {
+            let semaphore = Arc::clone(&semaphore);
+
+            let mp = mp.clone();
+            let style = style.clone();
+
             let dependency = dependency.clone();
             let manifest = manifest.clone();
             let client = client.clone();
@@ -102,14 +122,28 @@ async fn resolve_dependencies(
             debug!("Manifest of dependency: {}\n{:#?}", dependency, manifest);
 
             let handle = tokio::spawn(async move {
-                download::download_mod(
+                let _permit = semaphore.acquire().await?;
+
+                let total_size = super::get_file_size(&client, &manifest.download_url).await?;
+                let pb = mp.add(ProgressBar::new(total_size));
+                pb.set_style(style);
+
+                let msg = super::pb_style::truncate_msg(&dependency);
+                pb.set_message(msg.to_string());
+
+                let saved_path = download::download_mod(
                     &client,
                     &dependency,
                     &manifest.download_url,
                     &manifest.checksums,
                     &download_dir,
+                    &pb,
                 )
-                .await
+                .await?;
+
+                drop(_permit);
+
+                Ok(saved_path)
             });
 
             handles.push(handle);
@@ -149,7 +183,7 @@ async fn resolve_dependencies(
 
 /// Check for dependencies, if found return `HashSet<String>`, otherwise return `None`.
 fn check_dependencies(download_path: &Path) -> Result<Option<HashSet<String>>, Error> {
-    info!("Checking for missing dependencies...");
+    info!("\nChecking for missing dependencies...");
     // Attempt to read the manifest file. If it doesn't exist, return an error.
     let buffer = read_manifest_file_from_zip(download_path)?
         .ok_or_else(|| Error::MissingManifestFile(download_path.to_path_buf()))?;
