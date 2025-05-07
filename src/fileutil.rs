@@ -141,13 +141,18 @@ pub fn read_manifest_file_from_archive(archive_path: &Path) -> Result<Vec<u8>, E
 /// # Returns
 /// * `Ok(String)` - The hexadecimal representation of the file hash.
 /// * `Err(Error)` - An error if the file could not be read.
-pub fn hash_file(file_path: &Path) -> Result<String, Error> {
-    let file = std::fs::File::open(file_path)?;
-    let mut reader = std::io::BufReader::new(file);
+pub async fn hash_file(file_path: &Path) -> Result<String, Error> {
+    use tokio::{
+        fs::File,
+        io::{AsyncReadExt, BufReader},
+    };
+
+    let file = File::open(file_path).await?;
+    let mut reader = BufReader::new(file);
     let mut hasher = Xxh64::new(0);
-    let mut buffer = [0u8; 8192]; // Read in 8 KB chunks
+    let mut buffer = [0u8; 64 * 1024]; // Read in 64 KB chunks
     loop {
-        let bytes_read = reader.read(&mut buffer)?;
+        let bytes_read = reader.read(&mut buffer).await?;
         if bytes_read == 0 {
             break;
         }
@@ -272,22 +277,22 @@ mod tests_fileutil {
         assert!(matches!(result.unwrap_err(), Error::MissingModsDirectory));
     }
 
-    #[test]
-    fn test_hash_file_success() {
+    #[tokio::test]
+    async fn test_hash_file_success() {
         let temp_file = NamedTempFile::new().unwrap();
         write!(temp_file.as_file(), "test data").unwrap();
 
-        let result = hash_file(temp_file.path());
+        let result = hash_file(temp_file.path()).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 16); // Should return a valid 16-character hash
     }
 
-    #[test]
-    fn test_hash_file_nonexistent() {
+    #[tokio::test]
+    async fn test_hash_file_nonexistent() {
         let nonexistent_path = Path::new("nonexistent_file");
 
-        let result = hash_file(nonexistent_path);
+        let result = hash_file(nonexistent_path).await;
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), Error::Io(_)));

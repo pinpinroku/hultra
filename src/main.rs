@@ -13,8 +13,10 @@ mod local;
 mod mod_registry;
 
 use cli::{Cli, Commands};
-use download::install::parse_mod_page_url;
-use download::update::check_updates;
+use download::{
+    install::parse_mod_page_url,
+    update::{self, check_updates},
+};
 use error::Error;
 use fileutil::{find_installed_mod_archives, read_updater_blacklist, replace_home_dir_with_tilde};
 use local::remove_blacklisted_mods;
@@ -181,29 +183,15 @@ async fn run() -> Result<(), Error> {
             let blacklist = read_updater_blacklist(&mods_directory)?;
             remove_blacklisted_mods(&mut installed_mods, &blacklist)?;
 
-            info!("Checking mod updates...");
-            let available_updates = check_updates(installed_mods, &mod_registry)?;
+            let available_updates = check_updates(installed_mods, mod_registry).await?;
             if available_updates.is_empty() {
                 info!("All mods are up to date!");
+            } else if args.install {
+                info!("\nInstalling updates...");
+                let client = Client::new();
+                update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
             } else {
-                println!("Available updates:");
-                for update_info in &available_updates {
-                    println!("\n{}", update_info.name);
-                    println!(" - Current version: {}", update_info.current_version);
-                    println!(" - Available version: {}", update_info.available_version);
-                }
-                if args.install {
-                    info!("\nInstalling updates...");
-                    let client = Client::new();
-                    download::update::update_multiple_mods(
-                        &client,
-                        &mods_directory,
-                        available_updates,
-                    )
-                    .await?;
-                } else {
-                    info!("\nRun with --install to install these updates");
-                }
+                info!("\nRun with --install to install these updates");
             }
         }
     }

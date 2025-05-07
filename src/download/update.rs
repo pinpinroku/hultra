@@ -11,7 +11,7 @@ use crate::{
     download,
     error::Error,
     fileutil,
-    local::Generatable,
+    local::{Generatable, LocalMod},
     mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
@@ -19,17 +19,13 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct AvailableUpdate {
     /// The Mod name
-    pub name: String,
-    /// Current version (from LocalMod)
-    pub current_version: String,
-    /// Available version (from RemoteMod)
-    pub available_version: String,
+    name: String,
     /// Download URL of the Mod
-    pub url: String,
+    url: String,
     /// xxHashes of the file
-    pub hashes: Vec<String>,
+    hashes: Vec<String>,
     /// Path to the current version of the mod
-    pub existing_path: PathBuf,
+    existing_path: PathBuf,
 }
 
 /// Checks for an available update for a mod.
@@ -40,40 +36,47 @@ pub struct AvailableUpdate {
 ///
 /// # Arguments
 /// * `local_mod` - Information about the locally installed mod, including its current version and checksum.
-/// * `mod_registry` - A reference to the mod registry that holds remote mod information.
+/// * `mod_registry` - An atomic reference counter of the mod registry that holds remote mod information.
 ///
 /// # Returns
 /// * `Ok(Some(AvailableUpdate))` if an update is available, containing update details.
 /// * `Ok(None)` if no update is available (either because the mod is up-to-date or remote info is missing).
-/// * `Err(Error)` if there is an error computing the mod's checksum.
-fn check_update<G: Generatable>(
-    mut local_mod: G,
-    mod_registry: &RemoteModRegistry,
+/// * `Err(Error)` if there is an error computing the mod's checksum (originally the error caused by opening or reading file).
+async fn check_update(
+    local_mod: LocalMod,
+    mod_registry: Arc<RemoteModRegistry>,
 ) -> Result<Option<AvailableUpdate>, Error> {
-    // Look up remote mod info
     let manifest = local_mod.manifest();
-    let remote_mod = match mod_registry.get_mod_info_by_name(&manifest.name) {
-        Some(info) => info,
-        None => return Ok(None), // No remote info, skip update check. (Custom or original mod)
+
+    // Look up remote mod info
+    let Some(remote_mod) = mod_registry.get_mod_info_by_name(&manifest.name) else {
+        tracing::debug!(
+            "No remote info for mod: {}, skipping update check",
+            manifest.name
+        );
+        return Ok(None);
     };
 
-    // Compute checksum
-    let computed_hash = local_mod.checksum()?;
+    // Compute checksum - only if needed
+    let computed_hash = local_mod.checksum().await?;
 
-    // Continue only if the hash doesn't match
+    // Skip if hash matches (no update needed)
     if remote_mod.has_matching_hash(computed_hash) {
         return Ok(None);
     }
 
-    let remote_mod = remote_mod.clone();
-    let manifest = local_mod.manifest();
+    tracing::info!(
+        "Update available for '{}': {} -> {}",
+        manifest.name,
+        manifest.version,
+        remote_mod.version
+    );
 
+    // Update is available
     Ok(Some(AvailableUpdate {
         name: manifest.name.to_string(),
-        current_version: manifest.version.to_string(),
-        available_version: remote_mod.version,
-        url: remote_mod.download_url,
-        hashes: remote_mod.checksums,
+        url: remote_mod.download_url.clone(),
+        hashes: remote_mod.checksums.clone(),
         existing_path: local_mod.file_path().to_path_buf(),
     }))
 }
@@ -87,18 +90,59 @@ fn check_update<G: Generatable>(
 /// # Returns
 /// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
 /// * `Err(Error)` - If there are issues fetching or computing update information.
-pub fn check_updates<G: Generatable>(
-    installed_mods: Vec<G>,
-    mod_registry: &RemoteModRegistry,
+pub async fn check_updates(
+    installed_mods: Vec<LocalMod>,
+    mod_registry: RemoteModRegistry,
 ) -> Result<Vec<AvailableUpdate>, Error> {
-    // Use iterator combinators to process each mod gracefully.
-    let updates = installed_mods
-        .into_iter()
-        .map(|local_mod| check_update(local_mod, mod_registry))
-        .collect::<Result<Vec<Option<AvailableUpdate>>, Error>>()?
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+    let start = std::time::Instant::now();
+    tracing::info!("Starting update check for {} mods", installed_mods.len());
+
+    let mod_registry = Arc::new(mod_registry);
+    let semaphore = Arc::new(Semaphore::new(64)); // Optimal limits for modern linux system
+
+    let mut handles = Vec::with_capacity(installed_mods.len());
+    for local_mod in installed_mods {
+        let semaphore = Arc::clone(&semaphore);
+        let mod_registry = Arc::clone(&mod_registry);
+        let handle = tokio::spawn(async move {
+            let _permit = semaphore.acquire().await?;
+            let result = check_update(local_mod, mod_registry).await?;
+            drop(_permit);
+            Ok(result)
+        });
+        handles.push(handle);
+    }
+
+    let mut updates = Vec::with_capacity(handles.len());
+    let mut errors = Vec::new();
+
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(available_or_not)) => {
+                if let Some(available) = available_or_not {
+                    updates.push(available)
+                }
+            } // Task completed successfully
+            Ok(Err(err)) => errors.push(err), // Task returned an error
+            Err(err) => errors.push(Error::TaskJoin(err)), // Task panicked
+        }
+    }
+
+    if errors.is_empty() {
+        tracing::info!(
+            "Completed update check in {:?}. Found {} updates.",
+            start.elapsed(),
+            updates.len()
+        );
+    } else {
+        // Log all errors
+        for (i, err) in errors.iter().enumerate() {
+            error!("Error {}: {}", i + 1, err);
+        }
+        // Return update check errors
+        return Err(Error::UpdateCheck(errors));
+    }
+
     Ok(updates)
 }
 
@@ -126,11 +170,6 @@ async fn update(
             fileutil::replace_home_dir_with_tilde(&update_info.existing_path)
         );
     }
-
-    debug!(
-        "Updated {} to version {}\n",
-        update_info.name, update_info.available_version
-    );
 
     Ok(())
 }

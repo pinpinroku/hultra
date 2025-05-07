@@ -36,6 +36,10 @@ pub enum Error {
     #[error("multiple update errors occurred: {0:?}")]
     MultipleUpdate(Vec<Error>),
 
+    /// Multiple update check failures
+    #[error("update check errors occurred: {0:?}")]
+    UpdateCheck(Vec<Error>),
+
     /// Error indicating that the home directory could not be determined
     #[error(
         "could not determine home directory location!\

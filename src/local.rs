@@ -4,6 +4,7 @@ use std::{
     path::{Path, PathBuf},
     time::Instant,
 };
+use tokio::sync::OnceCell;
 use tracing::debug;
 
 use crate::{
@@ -50,21 +51,21 @@ impl ModManifest {
 }
 
 /// Information about a locally installed mod.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct LocalMod {
     /// Path to the local mod file which contains the mod's assets and manifest
     pub file_path: PathBuf,
     /// Mod manifest resides in the mod file
     pub manifest: ModManifest,
     /// Computed XXH64 hash of the file for update check
-    checksum: Option<String>,
+    checksum: OnceCell<String>,
 }
 
 pub trait Generatable {
     fn new(file_path: PathBuf, manifest: ModManifest) -> Self;
     fn file_path(&self) -> &Path;
     fn manifest(&self) -> &ModManifest;
-    fn checksum(&mut self) -> Result<&str, Error>;
+    async fn checksum(&self) -> Result<&str, Error>;
 }
 
 impl Generatable for LocalMod {
@@ -73,7 +74,7 @@ impl Generatable for LocalMod {
         Self {
             file_path,
             manifest,
-            checksum: None,
+            checksum: OnceCell::new(),
         }
     }
 
@@ -85,22 +86,20 @@ impl Generatable for LocalMod {
         &self.manifest
     }
 
-    /// Sets the checksum of the file by computing them if none.
+    /// Compute checksum if not already computed, then cache it.
     ///
     /// # Returns
     /// * `Ok(&str)` - Computed checksum as a string reference.
     /// * `Err(Error)` - If the file could not be read.
-    fn checksum(&mut self) -> Result<&str, Error> {
-        debug!("Checksum of the mod: {:#?}", self.checksum);
-
-        if self.checksum.is_none() {
-            let computed_hash = hash_file(&self.file_path)?;
-            debug!("Computed hash of the mod: {:#?}", computed_hash);
-            self.checksum = Some(computed_hash);
-        }
-
-        // unwrap is fine here
-        Ok(self.checksum.as_deref().unwrap())
+    async fn checksum(&self) -> Result<&str, Error> {
+        self.checksum
+            .get_or_try_init(async || {
+                tracing::debug!("Computing checksum for {}", self.file_path.display());
+                let computed_hash = hash_file(&self.file_path).await?;
+                Ok(computed_hash)
+            })
+            .await
+            .map(|hash| hash.as_str())
     }
 }
 
