@@ -54,7 +54,7 @@ fn check_update<G: Generatable>(
     let manifest = local_mod.manifest();
     let remote_mod = match mod_registry.get_mod_info_by_name(&manifest.name) {
         Some(info) => info,
-        None => return Ok(None), // No remote info, skip update check.
+        None => return Ok(None), // No remote info, skip update check. (Custom or original mod)
     };
 
     // Compute checksum
