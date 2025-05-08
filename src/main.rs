@@ -74,23 +74,24 @@ async fn run() -> Result<(), Error> {
     debug!("Number of mod files found: {}", archive_paths.len());
 
     match &cli.command {
-        // Show name and version of installed mods
+        // Show mod name and file name of installed mods.
         Commands::List => {
             if archive_paths.is_empty() {
-                info!("No mods are currently installed.");
+                tracing::info!("No mods are currently installed.");
                 return Ok(());
             }
 
             let local_mods = local::load_local_mods(archive_paths)?;
 
-            for local_mod in local_mods.iter() {
-                info!(
-                    "- {} (version {})",
-                    local_mod.manifest.name, local_mod.manifest.version
-                );
-            }
+            local_mods.iter().for_each(|local_mod| {
+                if let Some(name) = local_mod.file_path.file_name() {
+                    println!("- {} ({})", local_mod.manifest.name, name.to_string_lossy());
+                } else {
+                    println!("- {}", local_mod.manifest.name);
+                }
+            });
 
-            debug!("{} mods installed.", &local_mods.len());
+            tracing::info!("\n✅ {} mods found.", &local_mods.len());
         }
 
         // Show details of a specific mod if it is installed.
