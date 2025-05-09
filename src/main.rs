@@ -2,7 +2,6 @@ use clap::Parser;
 use indicatif::ProgressBar;
 use reqwest::Client;
 use std::{collections::HashSet, time::Duration};
-use tracing::{debug, info};
 
 mod cli;
 mod constant;
@@ -13,9 +12,8 @@ mod local;
 mod mod_registry;
 
 use cli::{Cli, Commands};
-use download::{install::parse_mod_page_url, update};
+use download::{install, update};
 use error::Error;
-use fileutil::{find_installed_mod_archives, replace_home_dir_with_tilde};
 use mod_registry::ModRegistryQuery;
 
 fn setup_logging(verbose: bool) {
@@ -23,13 +21,13 @@ fn setup_logging(verbose: bool) {
         Layer, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt,
     };
 
-    // Create a layer for INFO level and above - no timestamp
+    // Create a layer for ERROR level and above - no timestamp
     let info_layer = fmt::layer()
         .with_ansi(true)
         .with_level(true)
         .with_target(false)
         .without_time()
-        .with_filter(LevelFilter::INFO);
+        .with_filter(LevelFilter::ERROR);
 
     // Create a layer for DEBUG level - with module name, thread IDs, detailed file information
     let debug_layer = fmt::layer()
@@ -49,31 +47,30 @@ fn setup_logging(verbose: bool) {
 }
 
 async fn run() -> Result<(), Error> {
-    debug!("Application starts");
+    tracing::info!("Application starts");
 
     let cli = Cli::parse();
 
     // Initialize the tracing subscriber for logging based on user flags.
     setup_logging(cli.verbose);
 
-    debug!("Command passed: {:#?}", &cli.command);
+    tracing::debug!("Command passed: {:?}", &cli.command);
 
     // Determine the mods directory.
     let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
-    debug!(
+    tracing::debug!(
         "Determined mods directory: {}",
-        replace_home_dir_with_tilde(&mods_directory)
+        fileutil::replace_home_dir_with_tilde(&mods_directory)
     );
 
     // Gathering mod paths
-    let archive_paths = find_installed_mod_archives(&mods_directory)?;
-    debug!("Number of mod files found: {}", archive_paths.len());
+    let archive_paths = fileutil::find_installed_mod_archives(&mods_directory)?;
 
     match &cli.command {
         // Show mod name and file name of installed mods.
         Commands::List => {
             if archive_paths.is_empty() {
-                tracing::info!("No mods are currently installed.");
+                println!("No mods are currently installed.");
                 return Ok(());
             }
 
@@ -87,17 +84,17 @@ async fn run() -> Result<(), Error> {
                 }
             });
 
-            tracing::info!("✅ {} mods found.", &local_mods.len());
+            println!("\n✅ {} mods found.", &local_mods.len());
         }
 
         // Show details of a specific mod if it is installed.
         Commands::Show(args) => {
-            debug!("Checking installed mod information...");
+            tracing::info!("Checking installed mod information...");
 
             let local_mods = local::load_local_mods(archive_paths)?;
 
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
-                info!(
+                println!(
                     "📂 {}",
                     fileutil::replace_home_dir_with_tilde(&local_mod.file_path)
                 );
@@ -118,13 +115,13 @@ async fn run() -> Result<(), Error> {
                     }
                 }
             } else {
-                info!("The mod '{}' is not currently installed.", args.name);
+                println!("The mod '{}' is not currently installed.", args.name);
             }
         }
 
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            let mod_id = parse_mod_page_url(&args.mod_page_url)?;
+            let mod_id = install::parse_mod_page_url(&args.mod_page_url)?;
 
             // Fetches mod information from URL
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
@@ -133,8 +130,8 @@ async fn run() -> Result<(), Error> {
             // If the mod is found in the database, check if it is installed or not, if not, install it.
             match mod_info {
                 Some((mod_name, manifest)) => {
-                    debug!("Matched entry name: {}", mod_name);
-                    debug!("Matched entry detail: {:#?}", manifest);
+                    tracing::debug!("Matched entry name: {}", mod_name);
+                    tracing::debug!("Matched entry detail: {:#?}", manifest);
 
                     // Check if already installed
                     let local_mods = local::load_local_mods(archive_paths)?;
@@ -147,7 +144,7 @@ async fn run() -> Result<(), Error> {
 
                     // Check if the target mod_name is in the vector.
                     if installed_mod_names.contains(mod_name) {
-                        info!("You already have [{}] installed.", mod_name);
+                        println!("You already have [{}] installed.", mod_name);
                         return Ok(());
                     }
 
@@ -155,7 +152,7 @@ async fn run() -> Result<(), Error> {
                     let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
                     let pb = ProgressBar::new(manifest.file_size);
                     let mod_registry = mod_registry.clone();
-                    download::install::install(
+                    install::install(
                         &client,
                         (mod_name, manifest),
                         &mod_registry,
@@ -166,7 +163,7 @@ async fn run() -> Result<(), Error> {
                     .await?;
                 }
                 None => {
-                    info!("Could not find a mod matching [{}].", &args.mod_page_url);
+                    println!("Could not find a mod matching [{}].", &args.mod_page_url);
                 }
             }
         }
@@ -182,13 +179,13 @@ async fn run() -> Result<(), Error> {
 
             let available_updates = update::check_updates(local_mods, mod_registry).await?;
             if available_updates.is_empty() {
-                tracing::info!("All mods are up to date!");
+                println!("All mods are up to date!");
             } else if args.install {
-                tracing::info!("Installing updates...");
+                println!("\nInstalling updates...");
                 let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
                 update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
             } else {
-                tracing::info!("Run with --install to install these updates");
+                println!("\nRun with --install to install these updates");
             }
         }
     }
@@ -199,6 +196,8 @@ async fn run() -> Result<(), Error> {
 #[tokio::main]
 async fn main() {
     if let Err(err) = run().await {
-        tracing::error!("{}", err)
+        tracing::error!("{:#?}", err);
+        eprintln!("Failed to run the command.");
     }
+    tracing::info!("Command completed successfully.");
 }

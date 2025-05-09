@@ -56,7 +56,7 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
         return Err(Error::MissingModsDirectory);
     }
 
-    debug!(
+    tracing::debug!(
         "Scanning the installed mod archives in {:?}",
         replace_home_dir_with_tilde(mods_directory)
     );
@@ -73,6 +73,8 @@ pub fn find_installed_mod_archives(mods_directory: &Path) -> Result<Vec<PathBuf>
             mod_archives.push(path);
         }
     }
+
+    tracing::debug!("Number of mod files found: {}", mod_archives.len());
 
     Ok(mod_archives)
 }
