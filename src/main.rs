@@ -26,7 +26,7 @@ fn setup_logging(verbose: bool) {
     // Create a layer for INFO level and above - no timestamp
     let info_layer = fmt::layer()
         .with_ansi(true)
-        .with_level(false)
+        .with_level(true)
         .with_target(false)
         .without_time()
         .with_filter(LevelFilter::INFO);
@@ -87,7 +87,7 @@ async fn run() -> Result<(), Error> {
                 }
             });
 
-            tracing::info!("\n✅ {} mods found.", &local_mods.len());
+            tracing::info!("✅ {} mods found.", &local_mods.len());
         }
 
         // Show details of a specific mod if it is installed.
@@ -98,23 +98,23 @@ async fn run() -> Result<(), Error> {
 
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
                 info!(
-                    "📂 {}\n",
+                    "📂 {}",
                     fileutil::replace_home_dir_with_tilde(&local_mod.file_path)
                 );
-                info!("- Name: {}", local_mod.manifest.name);
-                info!("  Version: {}", local_mod.manifest.version);
+                println!("- Name: {}", local_mod.manifest.name);
+                println!("  Version: {}", local_mod.manifest.version);
                 if let Some(deps) = &local_mod.manifest.dependencies {
-                    info!("  Dependencies:");
+                    println!("  Dependencies:");
                     for dep in deps {
-                        info!("    - Name: {}", dep.name);
-                        info!("      Version: {}", dep.version);
+                        println!("    - Name: {}", dep.name);
+                        println!("      Version: {}", dep.version);
                     }
                 }
                 if let Some(opt_deps) = &local_mod.manifest.optional_dependencies {
-                    info!("  Optional Dependencies:");
+                    println!("  Optional Dependencies:");
                     for dep in opt_deps {
-                        info!("    - Name: {}", dep.name);
-                        info!("      Version: {}", dep.version);
+                        println!("    - Name: {}", dep.name);
+                        println!("      Version: {}", dep.version);
                     }
                 }
             } else {
@@ -184,11 +184,11 @@ async fn run() -> Result<(), Error> {
             if available_updates.is_empty() {
                 tracing::info!("All mods are up to date!");
             } else if args.install {
-                tracing::info!("\nInstalling updates...");
+                tracing::info!("Installing updates...");
                 let client = Client::builder().timeout(Duration::from_secs(30)).build()?;
                 update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
             } else {
-                tracing::info!("\nRun with --install to install these updates");
+                tracing::info!("Run with --install to install these updates");
             }
         }
     }
