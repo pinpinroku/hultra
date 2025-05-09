@@ -148,7 +148,7 @@ async fn run() -> Result<(), Error> {
 
             tracing::info!("Start installing the new mod");
             let client = Client::builder()
-                .connect_timeout(Duration::from_secs(30))
+                .connect_timeout(Duration::from_secs(5))
                 .build()?;
             let pb = ProgressBar::new(remote_mod.file_size);
             install::install(
@@ -177,7 +177,7 @@ async fn run() -> Result<(), Error> {
             } else if args.install {
                 println!("\nInstalling updates...");
                 let client = Client::builder()
-                    .connect_timeout(Duration::from_secs(30))
+                    .connect_timeout(Duration::from_secs(5))
                     .build()?;
                 update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
             } else {
