@@ -156,7 +156,7 @@ async fn run() -> Result<(), Error> {
                 (mod_name, remote_mod),
                 &mod_registry,
                 &mods_directory,
-                installed_mod_names,
+                &installed_mod_names,
                 &pb,
             )
             .await?;

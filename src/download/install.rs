@@ -55,7 +55,7 @@ pub async fn install(
     (name, manifest): (&str, &RemoteModInfo),
     mod_registry: &RemoteModRegistry,
     download_dir: &Path,
-    installed_mod_names: HashSet<String>,
+    installed_mod_names: &HashSet<String>,
     pb: &ProgressBar,
 ) -> Result<(), Error> {
     let style = super::pb_style::new();
@@ -82,7 +82,7 @@ pub async fn install(
 
     if let Some(dependencies) = check_dependencies(&downloaded_file_path)? {
         debug!("Filetering out already installed dependencies.");
-        let missing_dependencies: Vec<_> = dependencies.difference(&installed_mod_names).collect();
+        let missing_dependencies: Vec<_> = dependencies.difference(installed_mod_names).collect();
         if missing_dependencies.is_empty() {
             info!("You already have all the dependencies required by this mod.");
             return Ok(());

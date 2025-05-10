@@ -290,12 +290,12 @@ mod tests_for_files {
         let manifest = generate_test_mod_manifest("Testmod", "1.0.0");
         let file_path = create_test_mod_archive(mods_dir, &manifest, MANIFEST_FILE_NAME);
 
-        let test_local_mods = vec![LocalMod::new(file_path.to_path_buf(), manifest.clone())];
-        let result = collect_installed_mod_names(test_local_mods.clone());
+        let test_local_mods = vec![LocalMod::new(file_path.to_path_buf(), manifest)];
+        let result = collect_installed_mod_names(test_local_mods);
         assert!(result.is_ok());
 
-        let result = result.unwrap().clone();
-        assert_eq!(result.len(), test_local_mods.len());
-        assert!(result.contains(&manifest.name));
+        let result = result.unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(result.contains("Testmod"));
     }
 }
