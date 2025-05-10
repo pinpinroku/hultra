@@ -65,11 +65,9 @@ async fn check_update(
         return Ok(None);
     }
 
-    tracing::info!(
+    println!(
         "Update available for '{}': {} -> {}",
-        manifest.name,
-        manifest.version,
-        remote_mod.version
+        manifest.name, manifest.version, remote_mod.version
     );
 
     // Update is available

@@ -1,6 +1,7 @@
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Deserialize;
-use std::collections::HashMap;
-use tracing::{debug, info};
+use std::{collections::HashMap, time::Duration};
+use tracing::debug;
 
 use crate::{constant::MOD_REGISTRY_URL, error::Error};
 
@@ -61,21 +62,31 @@ impl ModRegistryQuery for RemoteModRegistry {
 
 /// Fetches the remote mod registry, then parse and deserialize into the RemoteModRegistry type
 pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
-    info!("🌐 Fetching online database...");
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner.set_style(
+        ProgressStyle::with_template("{spinner:.green/blue} {msg}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    spinner.set_message("Fetching online database...");
+
     let client = reqwest::ClientBuilder::new()
         .http2_prior_knowledge()
         .gzip(true)
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
+
     let response = client
         .get(MOD_REGISTRY_URL)
         .send()
         .await?
         .error_for_status()?;
-    debug!("Response headers: {:#?}", response.headers());
-    let bytes = response.bytes().await?;
 
-    debug!("Parsing the binary data from the response to initialize `RemoteModRegistry`.");
+    tracing::debug!("Response headers: {:#?}", response.headers());
+    let bytes = response.bytes().await?;
+    spinner.finish_and_clear();
+
+    tracing::info!("Parsing the binary data from the response");
     let mod_registry = parse_response_bytes(&bytes)?;
 
     Ok(mod_registry)
