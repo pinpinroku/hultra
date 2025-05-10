@@ -58,7 +58,7 @@ pub async fn download_mod(
 
     download_and_write(response, &download_path, expected_hashes, pb).await?;
 
-    pb.finish_with_message(format!("🍓 {}", mod_name));
+    pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
     Ok(download_path)
 }
 
