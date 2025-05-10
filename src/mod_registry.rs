@@ -1,6 +1,6 @@
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::ProgressBar;
 use serde::Deserialize;
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 use tracing::debug;
 
 use crate::{constant::MOD_REGISTRY_URL, error::Error};
@@ -62,13 +62,7 @@ impl ModRegistryQuery for RemoteModRegistry {
 
 /// Fetches the remote mod registry, then parse and deserialize into the RemoteModRegistry type
 pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
-    let spinner = ProgressBar::new_spinner();
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    spinner.set_style(
-        ProgressStyle::with_template("{spinner:.green/blue} {msg}")
-            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-    );
-    spinner.set_message("Fetching online database...");
+    let spinner = create_spinner();
 
     let client = reqwest::ClientBuilder::new()
         .http2_prior_knowledge()
@@ -84,6 +78,7 @@ pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
 
     tracing::debug!("Response headers: {:#?}", response.headers());
     let bytes = response.bytes().await?;
+
     spinner.finish_and_clear();
 
     tracing::info!("Parsing the binary data from the response");
@@ -97,6 +92,21 @@ fn parse_response_bytes(
     bytes: &[u8],
 ) -> Result<HashMap<String, RemoteModInfo>, serde_yaml_ng::Error> {
     serde_yaml_ng::from_slice::<RemoteModRegistry>(bytes)
+}
+
+/// Create a spinner
+fn create_spinner() -> ProgressBar {
+    use indicatif::ProgressStyle;
+    use std::time::Duration;
+
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner.set_style(
+        ProgressStyle::with_template("{spinner:.green/blue} {msg}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    spinner.set_message("Fetching online database...");
+    spinner
 }
 
 #[cfg(test)]
