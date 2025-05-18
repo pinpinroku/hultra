@@ -4,7 +4,7 @@ use std::{
     collections::HashSet,
     env,
     fs::{self, File},
-    io::{BufRead, BufReader, ErrorKind, Read},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -172,40 +172,37 @@ pub async fn hash_file(file_path: &Path) -> Result<String, Error> {
 /// # Returns
 /// * `Ok(HashSet<PathBuf>)` - A HashSet containing the archive file paths if the file was read successfully.
 /// * `Err(io::Error)` - An error if there was an issue reading the file.
-pub fn read_updater_blacklist(mods_directory: &Path) -> Result<HashSet<PathBuf>, Error> {
+pub fn read_updater_blacklist(mods_directory: &Path) -> Result<Option<HashSet<PathBuf>>, Error> {
     debug!("Checking the updater blacklist...");
     let path = mods_directory.join(UPDATER_BLACKLIST_FILE);
 
-    // If the blacklist file is missing, return empty HashSet
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(err) => match err.kind() {
-            ErrorKind::NotFound => return Ok(HashSet::new()),
-            _ => return Err(Error::Io(err)),
-        },
-    };
-
-    let reader = BufReader::new(file);
-
-    // Store in HashSet for O(1) lookups
-    let mut filenames: HashSet<PathBuf> = HashSet::new();
-
-    for line_result in reader.lines() {
-        let line = line_result?;
-        let trimmed = line.trim();
-        if !trimmed.is_empty() && !trimmed.starts_with('#') {
-            // NOTE: Generates the full paths by joining the filenames since it is easier to compare them as full paths.
-            let filename = mods_directory.join(trimmed);
-            filenames.insert(filename);
-        }
+    if !path.exists() {
+        return Ok(None);
     }
 
-    filenames
-        .iter()
-        .filter_map(|filename| filename.file_name())
-        .for_each(|name| tracing::debug!("{}", name.to_string_lossy()));
+    // If the blacklist file is missing, return empty HashSet
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
 
-    Ok(filenames)
+    // Stores in the `HashSet` for `O(1)` lookups
+    let filenames: HashSet<PathBuf> = reader
+        .lines()
+        .filter_map(|line_result| {
+            line_result.ok().and_then(|line| {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() && !trimmed.starts_with('#') {
+                    // NOTE: Generates the full paths by joining the filenames since it is easier to compare them as full paths.
+                    Some(mods_directory.join(trimmed))
+                } else {
+                    None
+                }
+            })
+        })
+        .collect();
+
+    tracing::debug!("Blacklist contains {} entries.", filenames.len());
+
+    Ok(Some(filenames))
 }
 
 #[cfg(test)]
@@ -309,9 +306,12 @@ mod tests_fileutil {
         writeln!(file, "blacklisted_mod_2.zip").unwrap();
 
         let result = read_updater_blacklist(temp_dir.path());
-
         assert!(result.is_ok());
-        let blacklist = result.unwrap();
+
+        let optional_blacklist = result.unwrap();
+        assert!(optional_blacklist.is_some());
+
+        let blacklist = optional_blacklist.unwrap();
         assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_1.zip")));
         assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_2.zip")));
     }
@@ -321,9 +321,10 @@ mod tests_fileutil {
         let temp_dir = tempdir().unwrap();
 
         let result = read_updater_blacklist(temp_dir.path());
-
         assert!(result.is_ok());
-        assert!(result.unwrap().is_empty())
+
+        let optional_blacklist = result.unwrap();
+        assert!(optional_blacklist.is_none());
     }
 
     #[test]

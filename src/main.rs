@@ -167,8 +167,9 @@ async fn run() -> Result<(), Error> {
         Commands::Update(args) => {
             // Filter installed mods according to the `updaterblacklist.txt`
             let mut local_mods = local::load_local_mods(&archive_paths)?;
-            let blacklist = fileutil::read_updater_blacklist(&mods_directory)?;
-            local::remove_blacklisted_mods(&mut local_mods, &blacklist);
+            if let Some(blacklist) = fileutil::read_updater_blacklist(&mods_directory)? {
+                local::remove_blacklisted_mods(&mut local_mods, &blacklist);
+            }
 
             // Update installed mods by checking for available updates in the mod registry.
             let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
