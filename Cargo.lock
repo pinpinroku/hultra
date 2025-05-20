@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "everest-mod-cli"
-version = "2.0.0"
+version = "2.0.1"
 dependencies = [
  "clap",
  "futures-util",
