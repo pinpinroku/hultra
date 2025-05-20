@@ -33,7 +33,7 @@ pub struct Dependency {
     #[serde(rename = "Name")]
     pub name: String,
     #[serde(rename = "Version")]
-    pub version: String,
+    pub version: Option<String>,
 }
 
 impl ModManifest {

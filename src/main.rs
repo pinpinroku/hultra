@@ -106,14 +106,18 @@ async fn run() -> Result<(), Error> {
                     println!("  Dependencies:");
                     for dep in deps {
                         println!("    - Name: {}", dep.name);
-                        println!("      Version: {}", dep.version);
+                        if let Some(version) = &dep.version {
+                            println!("      Version: {}", version);
+                        }
                     }
                 }
                 if let Some(opt_deps) = &local_mod.manifest.optional_dependencies {
                     println!("  Optional Dependencies:");
                     for dep in opt_deps {
                         println!("    - Name: {}", dep.name);
-                        println!("      Version: {}", dep.version);
+                        if let Some(version) = &dep.version {
+                            println!("      Version: {}", version);
+                        }
                     }
                 }
             } else {
