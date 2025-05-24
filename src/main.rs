@@ -5,8 +5,10 @@ use std::time::Duration;
 
 mod cli;
 mod constant;
+mod dependency;
 mod download;
 mod error;
+mod fetch;
 mod fileutil;
 mod local;
 mod mod_registry;
