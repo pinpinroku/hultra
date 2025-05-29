@@ -23,6 +23,7 @@ tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
 uuid = { version = "1.16.0", features = ["v4"] }
 tempfile = "3.15.0"
+anyhow = "1.0.98"
 
 [profile.release]
 lto = true        # Enable Link Time Optimization

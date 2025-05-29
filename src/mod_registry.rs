@@ -1,8 +1,11 @@
-use serde::Deserialize;
 use std::collections::HashMap;
+
+use anyhow::Result;
+use reqwest::Client;
+use serde::Deserialize;
 use tracing::debug;
 
-use crate::{constant::MOD_REGISTRY_URL, error::Error, fetch};
+use crate::{constant::MOD_REGISTRY_URL, fetch};
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -37,31 +40,33 @@ impl RemoteModInfo {
 pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 pub trait ModRegistryQuery {
+    async fn fetch(client: &Client) -> Result<RemoteModRegistry>;
     fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo>;
-    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)>;
+    fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String>;
 }
 
 impl ModRegistryQuery for RemoteModRegistry {
+    /// Fetches the Remote Mod Registry from the maddie480's server.
+    async fn fetch(client: &Client) -> Result<Self> {
+        fetch::fetch_remote_data::<Self>(MOD_REGISTRY_URL, client).await
+    }
+
     /// Gets a mod registry entry that matches the given name.
     fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
         debug!("Getting the mod information matching the name: {}", name);
         self.get(name)
     }
 
-    /// Finds a mod registry that matches the mod ID.
-    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)> {
+    /// Gets a mod name that matches the given mod ID.
+    fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String> {
         debug!(
             "Looking up the remote mod information that matches the mod ID: {}",
             mod_id
         );
         self.iter()
             .find(|(_, manifest)| manifest.gamebanana_id == mod_id)
+            .map(|(mod_name, _)| mod_name)
     }
-}
-
-// Fetches the RemoteModRegistry
-pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
-    fetch::fetch_remote_data::<RemoteModRegistry>(MOD_REGISTRY_URL, "online database").await
 }
 
 #[cfg(test)]
@@ -112,12 +117,11 @@ mod tests {
     fn test_find_mod_registry_by_id() {
         let mod_registry = dummy_registry();
 
-        let result = mod_registry.find_mod_entry_by_id(42);
+        let result = mod_registry.get_mod_name_by_id(42);
         assert!(result.is_some());
-        let (found_key, found_mod) = result.unwrap();
-        assert_eq!(found_mod.gamebanana_id, 42);
+        let found_key = result.unwrap();
         assert_eq!(found_key, "SpeedrunTool");
 
-        assert!(mod_registry.find_mod_entry_by_id(12345).is_none());
+        assert!(mod_registry.get_mod_name_by_id(12345).is_none());
     }
 }

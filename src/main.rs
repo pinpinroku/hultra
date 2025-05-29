@@ -1,5 +1,6 @@
+use anyhow::Result;
 use clap::Parser;
-use indicatif::ProgressBar;
+use mod_registry::{ModRegistryQuery, RemoteModRegistry};
 use reqwest::Client;
 use std::time::Duration;
 
@@ -15,8 +16,6 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use download::{install, update};
-use error::Error;
-use mod_registry::ModRegistryQuery;
 
 fn setup_logging(verbose: bool) {
     use tracing_subscriber::{
@@ -48,7 +47,7 @@ fn setup_logging(verbose: bool) {
     }
 }
 
-async fn run() -> Result<(), Error> {
+async fn run() -> Result<()> {
     tracing::info!("Application starts");
 
     let cli = Cli::parse();
@@ -130,23 +129,18 @@ async fn run() -> Result<(), Error> {
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
             let mod_id = install::parse_mod_page_url(&args.mod_page_url)?;
+            // Fetching online database
+            let (mod_registry, dependency_graph) = fetch::fetch_online_database().await?;
 
-            tracing::info!("Look up the mod entry matches the given URL by using its ID");
-            let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
-            let mod_entry = mod_registry.find_mod_entry_by_id(mod_id);
-
-            let (mod_name, remote_mod) = match mod_entry {
-                Some(entry) => entry,
+            // Gets the mod name by using the ID from the Remote Mod Registry.
+            let mod_name = match mod_registry.get_mod_name_by_id(mod_id) {
+                Some(name) => name,
                 None => {
-                    println!("Could not find a mod matching [{}].", &args.mod_page_url);
+                    println!("Could not find the mod matches [{}].", mod_id);
                     return Ok(());
                 }
             };
 
-            tracing::debug!("Matched entry name: {}", mod_name);
-            tracing::debug!("Matched entry detail: {:#?}", remote_mod);
-
-            tracing::info!("Check if the mod is already installed or not");
             let local_mods = local::load_local_mods(&archive_paths)?;
             let installed_mod_names = local::collect_installed_mod_names(local_mods)?;
             if installed_mod_names.contains(mod_name) {
@@ -154,18 +148,12 @@ async fn run() -> Result<(), Error> {
                 return Ok(());
             }
 
-            tracing::info!("Start installing the new mod");
-            let client = Client::builder()
-                .connect_timeout(Duration::from_secs(5))
-                .build()?;
-            let pb = ProgressBar::new(remote_mod.file_size);
-            install::install(
-                &client,
-                (mod_name, remote_mod),
+            download::install::install_mod(
+                mod_name,
                 &mod_registry,
-                &mods_directory,
+                &dependency_graph,
                 &installed_mod_names,
-                &pb,
+                &mods_directory,
             )
             .await?;
         }
@@ -178,7 +166,14 @@ async fn run() -> Result<(), Error> {
             }
 
             // Update installed mods by checking for available updates in the mod registry.
-            let mod_registry = mod_registry::fetch_remote_mod_registry().await?;
+            let spinner = download::pb_style::create_spinner();
+            let client = reqwest::ClientBuilder::new()
+                .http2_prior_knowledge()
+                .gzip(true)
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
+            let mod_registry = RemoteModRegistry::fetch(&client).await?;
+            spinner.finish_and_clear();
 
             let available_updates = update::check_updates(local_mods, mod_registry).await?;
             if available_updates.is_empty() {
