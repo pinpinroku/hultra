@@ -1,9 +1,11 @@
-use indicatif::ProgressBar;
-use serde::Deserialize;
 use std::collections::HashMap;
+
+use anyhow::Result;
+use reqwest::Client;
+use serde::Deserialize;
 use tracing::debug;
 
-use crate::{constant::MOD_REGISTRY_URL, error::Error};
+use crate::{constant::MOD_REGISTRY_URL, fetch};
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -38,75 +40,33 @@ impl RemoteModInfo {
 pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 pub trait ModRegistryQuery {
+    async fn fetch(client: &Client) -> Result<RemoteModRegistry>;
     fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo>;
-    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)>;
+    fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String>;
 }
 
 impl ModRegistryQuery for RemoteModRegistry {
+    /// Fetches the Remote Mod Registry from the maddie480's server.
+    async fn fetch(client: &Client) -> Result<Self> {
+        fetch::fetch_remote_data::<Self>(MOD_REGISTRY_URL, client).await
+    }
+
     /// Gets a mod registry entry that matches the given name.
     fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
         debug!("Getting the mod information matching the name: {}", name);
         self.get(name)
     }
 
-    /// Finds a mod registry that matches the mod ID.
-    fn find_mod_entry_by_id(&self, mod_id: u32) -> Option<(&String, &RemoteModInfo)> {
+    /// Gets a mod name that matches the given mod ID.
+    fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String> {
         debug!(
             "Looking up the remote mod information that matches the mod ID: {}",
             mod_id
         );
         self.iter()
             .find(|(_, manifest)| manifest.gamebanana_id == mod_id)
+            .map(|(mod_name, _)| mod_name)
     }
-}
-
-/// Fetches the remote mod registry, then parse and deserialize into the RemoteModRegistry type
-pub async fn fetch_remote_mod_registry() -> Result<RemoteModRegistry, Error> {
-    let spinner = create_spinner();
-
-    let client = reqwest::ClientBuilder::new()
-        .http2_prior_knowledge()
-        .gzip(true)
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
-
-    let response = client
-        .get(MOD_REGISTRY_URL)
-        .send()
-        .await?
-        .error_for_status()?;
-
-    tracing::debug!("Response headers: {:#?}", response.headers());
-    let bytes = response.bytes().await?;
-
-    spinner.finish_and_clear();
-
-    tracing::info!("Parsing the binary data from the response");
-    let mod_registry = parse_response_bytes(&bytes)?;
-
-    Ok(mod_registry)
-}
-
-/// Parses a binary data from the response into the remote mod registry.
-fn parse_response_bytes(
-    bytes: &[u8],
-) -> Result<HashMap<String, RemoteModInfo>, serde_yaml_ng::Error> {
-    serde_yaml_ng::from_slice::<RemoteModRegistry>(bytes)
-}
-
-/// Create a spinner
-fn create_spinner() -> ProgressBar {
-    use indicatif::ProgressStyle;
-    use std::time::Duration;
-
-    let spinner = ProgressBar::new_spinner();
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    spinner.set_style(
-        ProgressStyle::with_template("{spinner:.bold} {msg}")
-            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-    );
-    spinner.set_message("Fetching online database...");
-    spinner
 }
 
 #[cfg(test)]
@@ -157,35 +117,11 @@ mod tests {
     fn test_find_mod_registry_by_id() {
         let mod_registry = dummy_registry();
 
-        let result = mod_registry.find_mod_entry_by_id(42);
+        let result = mod_registry.get_mod_name_by_id(42);
         assert!(result.is_some());
-        let (found_key, found_mod) = result.unwrap();
-        assert_eq!(found_mod.gamebanana_id, 42);
+        let found_key = result.unwrap();
         assert_eq!(found_key, "SpeedrunTool");
 
-        assert!(mod_registry.find_mod_entry_by_id(12345).is_none());
-    }
-
-    #[test]
-    fn test_parse_response_bytes_valid() {
-        // Real example of SpeedrunTool
-        let yaml = r#"
-SpeedrunTool:
-  GameBananaType: Tool
-  Version: 3.24.3
-  LastUpdate: 1739450250
-  Size: 251301
-  GameBananaId: 6597
-  GameBananaFieldId: 1380853
-  xxHash:
-  - cbc55c04533efb34
-  URL: "https://gamebanana.com/mmdl/1380853"
-"#;
-
-        let bytes = yaml.as_bytes();
-        let result = parse_response_bytes(bytes);
-        assert!(result.is_ok());
-        let registry = result.unwrap();
-        assert!(registry.contains_key("SpeedrunTool"));
+        assert!(mod_registry.get_mod_name_by_id(12345).is_none());
     }
 }

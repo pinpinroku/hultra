@@ -1,7 +1,8 @@
+use std::path::{Path, PathBuf};
+
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use reqwest::{Client, Response};
-use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use tokio::io::AsyncWriteExt;
 use tracing::{debug, error};
@@ -115,8 +116,8 @@ async fn download_and_write(
 }
 
 /// Style configurations of a progress bar.
-mod pb_style {
-    use indicatif::ProgressStyle;
+pub mod pb_style {
+    use indicatif::{ProgressBar, ProgressStyle};
     use std::borrow::Cow;
 
     const MAX_MSG_LENGTH: usize = 40;
@@ -142,6 +143,20 @@ mod pb_style {
         } else {
             Cow::Borrowed(msg)
         }
+    }
+
+    pub fn create_spinner() -> ProgressBar {
+        use indicatif::ProgressStyle;
+        use std::time::Duration;
+
+        let spinner = ProgressBar::new_spinner();
+        spinner.enable_steady_tick(Duration::from_millis(100));
+        spinner.set_style(
+            ProgressStyle::with_template("{spinner:.bold} {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        spinner.set_message("Fetching online database...");
+        spinner
     }
 
     #[cfg(test)]

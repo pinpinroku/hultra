@@ -1,19 +1,14 @@
+use std::{collections::HashSet, path::Path, time::Duration};
+
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Url};
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-    sync::Arc,
-};
-use tokio::sync::Semaphore;
-use tracing::{debug, error, info, warn};
 
 use crate::{
+    dependency::{DependencyGraph, ModDependencyQuery},
     download,
     error::Error,
-    fileutil,
-    local::ModManifest,
-    mod_registry::{ModRegistryQuery, RemoteModInfo, RemoteModRegistry},
+    mod_registry::RemoteModRegistry,
 };
 
 /// Parses the given url string, converts it to the mod ID.
@@ -49,165 +44,68 @@ pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, Error> {
     }
 }
 
-/// Installs a mod and checks for the missing dependencies, if missing install them.
-pub async fn install(
-    client: &Client,
-    (name, manifest): (&str, &RemoteModInfo),
+/// Newly implemented install function to download all mods including dependencies at once.
+pub async fn install_mod(
+    mod_name: &str,
     mod_registry: &RemoteModRegistry,
-    download_dir: &Path,
+    dependency_graph: &DependencyGraph,
     installed_mod_names: &HashSet<String>,
-    pb: &ProgressBar,
-) -> Result<(), Error> {
-    let style = super::pb_style::new();
-    pb.set_style(style);
+    mods_directory: &Path,
+) -> anyhow::Result<()> {
+    // Collects required dependencies for the mod including the mod itself
+    let dependencies = dependency_graph.collect_all_dependencies_bfs(mod_name);
 
-    let msg = super::pb_style::truncate_msg(name);
-    pb.set_message(msg.into_owned());
+    // Filters out missing dependencies
+    let missing_deps = dependencies
+        .difference(installed_mod_names)
+        .collect::<Vec<_>>();
+    tracing::debug!("Missing dependencies are found: {:?}", missing_deps);
 
-    let downloaded_file_path = download::download_mod(
-        client,
-        name,
-        &manifest.download_url,
-        &manifest.checksums,
-        download_dir,
-        pb,
-    )
-    .await?;
-
-    debug!(
-        "[{}] is now installed in {}.",
-        name,
-        fileutil::replace_home_dir_with_tilde(&downloaded_file_path)
-    );
-
-    if let Some(dependencies) = check_dependencies(&downloaded_file_path)? {
-        debug!("Filetering out already installed dependencies.");
-        let missing_dependencies: Vec<_> = dependencies.difference(installed_mod_names).collect();
-        if missing_dependencies.is_empty() {
-            info!("You already have all the dependencies required by this mod.");
-            return Ok(());
-        }
-
-        info!("Start downloading the dependencies...\n");
-        resolve_dependencies(client, mod_registry, download_dir, missing_dependencies).await?;
-    }
-
-    Ok(())
-}
-
-/// Downloads all missing dependencies concurrently.
-async fn resolve_dependencies(
-    client: &Client,
-    mod_registry: &HashMap<String, RemoteModInfo>,
-    download_dir: &Path,
-    missing_dependency_names: Vec<&String>,
-) -> Result<(), Error> {
+    tracing::info!("Start installing the new mod [{}]", mod_name);
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()?;
     let mp = MultiProgress::new();
     let style = super::pb_style::new();
 
-    let semaphore = Arc::new(Semaphore::new(6));
-    let mut handles = Vec::with_capacity(missing_dependency_names.len());
-
-    for dependency_name in missing_dependency_names {
-        if let Some(manifest) = mod_registry.get_mod_info_by_name(dependency_name) {
-            let semaphore = Arc::clone(&semaphore);
-
+    // Collects metadata of the mods for the downloads
+    let tasks = missing_deps
+        .iter()
+        .filter_map(|k| mod_registry.get(*k).map(|v| (*k, v)))
+        .map(|(name, info)| {
+            let client = client.clone();
             let mp = mp.clone();
             let style = style.clone();
 
-            let dependency_name = dependency_name.clone();
-            let manifest = manifest.clone();
-            let client = client.clone();
-            let download_dir = download_dir.to_path_buf();
-            debug!(
-                "Manifest of dependency: {}\n{:#?}",
-                dependency_name, manifest
-            );
-
-            let handle = tokio::spawn(async move {
-                let _permit = semaphore.acquire().await?;
-
-                let total_size = super::get_file_size(&client, &manifest.download_url).await?;
-                let pb = mp.add(ProgressBar::new(total_size));
+            async move {
+                let pb = mp.add(ProgressBar::new(info.file_size));
                 pb.set_style(style);
 
-                let msg = super::pb_style::truncate_msg(&dependency_name);
+                let msg = super::pb_style::truncate_msg(name);
                 pb.set_message(msg.to_string());
 
-                let downloaded_file_path = download::download_mod(
+                if let Err(e) = download::download_mod(
                     &client,
-                    &dependency_name,
-                    &manifest.download_url,
-                    &manifest.checksums,
-                    &download_dir,
+                    name,
+                    &info.download_url,
+                    &info.checksums,
+                    mods_directory,
                     &pb,
                 )
-                .await?;
+                .await
+                {
+                    eprintln!("Error downloading {}: {}", name, e);
+                }
+            }
+        })
+        .collect::<FuturesUnordered<_>>();
 
-                drop(_permit);
-
-                Ok(downloaded_file_path)
-            });
-
-            handles.push(handle);
-        } else {
-            warn!(
-                "Could not find information about the mod '{}'.\n\
-                    The modder may have misspelled the name.",
-                dependency_name
-            );
-        }
-    }
-
-    // Collects all errors instead of stopping at the first one.
-    let mut errors = Vec::new();
-    for handle in handles {
-        match handle.await {
-            Ok(Ok(_)) => (),                               // Task completed successfully
-            Ok(Err(err)) => errors.push(err),              // Task returned an error
-            Err(err) => errors.push(Error::TaskJoin(err)), // Task panicked
-        }
-    }
-
-    // Actually handle the errors
-    if errors.is_empty() {
-        info!("All required dependencies installed successfully!");
-    } else {
-        // Log all errors
-        for (i, err) in errors.iter().enumerate() {
-            error!("Error {}: {}", i + 1, err);
-        }
-        // Return multiple update errors
-        return Err(Error::MultipleUpdate(errors));
-    }
+    // NOTE: I don't know what the `fut: ()` can do within the async block.
+    tasks
+        .for_each_concurrent(Some(6), |fut| async move { fut })
+        .await;
 
     Ok(())
-}
-
-/// Check for dependencies, if found return `HashSet<String>`, otherwise return `None`.
-fn check_dependencies(downloaded_file_path: &Path) -> Result<Option<HashSet<String>>, Error> {
-    info!("\nChecking for missing dependencies...");
-    // Attempt to read the manifest file. If it doesn't exist, return an error.
-    let buffer = fileutil::read_manifest_file_from_archive(downloaded_file_path)?;
-
-    // Parse the manifest file
-    let manifest = ModManifest::from_yaml(&buffer)?;
-    debug!("Manifest content: {:#?}", manifest);
-
-    // Retrieve dependencies if available, filtering out "Everest" and "EverestCore"
-    if let Some(dependencies) = manifest.dependencies {
-        let filtered_deps = dependencies
-            .into_iter()
-            // NOTE: "Everest" and "EverestCore (deprecated)" are primal dependencies, so there is no need to download them
-            .filter(|dependency| !matches!(dependency.name.as_str(), "Everest" | "EverestCore"))
-            .map(|dependency| dependency.name)
-            .collect::<HashSet<String>>();
-        debug!("Filtered dependencies: {:#?}", filtered_deps);
-        Ok(Some(filtered_deps))
-    } else {
-        warn!("No dependencies found. This is weird. Even 'Everest' is not listed.");
-        Ok(None)
-    }
 }
 
 #[cfg(test)]

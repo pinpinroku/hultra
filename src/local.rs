@@ -28,7 +28,7 @@ pub struct ModManifest {
 }
 
 /// Dependency specification for required or optional mod dependencies.
-#[derive(Debug, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
 pub struct Dependency {
     #[serde(rename = "Name")]
     pub name: String,
