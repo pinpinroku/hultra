@@ -15,7 +15,6 @@ indicatif = "0.17.9"
 reqwest = { version = "0.12.12", features = ["gzip" ,"stream"] }
 serde = { version = "1.0.217", features = ["derive"] }
 tokio = { version = "1.42.0", features = ["full"] }
-zip = "2.2.2"
 xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 serde_yaml_ng = "0.10.0"
 thiserror = "2.0.12"
@@ -24,6 +23,7 @@ tracing-subscriber = "0.3.19"
 uuid = { version = "1.16.0", features = ["v4"] }
 tempfile = "3.15.0"
 anyhow = "1.0.98"
+zip = "4.0.0"
 
 [profile.release]
 lto = true        # Enable Link Time Optimization
