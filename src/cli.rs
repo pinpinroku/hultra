@@ -10,6 +10,27 @@ pub struct Cli {
     #[arg(short = 'd', long = "mods-dir", value_name = "DIR")]
     pub mods_dir: Option<PathBuf>,
 
+    /// Priority of the mirror list separated by commas
+    #[arg(
+        short = 'm',
+        long = "mirror-priority",
+        long_help = "Priority of the mirror list separated by commas (e.g., \"wegfan,jade,gb,otobot\").
+        This option only applies to the `install` and the `update` commands,
+
+        * gb     => 'Default GameBanana Server',
+        * jade   => 'Germany',
+        * wegfan => 'China',
+        * otobot => 'North America',
+
+        If the download from the current server fails, the application will
+        automatically fall back to the next server in the priority list to
+        retry the download. You can also restrict the fallback servers by
+        providing a comma-separated list (e.g., \"otobot,jade\"), which will
+        limit the retries to only those specified servers.",
+        default_value = "gb,jade,wegfan,otobot"
+    )]
+    pub mirror_preferences: String,
+
     /// Verbose mode: Display verbose outputs
     #[arg(short, long)]
     pub verbose: bool,

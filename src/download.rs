@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use clap::Parser;
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use reqwest::{Client, Response};
@@ -8,7 +9,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::{debug, error};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
+use crate::{cli::Cli, error::Error, fileutil::replace_home_dir_with_tilde};
 
 pub mod install;
 pub mod update;
@@ -49,14 +50,33 @@ pub async fn download_mod(
         replace_home_dir_with_tilde(download_dir)
     );
 
+    // let cli = Cli::parse();
+    // let mirror_urls = mirror_list::get_all_mirror_urls(url, &cli.mirror_preferences);
+
+    // HACK: Looping mirrors to download the file
+    // for url in mirror_urls {
+    //     let response = client.get(url.as_ref()).send().await?;
+    //     // TODO: How to detemine the mod name for the mirror URLs since they have only `mod_id: u32` as the file name.
+    //     // TODO: Also the mod name may contains forbidden characters for the filesystem. Also, trimming and sanitizing may result in a duplicate names.
+    //     if response.status().is_success() {
+    //         todo!("Download the file")
+    //     } else {
+    //         // TODO: Also retries for the checksum verification failures.
+    //         tracing::warn!("Download failed, trying another mirror")
+    //     }
+    // }
+
+    // TODO: This operation should be repalced with above codes.
     let response = client.get(url).send().await?.error_for_status()?;
     debug!("Response status: {}", response.status());
 
+    // TODO: This operation should replace with simple HEAD request to the original gamebanana server.
+    // TODO: Retrieves the LOCATION header from the initial reponse without redirecting to the actual file server.
     let filename = download_util::determine_filename(response.url(), response.headers());
     let download_path = download_dir.join(&filename);
-
     debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
 
+    // TODO: If this function returns `crate error::Error::InvalidChecksum`, retry next mirror URL
     download_and_write(response, &download_path, expected_hashes, pb).await?;
 
     pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
