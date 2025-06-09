@@ -127,9 +127,6 @@ If there are missing dependencies, it will automatically download and install th
 everest-mod-cli install "https://gamebanana.com/mods/592695"
 # 🌐 Fetching online database...
 # 🍓 kit                5.55 MiB  21.89 KiB/s  00:00:00 [#######################]  100%
-# Checking for missing dependencies...
-# Start downloading the dependencies...
-# 
 # 🍓 CommunalHelper    19.25 MiB   4.40 MiB/s  00:00:00 [#######################]  100%
 # 🍓 GravityHelper    706.45 KiB  97.16 KiB/s  00:00:00 [#######################]  100%
 # 🍓 OutbackHelper     45.12 KiB  61.97 KiB/s  00:00:00 [#######################]  100%
@@ -151,16 +148,9 @@ Check for available updates for installed mods.
 ```bash
 everest-mod-cli update
 # 🌐 Fetching online database...
-# Checking mod updates...
-# Available updates:
-# 
-# UnderDragon's Repository
-#  - Current version: 2.5.3
-#  - Available version: 2.5.4
-# 
-# califonia dreamin'
-#  - Current version: 0.0.1
-#  - Available version: 0.0.1
+#
+# UnderDragon's Repository: 2.5.3 -> 2.5.4
+# califonia dreamin': 0.0.1 -> 0.0.1
 #
 # Run with --install to install these updates
 ```
@@ -169,26 +159,20 @@ Install available updates.
 ```bash
 everest-mod-cli update --install
 # 🌐 Fetching online database...
-# Checking mod updates...
-# Available updates:
 # 
-# UnderDragon's Repository
-#  - Current version: 2.5.3
-#  - Available version: 2.5.4
-# 
-# califonia dreamin'
-#  - Current version: 0.0.1
-#  - Available version: 0.0.1
+# UnderDragon's Repository: 2.5.3 -> 2.5.4
+# califonia dreamin': 0.0.1 -> 0.0.1
 # 
 # Installing updates...
 # 🍓 califonia dreamin'          6.91 MiB 254.93 KiB/s  00:00:00 [######################]  100%
 # 🍓 UnderDragon's Repository   29.70 MiB 683.38 KiB/s  00:00:00 [######################]  100%
-# All updates installed successfully!
 ```
 
 > Modders sometimes forget to increase the version number but the file change will be detected by the checksum.
 
-## Option
+## Options
+
+### `-d, --mods-dir` \<DIR\>
 
 The default mods directory is set to the Steam game installation folder:
 
@@ -209,6 +193,23 @@ Just use an alias to make things easier:
 alias emc='everest-mod-cli --mods-dir $HOME/game/exokgames/celeste/Mods/'
 ```
 
+### `-m, --mirror-priority` \<MIRROR\>
+
+> This option only applies to the `install` and the `update` commands.
+
+Mirror priority can be specified by a comma-separated list. Default is "gb,jade,wegfan,otobot".
+
+| name    | location                      |
+|---------|-------------------------------|
+| gb      | Default GameBanana Server     |
+| jade    | Germany                       |
+| wegfan  | China                         |
+| otobot  | North America                 |
+
+If the download from the current server fails, the application will automatically fall back to the next server in the priority list to retry the download.
+
+You can also restrict the fallback servers by providing a comma-separated list (e.g., \"otobot,jade\"), which will limit the retries to only those specified servers.
+
 ---
 
 ## Motivation
@@ -228,7 +229,7 @@ Everest and Olympus are excellent tools for managing Celeste mods. However, ther
 ## Notes
 
 - The `mod_name` and the corresponding filenames may not match.
-- The `mod_name` refers to the name of the Mod as it appears in the game menu.
+- The `mod_name` is the unique identifier which is stored in the metadata and online database for searching purpose.
 - The `filename` is the name of the zip file that contains the Mod's assets and the manifest file called `everest.yaml`.
 
 ---
