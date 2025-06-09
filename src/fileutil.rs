@@ -7,24 +7,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::debug;
 use xxhash_rust::xxh64::Xxh64;
 use zip::{ZipArchive, result::ZipError};
 
-use crate::constant::{STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE};
+use crate::constant::UPDATER_BLACKLIST_FILE;
 use crate::error::Error;
-
-/// Returns the path to the user's mods directory based on platform-specific conventions.
-///
-/// # Returns
-/// * `Ok(PathBuf)` - The path to the mods directory if detected successfully.
-/// * `Err(Error)` - An error if the home directory could not be determined.
-pub fn get_mods_directory() -> Result<PathBuf, Error> {
-    debug!("Detecting Celeste/Mods directory...");
-    env::home_dir()
-        .map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
-        .ok_or(Error::CouldNotDetermineHomeDir)
-}
 
 /// Replaces `/home/user/` with `~/`
 pub fn replace_home_dir_with_tilde(destination: &Path) -> Cow<'_, str> {
@@ -232,14 +219,6 @@ mod tests_fileutil {
 
         zip.finish().unwrap();
         temp_file
-    }
-
-    #[test]
-    fn test_get_mods_directory_success() {
-        let mods_dir = get_mods_directory();
-        assert!(mods_dir.is_ok());
-        let path = mods_dir.unwrap();
-        assert!(path.ends_with(STEAM_MODS_DIRECTORY_PATH));
     }
 
     #[test]

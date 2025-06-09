@@ -1,10 +1,11 @@
-use std::{collections::HashSet, path::Path, time::Duration};
+use std::{collections::HashSet, time::Duration};
 
 use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Url};
 
 use crate::{
+    config::Config,
     dependency::{DependencyGraph, ModDependencyQuery},
     download,
     error::Error,
@@ -50,7 +51,7 @@ pub async fn install_mod(
     mod_registry: &RemoteModRegistry,
     dependency_graph: &DependencyGraph,
     installed_mod_names: &HashSet<String>,
-    mods_directory: &Path,
+    config: &Config,
 ) -> anyhow::Result<()> {
     // Collects required dependencies for the mod including the mod itself
     let dependencies = dependency_graph.collect_all_dependencies_bfs(mod_name);
@@ -77,6 +78,9 @@ pub async fn install_mod(
             let mp = mp.clone();
             let style = style.clone();
 
+            let mirror_urls =
+                mirror_list::get_all_mirror_urls(&info.download_url, config.mirror_preferences());
+
             async move {
                 let pb = mp.add(ProgressBar::new(info.file_size));
                 pb.set_style(style);
@@ -87,9 +91,9 @@ pub async fn install_mod(
                 if let Err(e) = download::download_mod(
                     &client,
                     name,
-                    &info.download_url,
+                    &mirror_urls,
                     &info.checksums,
-                    mods_directory,
+                    config.directory(),
                     &pb,
                 )
                 .await

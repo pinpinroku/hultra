@@ -5,6 +5,7 @@ use reqwest::Client;
 use std::time::Duration;
 
 mod cli;
+mod config;
 mod constant;
 mod dependency;
 mod download;
@@ -15,6 +16,7 @@ mod local;
 mod mod_registry;
 
 use cli::{Cli, Commands};
+use config::Config;
 use download::{install, update};
 
 fn setup_logging(verbose: bool) {
@@ -57,15 +59,17 @@ async fn run() -> Result<()> {
 
     tracing::debug!("Command passed: {:?}", &cli.command);
 
+    let config = Config::new(&cli)?;
+
     // Determine the mods directory.
-    let mods_directory = cli.mods_dir.unwrap_or(fileutil::get_mods_directory()?);
+    let mods_directory = config.directory();
     tracing::debug!(
         "Determined mods directory: {}",
-        fileutil::replace_home_dir_with_tilde(&mods_directory)
+        fileutil::replace_home_dir_with_tilde(mods_directory)
     );
 
     // Gathering mod paths
-    let archive_paths = fileutil::find_installed_mod_archives(&mods_directory)?;
+    let archive_paths = fileutil::find_installed_mod_archives(mods_directory)?;
 
     match &cli.command {
         // Show mod name and file name of installed mods.
@@ -153,7 +157,7 @@ async fn run() -> Result<()> {
                 &mod_registry,
                 &dependency_graph,
                 &installed_mod_names,
-                &mods_directory,
+                &config,
             )
             .await?;
         }
@@ -161,7 +165,7 @@ async fn run() -> Result<()> {
         Commands::Update(args) => {
             // Filter installed mods according to the `updaterblacklist.txt`
             let mut local_mods = local::load_local_mods(&archive_paths)?;
-            if let Some(blacklist) = fileutil::read_updater_blacklist(&mods_directory)? {
+            if let Some(blacklist) = fileutil::read_updater_blacklist(mods_directory)? {
                 local::remove_blacklisted_mods(&mut local_mods, &blacklist);
             }
 
@@ -183,7 +187,7 @@ async fn run() -> Result<()> {
                 let client = Client::builder()
                     .connect_timeout(Duration::from_secs(5))
                     .build()?;
-                update::update_multiple_mods(&client, &mods_directory, available_updates).await?;
+                update::update_multiple_mods(&client, available_updates, &config).await?;
             } else {
                 println!("\nRun with --install to install these updates");
             }

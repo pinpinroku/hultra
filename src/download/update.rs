@@ -1,13 +1,12 @@
+use std::{path::PathBuf, sync::Arc};
+
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
 use tokio::sync::Semaphore;
 use tracing::{debug, error, info};
 
 use crate::{
+    config::Config,
     download,
     error::Error,
     fileutil,
@@ -148,15 +147,17 @@ pub async fn check_updates(
 async fn update(
     client: &Client,
     update_info: &AvailableUpdate,
-    download_dir: &Path,
     pb: &ProgressBar,
-) -> Result<(), Error> {
+    config: &Config,
+) -> anyhow::Result<()> {
+    let mirror_urls =
+        mirror_list::get_all_mirror_urls(&update_info.url, config.mirror_preferences());
     download::download_mod(
         client,
         &update_info.name,
-        &update_info.url,
+        &mirror_urls,
         &update_info.hashes,
-        download_dir,
+        config.directory(),
         pb,
     )
     .await?;
@@ -175,9 +176,9 @@ async fn update(
 /// Updates all mods that can be updated concurrently.
 pub async fn update_multiple_mods(
     client: &Client,
-    download_dir: &Path,
     available_updates: Vec<AvailableUpdate>,
-) -> Result<(), Error> {
+    config: &Config,
+) -> anyhow::Result<()> {
     let mp = MultiProgress::new();
     let style = super::pb_style::new();
 
@@ -187,10 +188,9 @@ pub async fn update_multiple_mods(
     for available_update in available_updates {
         let semaphore = Arc::clone(&semaphore);
 
-        let mp = mp.clone();
-
         let client = client.clone();
-        let download_dir = download_dir.to_path_buf();
+        let config = config.clone();
+        let mp = mp.clone();
         let style = style.clone();
 
         let handle = tokio::spawn(async move {
@@ -203,11 +203,11 @@ pub async fn update_multiple_mods(
             let msg = super::pb_style::truncate_msg(&available_update.name);
             pb.set_message(msg.to_string());
 
-            update(&client, &available_update, &download_dir, &pb).await?;
+            update(&client, &available_update, &pb, &config).await?;
 
             drop(_permit);
 
-            Ok(())
+            Ok::<(), anyhow::Error>(())
         });
 
         handles.push(handle);
@@ -217,9 +217,9 @@ pub async fn update_multiple_mods(
     let mut errors = Vec::new();
     for handle in handles {
         match handle.await {
-            Ok(Ok(())) => (),                              // Task completed successfully
-            Ok(Err(err)) => errors.push(err),              // Task returned an error
-            Err(err) => errors.push(Error::TaskJoin(err)), // Task panicked
+            Ok(Ok(())) => (),                    // Task completed successfully
+            Ok(Err(err)) => errors.push(err),    // Task returned an error
+            Err(err) => errors.push(err.into()), // Task panicked
         }
     }
 
@@ -232,7 +232,7 @@ pub async fn update_multiple_mods(
             error!("Error {}: {}", i + 1, err);
         }
         // Return multiple update errors
-        return Err(Error::MultipleUpdate(errors));
+        anyhow::bail!("{:?}", errors)
     }
 
     Ok(())

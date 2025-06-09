@@ -32,20 +32,9 @@ pub enum Error {
     #[error(transparent)]
     SemaphoreAcquire(#[from] tokio::sync::AcquireError),
 
-    /// Multiple update failures
-    #[error("multiple update errors occurred: {0:?}")]
-    MultipleUpdate(Vec<Error>),
-
     /// Multiple update check failures
     #[error("update check errors occurred: {0:?}")]
     UpdateCheck(Vec<Error>),
-
-    /// Error indicating that the home directory could not be determined
-    #[error(
-        "could not determine home directory location!\
-        please specify the mods directory using --mods-dir"
-    )]
-    CouldNotDetermineHomeDir,
 
     /// Error indicating that the mods directory is missing
     #[error(
