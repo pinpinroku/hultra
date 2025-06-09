@@ -1,6 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
-use clap::Parser;
 use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use reqwest::{Client, Response};
@@ -9,13 +11,13 @@ use tokio::io::AsyncWriteExt;
 use tracing::{debug, error};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{cli::Cli, error::Error, fileutil::replace_home_dir_with_tilde};
+use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
 
 pub mod install;
 pub mod update;
 
 /// Retrieves the file size of the file from the response header by sending a HEAD request to the target URL.
-async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
+async fn get_file_size(client: &Client, url: &str) -> anyhow::Result<u64> {
     debug!(
         "Get the file size by sending HEAD request to the server: {}",
         url
@@ -35,58 +37,96 @@ async fn get_file_size(client: &Client, url: &str) -> Result<u64, Error> {
     Ok(total_size)
 }
 
+/// Returns sanitized mod name or "unnamed" if the given mod name is empty.
+fn sanitize(mod_name: &str) -> Cow<'_, str> {
+    const BAD_CHARS: [char; 6] = ['/', '\\', '*', '?', ':', ';'];
+
+    let trimmed = mod_name.trim();
+    let without_dot = trimmed.strip_prefix('.').unwrap_or(trimmed);
+
+    let mut changed = false;
+    let mut result = String::with_capacity(without_dot.len());
+
+    for c in without_dot
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+    {
+        let replacement = match c {
+            '\r' | '\n' | '\0' => {
+                changed = true;
+                continue;
+            }
+            c if BAD_CHARS.contains(&c) => {
+                changed = true;
+                '_'
+            }
+            c => c,
+        };
+        result.push(replacement);
+    }
+
+    if result.len() > 255 {
+        result.truncate(255);
+        changed = true;
+    }
+
+    if result.is_empty() {
+        Cow::Borrowed("unnamed")
+    } else if !changed && result == mod_name {
+        Cow::Borrowed(mod_name)
+    } else {
+        Cow::Owned(result)
+    }
+}
+
 /// Downloads a mod file, returns the file path.
 pub async fn download_mod(
     client: &Client,
     mod_name: &str,
-    url: &str,
+    mirror_urls: &[Cow<'_, str>],
     expected_hashes: &[String],
     download_dir: &Path,
     pb: &ProgressBar,
-) -> Result<PathBuf, Error> {
-    debug!("URL: {}", url);
-    debug!(
-        "Destination directory: {}",
-        replace_home_dir_with_tilde(download_dir)
+) -> anyhow::Result<PathBuf> {
+    let sanitized_name = sanitize(mod_name);
+    let filename = format!("{}.zip", &sanitized_name);
+
+    let install_destination = download_dir.join(&filename);
+    tracing::debug!(
+        "Install destination: {}",
+        replace_home_dir_with_tilde(&install_destination)
     );
 
-    // let cli = Cli::parse();
-    // let mirror_urls = mirror_list::get_all_mirror_urls(url, &cli.mirror_preferences);
-
-    // HACK: Looping mirrors to download the file
-    // for url in mirror_urls {
-    //     let response = client.get(url.as_ref()).send().await?;
-    //     // TODO: How to detemine the mod name for the mirror URLs since they have only `mod_id: u32` as the file name.
-    //     // TODO: Also the mod name may contains forbidden characters for the filesystem. Also, trimming and sanitizing may result in a duplicate names.
-    //     if response.status().is_success() {
-    //         todo!("Download the file")
-    //     } else {
-    //         // TODO: Also retries for the checksum verification failures.
-    //         tracing::warn!("Download failed, trying another mirror")
-    //     }
-    // }
-
-    // TODO: This operation should be repalced with above codes.
-    let response = client.get(url).send().await?.error_for_status()?;
-    debug!("Response status: {}", response.status());
-
-    // TODO: This operation should replace with simple HEAD request to the original gamebanana server.
-    // TODO: Retrieves the LOCATION header from the initial reponse without redirecting to the actual file server.
-    let filename = download_util::determine_filename(response.url(), response.headers());
-    let download_path = download_dir.join(&filename);
-    debug!("Full path: {}", replace_home_dir_with_tilde(&download_path));
-
-    // TODO: If this function returns `crate error::Error::InvalidChecksum`, retry next mirror URL
-    download_and_write(response, &download_path, expected_hashes, pb).await?;
-
-    pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
-    Ok(download_path)
+    for url in mirror_urls {
+        let response = client.get(url.as_ref()).send().await?;
+        if response.status().is_success() {
+            match download_and_write(response, &install_destination, expected_hashes, pb).await {
+                Ok(()) => {
+                    pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
+                    return Ok(install_destination);
+                }
+                Err(e) => {
+                    tracing::warn!("Checksum verification failed, trying another mirror");
+                    tracing::error!("{}", e);
+                    continue; // to the next mirror
+                }
+            }
+        } else {
+            tracing::warn!("Status: {}", response.status());
+            tracing::warn!("Download failed, trying another mirror");
+            continue; // to the next mirror
+        }
+    }
+    pb.finish_and_clear();
+    anyhow::bail!("Failed to download the mod: {}", mod_name)
 }
 
-// Writes all bytes to the temporary file, verifies the checksum when the write is complete, and then moves them to the destination.
+/// Writes all bytes to the temporary file, verifies the checksum when the write is complete, and then moves them to the destination.
 async fn download_and_write(
     response: Response,
-    download_path: &Path,
+    install_destination: &Path,
     expected_hashes: &[String],
     pb: &ProgressBar,
 ) -> Result<(), Error> {
@@ -119,16 +159,16 @@ async fn download_and_write(
         pb.set_message("✅ Checksum verified!");
         debug!(
             "Moving the file to the destination: {}",
-            replace_home_dir_with_tilde(download_path)
+            replace_home_dir_with_tilde(install_destination)
         );
         // NOTE: The permissions are set to 0600
-        tokio::fs::copy(temp_file, download_path).await?;
+        tokio::fs::copy(temp_file, install_destination).await?;
         Ok(())
     } else {
         error!("❌ Checksum verification failed!");
         // NOTE: The temp file will be removed automatically
         Err(Error::InvalidChecksum {
-            file: download_path.to_path_buf(),
+            file: install_destination.to_path_buf(),
             computed: hash_str,
             expected: expected_hashes.to_vec(),
         })
@@ -223,6 +263,7 @@ pub mod pb_style {
 }
 
 /// Utility functions for determining filenames and handling mod download metadata.
+#[allow(dead_code)]
 mod download_util {
     use reqwest::{Url, header::HeaderMap};
     use uuid::Uuid;

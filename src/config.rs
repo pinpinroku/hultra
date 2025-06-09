@@ -1,12 +1,11 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
 use thiserror::Error;
 
-use crate::cli::Cli;
+use crate::{cli::Cli, constant::STEAM_MODS_DIRECTORY_PATH};
 
 #[derive(Debug, Error)]
-enum ConfigError {
+pub enum ConfigError {
     /// Error indicating that user's home directory could not be determined.
     #[error(
         "could not determine home directory location!\
@@ -16,7 +15,7 @@ enum ConfigError {
 }
 
 /// Config to manage mods.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// The path to the directory where the mods are stored.
     directory: PathBuf,
@@ -25,10 +24,10 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(cli: &Cli) -> Result<Self> {
+    pub fn new(cli: &Cli) -> Result<Self, ConfigError> {
         Ok(Self {
             directory: cli
-                .mods_dir
+                .mods_directory
                 .clone()
                 .unwrap_or(get_default_mods_directory()?),
             mirror_preferences: cli.mirror_preferences.to_string(),
@@ -50,8 +49,8 @@ impl Config {
 ///
 /// # Errors
 /// Returns `CouldNotDetermineHomeDirectory` if user's home directory could not be determined.
-fn get_default_mods_directory() -> Result<PathBuf> {
+fn get_default_mods_directory() -> Result<PathBuf, ConfigError> {
     std::env::home_dir()
-        .map(|home_path| home_path.join(".local/share/Steam/steamapps/common/Celeste/Mods"))
-        .ok_or(ConfigError::CouldNotDetermineHomeDirectory.into())
+        .map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
+        .ok_or(ConfigError::CouldNotDetermineHomeDirectory)
 }
