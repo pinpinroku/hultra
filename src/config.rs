@@ -1,9 +1,13 @@
-use std::path::{Path, PathBuf};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
 use thiserror::Error;
 
 use crate::{cli::Cli, constant::STEAM_MODS_DIRECTORY_PATH};
 
+/// Configuration errors.
 #[derive(Debug, Error)]
 pub enum ConfigError {
     /// Error indicating that user's home directory could not be determined.
@@ -24,12 +28,22 @@ pub struct Config {
 }
 
 impl Config {
+    /// Returns an instance of this type.
+    ///
+    /// If the directory field is `None`, it will fall back to the default.
+    ///
+    /// # Errors
+    ///
+    /// If the user's home directory could not be determined, an error is returned.
     pub fn new(cli: &Cli) -> Result<Self, ConfigError> {
+        let directory = cli
+            .mods_directory
+            .clone()
+            .or_else(get_default_mods_directory)
+            .ok_or(ConfigError::CouldNotDetermineHomeDirectory)?;
+
         Ok(Self {
-            directory: cli
-                .mods_directory
-                .clone()
-                .unwrap_or(get_default_mods_directory()?),
+            directory,
             mirror_preferences: cli.mirror_preferences.to_string(),
         })
     }
@@ -45,12 +59,9 @@ impl Config {
     }
 }
 
-/// Returns the default path to the mods directory.
+/// Returns the path to the mods directory.
 ///
-/// # Errors
-/// Returns `CouldNotDetermineHomeDirectory` if user's home directory could not be determined.
-fn get_default_mods_directory() -> Result<PathBuf, ConfigError> {
-    std::env::home_dir()
-        .map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
-        .ok_or(ConfigError::CouldNotDetermineHomeDirectory)
+/// If the user's home directory could not be determined, it returns None.
+fn get_default_mods_directory() -> Option<PathBuf> {
+    env::home_dir().map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
 }
