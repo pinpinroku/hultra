@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -7,7 +8,6 @@ use futures_util::StreamExt;
 use indicatif::ProgressBar;
 use reqwest::{Client, Response};
 use tempfile::NamedTempFile;
-use tokio::io::AsyncWriteExt;
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
@@ -134,15 +134,14 @@ async fn download_and_write(
     expected_hashes: &[String],
     pb: &ProgressBar,
 ) -> Result<(), Error> {
-    let temp_file = NamedTempFile::new()?;
+    let mut temp_file = NamedTempFile::new()?;
 
     let mut stream = response.bytes_stream();
     let mut hasher = Xxh64::new(0);
-    let mut file = tokio::fs::File::create(&temp_file).await?;
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
-        file.write_all(&chunk).await?;
+        temp_file.write_all(&chunk)?;
         hasher.update(&chunk);
         pb.inc(chunk.len() as u64);
     }
