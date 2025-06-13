@@ -41,7 +41,6 @@ pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 
 pub trait ModRegistryQuery {
     async fn fetch(client: &Client) -> Result<RemoteModRegistry>;
-    fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo>;
     fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String>;
 }
 
@@ -49,12 +48,6 @@ impl ModRegistryQuery for RemoteModRegistry {
     /// Fetches the Remote Mod Registry from the maddie480's server.
     async fn fetch(client: &Client) -> Result<Self> {
         fetch::fetch_remote_data::<Self>(MOD_REGISTRY_URL, client).await
-    }
-
-    /// Gets a mod registry entry that matches the given name.
-    fn get_mod_info_by_name(&self, name: &str) -> Option<&RemoteModInfo> {
-        debug!("Getting the mod information matching the name: {}", name);
-        self.get(name)
     }
 
     /// Gets a mod name that matches the given mod ID.
@@ -99,18 +92,6 @@ mod tests {
         assert!(mod_info.has_matching_hash("abcd1234"));
         assert!(mod_info.has_matching_hash("efgh5678"));
         assert!(!mod_info.has_matching_hash("notfound"));
-    }
-
-    #[test]
-    fn test_get_mod_info_by_name() {
-        let mod_registry = dummy_registry();
-
-        assert!(mod_registry.get_mod_info_by_name("SpeedrunTool").is_some());
-        assert!(
-            mod_registry
-                .get_mod_info_by_name("NonExistentMod")
-                .is_none()
-        );
     }
 
     #[test]

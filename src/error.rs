@@ -24,18 +24,6 @@ pub enum Error {
     #[error(transparent)]
     Request(#[from] reqwest::Error),
 
-    /// Represents a task join error, transparently wrapping `tokio::task::JoinError`
-    #[error(transparent)]
-    TaskJoin(#[from] tokio::task::JoinError),
-
-    /// Represents a semaphore acquier error, transparently wrapping `tokio::sync::AcquireError`
-    #[error(transparent)]
-    SemaphoreAcquire(#[from] tokio::sync::AcquireError),
-
-    /// Multiple update check failures
-    #[error("update check errors occurred: {0:?}")]
-    UpdateCheck(Vec<Error>),
-
     /// Error indicating that the mods directory is missing
     #[error(
         "no mods directory found.\
