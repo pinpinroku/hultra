@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    fs,
     io::Write,
     path::{Path, PathBuf},
 };
@@ -10,7 +11,7 @@ use reqwest::{Client, Response};
 use tempfile::NamedTempFile;
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{error::Error, fileutil::replace_home_dir_with_tilde};
+use crate::{error::Error, fileutil};
 
 pub mod install;
 pub mod update;
@@ -95,7 +96,7 @@ pub async fn download_mod(
     let install_destination = download_dir.join(&filename);
     tracing::debug!(
         "Install destination: {}",
-        replace_home_dir_with_tilde(&install_destination)
+        fileutil::replace_home_dir_with_tilde(&install_destination)
     );
 
     let msg = pb_style::truncate_msg(mod_name);
@@ -105,7 +106,7 @@ pub async fn download_mod(
         if response.status().is_success() {
             pb.set_message(msg.to_string());
             match download_and_write(response, &install_destination, expected_hashes, pb).await {
-                Ok(()) => {
+                Ok(_) => {
                     pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
                     return Ok(install_destination);
                 }
@@ -148,35 +149,32 @@ async fn download_and_write(
     let computed_hash = hasher.digest();
     let hash_str = format!("{:016x}", computed_hash);
 
-    tracing::info!("🔍 Verifying checksum...");
+    tracing::info!("Start checksum verification");
     tracing::debug!("computed hash: {:?}", hash_str,);
     tracing::debug!("expected hash: {:?}", expected_hashes);
 
     if expected_hashes.contains(&hash_str) {
-        tracing::info!("✅ Checksum verified!");
+        tracing::info!("Checksum verified");
 
-        // Remove old file if it exists
+        let debug_filename = fileutil::replace_home_dir_with_tilde(install_destination);
+
         if install_destination.exists() {
-            tracing::info!(
-                "🗑  The previous version has been deleted. {}",
-                replace_home_dir_with_tilde(install_destination)
+            tracing::debug!(
+                "'{}' is already exists. Trying to remove it",
+                debug_filename
             );
-            tokio::fs::remove_file(install_destination).await?;
+            fs::remove_file(install_destination)?;
+            tracing::info!("The previous version has been deleted");
         }
-
-        tracing::info!(
-            "Moving the file to the destination: {}",
-            replace_home_dir_with_tilde(install_destination)
-        );
 
         // NOTE: The permissions are set to 0600 because of copy operation.
         // This is a restriction in the linux system which uses tempfs as external mount point.
-        tokio::fs::copy(temp_file, install_destination).await?;
+        fs::copy(temp_file, install_destination)?;
+        tracing::info!("The file saved in '{}'", debug_filename);
 
         Ok(())
     } else {
-        tracing::error!("❌ Checksum verification failed!");
-        // NOTE: The temp file will be removed automatically
+        // NOTE: The temp file will be removed automatically when they goes out scope
         Err(Error::InvalidChecksum {
             file: install_destination.to_path_buf(),
             computed: hash_str,
