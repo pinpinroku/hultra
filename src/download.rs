@@ -2,7 +2,7 @@ use std::{
     borrow::Cow,
     fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use futures_util::StreamExt;
@@ -15,24 +15,6 @@ use crate::{error::Error, fileutil};
 
 pub mod install;
 pub mod update;
-
-/// Retrieves the file size of the file from the response header by sending a HEAD request to the target URL.
-async fn get_file_size(client: &Client, url: &str) -> anyhow::Result<u64> {
-    tracing::debug!("Get the file size from: {}", url);
-
-    let response = client.head(url).send().await?.error_for_status()?;
-    tracing::debug!("Status code: {:#?}", response.status());
-
-    let total_size = response
-        .headers()
-        .get(reqwest::header::CONTENT_LENGTH)
-        .and_then(|length_header| length_header.to_str().ok())
-        .and_then(|length_str| length_str.parse::<u64>().ok())
-        .unwrap_or(0);
-    tracing::debug!("Total size: {}", total_size);
-
-    Ok(total_size)
-}
 
 /// Returns sanitized mod name or "unnamed" if the given mod name is empty.
 fn sanitize(mod_name: &str) -> Cow<'_, str> {
@@ -86,7 +68,7 @@ pub async fn download_mod(
     expected_hashes: &[String],
     download_dir: &Path,
     pb: &ProgressBar,
-) -> anyhow::Result<PathBuf> {
+) -> anyhow::Result<()> {
     tracing::debug!("Original mod name: {}", mod_name);
     let sanitized_name = sanitize(mod_name);
 
@@ -108,7 +90,7 @@ pub async fn download_mod(
             match download_and_write(response, &install_destination, expected_hashes, pb).await {
                 Ok(_) => {
                     pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
-                    return Ok(install_destination);
+                    return Ok(());
                 }
                 Err(e) => {
                     tracing::error!("{}", e);

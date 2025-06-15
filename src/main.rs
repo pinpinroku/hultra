@@ -1,8 +1,9 @@
+use std::{sync::Arc, time::Duration};
+
 use anyhow::Result;
 use clap::Parser;
-use mod_registry::{ModRegistryQuery, RemoteModRegistry};
 use reqwest::Client;
-use std::time::Duration;
+use tokio::sync::Semaphore;
 
 mod cli;
 mod config;
@@ -18,6 +19,7 @@ mod mod_registry;
 use cli::{Cli, Commands};
 use config::Config;
 use download::{install, update};
+use mod_registry::{ModRegistryQuery, RemoteModRegistry};
 
 fn setup_logging(verbose: bool) {
     use tracing_subscriber::{
@@ -178,16 +180,24 @@ async fn run() -> Result<()> {
                 .unwrap_or_else(|_| reqwest::Client::new());
             let mod_registry = RemoteModRegistry::fetch(&client).await?;
             spinner.finish_and_clear();
+            drop(spinner);
 
-            let available_updates = update::check_updates(local_mods, mod_registry).await?;
+            let semaphore = Arc::new(Semaphore::new(64));
+            let registry = Arc::new(mod_registry);
+            let config = Arc::new(config);
+
+            let available_updates = update::check_updates(&local_mods, registry, semaphore).await?;
+
             if available_updates.is_empty() {
                 println!("All mods are up to date!");
             } else if args.install {
                 println!("\nInstalling updates...");
-                let client = Client::builder()
+
+                let install_client = Client::builder()
                     .connect_timeout(Duration::from_secs(5))
                     .build()?;
-                update::update_mods(&client, available_updates, &config).await?;
+
+                update::install_updates(&install_client, config, &available_updates).await?;
             } else {
                 println!("\nRun with --install to install these updates");
             }

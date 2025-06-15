@@ -63,7 +63,6 @@ pub struct LocalMod {
 
 pub trait Generatable {
     fn new(file_path: PathBuf, manifest: ModManifest) -> Self;
-    fn manifest(&self) -> &ModManifest;
     async fn checksum(&self) -> Result<&str, Error>;
 }
 
@@ -75,10 +74,6 @@ impl Generatable for LocalMod {
             manifest,
             checksum: OnceCell::new(),
         }
-    }
-
-    fn manifest(&self) -> &ModManifest {
-        &self.manifest
     }
 
     /// Compute checksum if not already computed, then cache it.

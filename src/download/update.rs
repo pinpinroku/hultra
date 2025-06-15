@@ -1,218 +1,146 @@
 use std::sync::Arc;
 
+use anyhow::Result;
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
 use tokio::sync::Semaphore;
-use tracing::{error, info};
 
 use crate::{
     config::Config,
     download,
-    error::Error,
     local::{Generatable, LocalMod},
-    mod_registry::{ModRegistryQuery, RemoteModRegistry},
+    mod_registry::{RemoteModInfo, RemoteModRegistry},
 };
 
-/// Update information about the mod
-#[derive(Debug, Clone)]
-pub struct AvailableUpdate {
-    /// The Mod name
-    name: String,
-    /// Download URL of the Mod
-    url: String,
-    /// xxHashes of the file
-    hashes: Vec<String>,
-}
-
-/// Checks for an available update for a mod.
-///
-/// This function compares the local mod's checksum with the checksum provided by the remote mod registry.
-/// If the checksums differ, it indicates that an update is available. If the remote registry does not contain information
-/// for the mod, or the checksums match, no update is reported.
-///
-/// # Arguments
-/// * `local_mod` - Information about the locally installed mod, including its current version and checksum.
-/// * `mod_registry` - An atomic reference counter of the mod registry that holds remote mod information.
-///
-/// # Returns
-/// * `Ok(Some(AvailableUpdate))` if an update is available, containing update details.
-/// * `Ok(None)` if no update is available (either because the mod is up-to-date or remote info is missing).
-/// * `Err(Error)` if there is an error computing the mod's checksum (originally the error caused by opening or reading file).
-async fn check_update(
-    local_mod: LocalMod,
-    mod_registry: Arc<RemoteModRegistry>,
-) -> Result<Option<AvailableUpdate>, Error> {
-    let manifest = local_mod.manifest();
-
-    // Look up remote mod info
-    let Some(remote_mod) = mod_registry.get_mod_info_by_name(&manifest.name) else {
-        tracing::debug!(
-            "No remote info for mod: {}, skipping update check",
-            manifest.name
-        );
-        return Ok(None);
-    };
-
-    // Compute checksum - only if needed
-    let computed_hash = local_mod.checksum().await?;
-
-    // Skip if hash matches (no update needed)
-    if remote_mod.has_matching_hash(computed_hash) {
-        return Ok(None);
-    }
-
-    println!(
-        "Update available for '{}': {} -> {}",
-        manifest.name, manifest.version, remote_mod.version
-    );
-
-    // Update is available
-    Ok(Some(AvailableUpdate {
-        name: manifest.name.to_string(),
-        url: remote_mod.download_url.clone(),
-        hashes: remote_mod.checksums.clone(),
-    }))
-}
-
-/// Check available updates for all installed mods.
-///
-/// # Arguments
-/// * `local_mods` - A list of information about local mods.
-/// * `mod_registry` - Registry containing remote mod information.
-///
-/// # Returns
-/// * `Ok(Vec<AvailableUpdateInfo>)` - List of available updates for mods.
-/// * `Err(Error)` - If there are issues fetching or computing update information.
 pub async fn check_updates(
-    local_mods: Vec<LocalMod>,
-    mod_registry: RemoteModRegistry,
-) -> Result<Vec<AvailableUpdate>, Error> {
-    let start = std::time::Instant::now();
-    tracing::info!("Starting update check for {} mods", local_mods.len());
+    local_mods: &[LocalMod],
+    mod_registry: Arc<RemoteModRegistry>,
+    semaphore: Arc<Semaphore>,
+) -> Result<Vec<(String, RemoteModInfo)>> {
+    let tasks: Vec<_> = local_mods
+        .iter()
+        .map(|local_mod| {
+            let registry = mod_registry.clone();
+            let local_mod = local_mod.clone();
+            let semaphore = semaphore.clone();
 
-    let mod_registry = Arc::new(mod_registry);
-    let semaphore = Arc::new(Semaphore::new(64)); // Optimal limits for modern linux system
+            tokio::spawn(async move {
+                let _permit = semaphore.acquire().await?;
 
-    let mut handles = Vec::with_capacity(local_mods.len());
-    for local_mod in local_mods {
-        let semaphore = Arc::clone(&semaphore);
-        let mod_registry = Arc::clone(&mod_registry);
-        let handle = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await?;
-            let result = check_update(local_mod, mod_registry).await?;
-            drop(_permit);
-            Ok(result)
-        });
-        handles.push(handle);
-    }
+                let name = &local_mod.manifest.name;
+                let Some((name, remote_mod)) = registry.get_key_value(name) else {
+                    return Ok(None); // Local-only mod, ignore.
+                };
 
-    let mut updates = Vec::with_capacity(handles.len());
+                let computed_hash = local_mod.checksum().await?;
+                if remote_mod.has_matching_hash(computed_hash) {
+                    Ok(None) // No update needed.
+                } else {
+                    println!(
+                        "Update available for '{}': {} -> {}",
+                        name, local_mod.manifest.version, remote_mod.version
+                    );
+                    Ok(Some((name.clone(), remote_mod.clone())))
+                }
+            })
+        })
+        .collect();
+
+    let mut updates = Vec::new();
     let mut errors = Vec::new();
 
-    for handle in handles {
-        match handle.await {
-            Ok(Ok(available_or_not)) => {
-                if let Some(available) = available_or_not {
-                    updates.push(available)
-                }
-            } // Task completed successfully
-            Ok(Err(err)) => errors.push(err), // Task returned an error
-            Err(err) => errors.push(Error::TaskJoin(err)), // Task panicked
+    for task in tasks {
+        match task.await {
+            Ok(Ok(Some(update))) => updates.push(update),
+            Ok(Ok(None)) => { /* No update needed */ }
+            Ok(Err(e)) => errors.push(e),
+            Err(e) => errors.push(anyhow::anyhow!(e)),
         }
     }
 
     if errors.is_empty() {
-        tracing::info!(
-            "Completed update check in {:?}. Found {} updates.",
-            start.elapsed(),
-            updates.len()
-        );
+        tracing::info!("Completed update check. Found {} updates.", updates.len());
     } else {
-        // Log all errors
         for (i, err) in errors.iter().enumerate() {
-            error!("Error {}: {}", i + 1, err);
+            tracing::error!("Error {}: {}", i + 1, err);
         }
-        // Return update check errors
-        return Err(Error::UpdateCheck(errors));
+        anyhow::bail!("Failed to check updates: {:?}", errors)
     }
 
     Ok(updates)
 }
 
-/// Updates all mods that can be updated concurrently.
-pub async fn update_mods(
+pub async fn install_updates(
     client: &Client,
-    available_updates: Vec<AvailableUpdate>,
-    config: &Config,
-) -> anyhow::Result<()> {
+    config: Arc<Config>,
+    available_updates: &[(String, RemoteModInfo)],
+) -> Result<()> {
+    const CONCURRENT_LIMIT: usize = 6;
+    let semaphore = Arc::new(Semaphore::new(CONCURRENT_LIMIT));
     let mp = MultiProgress::new();
-    let style = super::pb_style::new();
 
-    let semaphore = Arc::new(Semaphore::new(6));
-    let mut handles = Vec::new();
+    let mut handles = Vec::with_capacity(available_updates.len());
 
-    for available_update in available_updates {
-        let semaphore = Arc::clone(&semaphore);
+    for (name, remote_mod) in available_updates {
+        let name = name.to_owned();
+        let remote_mod = remote_mod.clone();
 
-        let client = client.clone();
+        let semaphore = semaphore.clone();
         let config = config.clone();
+        let client = client.clone();
+
         let mp = mp.clone();
-        let style = style.clone();
 
         let handle = tokio::spawn(async move {
             let _permit = semaphore.acquire().await?;
 
-            // HACK: We can use `remote_mod.file_size`, no need to fetch the value from the server.
-            let total_size = super::get_file_size(&client, &available_update.url).await?;
-            let pb = mp.add(ProgressBar::new(total_size));
-            pb.set_style(style);
+            let pb = mp.add(ProgressBar::new(remote_mod.file_size));
+            pb.set_style(super::pb_style::new());
 
-            let msg = super::pb_style::truncate_msg(&available_update.name);
+            let msg = super::pb_style::truncate_msg(&name);
             pb.set_message(msg.to_string());
 
             let mirror_urls = mirror_list::get_all_mirror_urls(
-                &available_update.url,
+                &remote_mod.download_url,
                 config.mirror_preferences(),
             );
 
             download::download_mod(
                 &client,
-                &available_update.name,
+                &name,
                 &mirror_urls,
-                &available_update.hashes,
+                &remote_mod.checksums,
                 config.directory(),
                 &pb,
             )
-            .await?;
-
-            drop(_permit);
-
-            Ok::<(), anyhow::Error>(())
+            .await
         });
-
         handles.push(handle);
     }
 
-    // Collects all errors instead of stopping at the first one.
-    let mut errors = Vec::new();
+    let mut errors = Vec::with_capacity(available_updates.len());
+
     for handle in handles {
         match handle.await {
-            Ok(Ok(())) => (),                    // Task completed successfully
-            Ok(Err(err)) => errors.push(err),    // Task returned an error
-            Err(err) => errors.push(err.into()), // Task panicked
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::error!("Failed to download the mod: {}", err);
+                errors.push(err);
+            }
+            Err(err) => {
+                tracing::error!("Failed to join tasks: {}", err);
+                errors.push(err.into());
+            }
         }
     }
 
-    // Actually handle the errors
     if errors.is_empty() {
-        info!("\nAll updates installed successfully!");
+        tracing::info!("Successfully download the mods")
     } else {
-        // Log all errors
-        for (i, err) in errors.iter().enumerate() {
-            error!("Error {}: {}", i + 1, err);
+        for (i, error) in errors.iter().enumerate() {
+            tracing::error!("Error {}: {}", i + 1, error)
         }
-        // Return multiple update errors
-        anyhow::bail!("{:?}", errors)
+        anyhow::bail!("Failed to download the mods: {:?}", errors)
     }
 
     Ok(())
