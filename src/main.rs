@@ -3,7 +3,6 @@ use std::{sync::Arc, time::Duration};
 use anyhow::Result;
 use clap::Parser;
 use reqwest::Client;
-use tokio::sync::Semaphore;
 
 mod cli;
 mod config;
@@ -182,11 +181,10 @@ async fn run() -> Result<()> {
             spinner.finish_and_clear();
             drop(spinner);
 
-            let semaphore = Arc::new(Semaphore::new(64));
             let registry = Arc::new(mod_registry);
             let config = Arc::new(config);
 
-            let available_updates = update::check_updates(&local_mods, registry, semaphore).await?;
+            let available_updates = update::check_updates(&local_mods, registry);
 
             if available_updates.is_empty() {
                 println!("All mods are up to date!");

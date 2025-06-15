@@ -12,62 +12,37 @@ use crate::{
     mod_registry::{RemoteModInfo, RemoteModRegistry},
 };
 
-pub async fn check_updates(
+pub fn check_updates(
     local_mods: &[LocalMod],
-    mod_registry: Arc<RemoteModRegistry>,
-    semaphore: Arc<Semaphore>,
-) -> Result<Vec<(String, RemoteModInfo)>> {
-    let tasks: Vec<_> = local_mods
-        .iter()
-        .map(|local_mod| {
-            let registry = mod_registry.clone();
-            let local_mod = local_mod.clone();
-            let semaphore = semaphore.clone();
+    remote_map: Arc<RemoteModRegistry>,
+) -> Vec<(String, RemoteModInfo)> {
+    use rayon::prelude::*;
 
-            tokio::spawn(async move {
-                let _permit = semaphore.acquire().await?;
+    local_mods
+        .par_iter()
+        .filter_map(|local_mod| {
+            let name = &local_mod.manifest.name;
+            let remote_mod = remote_map.get(name)?;
 
-                let name = &local_mod.manifest.name;
-                let Some((name, remote_mod)) = registry.get_key_value(name) else {
-                    return Ok(None); // Local-only mod, ignore.
-                };
-
-                let computed_hash = local_mod.checksum().await?;
-                if remote_mod.has_matching_hash(computed_hash) {
-                    Ok(None) // No update needed.
-                } else {
-                    println!(
-                        "Update available for '{}': {} -> {}",
-                        name, local_mod.manifest.version, remote_mod.version
-                    );
-                    Ok(Some((name.clone(), remote_mod.clone())))
+            let local_hash = match local_mod.checksum() {
+                Ok(hash) => hash,
+                Err(e) => {
+                    tracing::warn!("Failed to compute checksum for {}: {}", name, e);
+                    return None;
                 }
-            })
+            };
+
+            if remote_mod.has_matching_hash(local_hash) {
+                None
+            } else {
+                println!(
+                    "Update available for '{}': {} -> {}",
+                    name, local_mod.manifest.version, remote_mod.version
+                );
+                Some((name.clone(), remote_mod.clone()))
+            }
         })
-        .collect();
-
-    let mut updates = Vec::new();
-    let mut errors = Vec::new();
-
-    for task in tasks {
-        match task.await {
-            Ok(Ok(Some(update))) => updates.push(update),
-            Ok(Ok(None)) => { /* No update needed */ }
-            Ok(Err(e)) => errors.push(e),
-            Err(e) => errors.push(anyhow::anyhow!(e)),
-        }
-    }
-
-    if errors.is_empty() {
-        tracing::info!("Completed update check. Found {} updates.", updates.len());
-    } else {
-        for (i, err) in errors.iter().enumerate() {
-            tracing::error!("Error {}: {}", i + 1, err);
-        }
-        anyhow::bail!("Failed to check updates: {:?}", errors)
-    }
-
-    Ok(updates)
+        .collect()
 }
 
 pub async fn install_updates(

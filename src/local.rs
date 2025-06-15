@@ -1,15 +1,16 @@
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashSet, VecDeque},
     path::PathBuf,
     time::Instant,
 };
-use tokio::sync::OnceCell;
+
+use once_cell::sync::OnceCell;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::{
     error::Error,
-    fileutil::{self, hash_file, read_manifest_file_from_archive},
+    fileutil::{hash_file, read_manifest_file_from_archive},
 };
 
 /// Represents the `everest.yaml` manifest file that defines a mod.
@@ -63,7 +64,7 @@ pub struct LocalMod {
 
 pub trait Generatable {
     fn new(file_path: PathBuf, manifest: ModManifest) -> Self;
-    async fn checksum(&self) -> Result<&str, Error>;
+    fn checksum(&self) -> anyhow::Result<&str>;
 }
 
 impl Generatable for LocalMod {
@@ -81,17 +82,12 @@ impl Generatable for LocalMod {
     /// # Returns
     /// * `Ok(&str)` - Computed checksum as a string reference.
     /// * `Err(Error)` - If the file could not be read.
-    async fn checksum(&self) -> Result<&str, Error> {
+    fn checksum(&self) -> anyhow::Result<&str> {
         self.checksum
-            .get_or_try_init(async || {
-                tracing::debug!(
-                    "Computing checksum for {}",
-                    fileutil::replace_home_dir_with_tilde(&self.file_path)
-                );
-                let computed_hash = hash_file(&self.file_path).await?;
+            .get_or_try_init(|| {
+                let computed_hash = hash_file(&self.file_path)?;
                 Ok(computed_hash)
             })
-            .await
             .map(|hash| hash.as_str())
     }
 }

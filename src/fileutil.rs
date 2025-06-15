@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use anyhow::Context;
 use xxhash_rust::xxh64::Xxh64;
 use zip::{ZipArchive, result::ZipError};
 
@@ -128,18 +129,19 @@ pub fn read_manifest_file_from_archive(archive_path: &Path) -> Result<Vec<u8>, E
 /// # Returns
 /// * `Ok(String)` - The hexadecimal representation of the file hash.
 /// * `Err(Error)` - An error if the file could not be read.
-pub async fn hash_file(file_path: &Path) -> Result<String, Error> {
-    use tokio::{
-        fs::File,
-        io::{AsyncReadExt, BufReader},
-    };
+pub fn hash_file(file_path: &Path) -> anyhow::Result<String> {
+    let debug_filename = replace_home_dir_with_tilde(file_path);
+    tracing::debug!("Computing checksum for {}", debug_filename);
 
-    let file = File::open(file_path).await?;
+    let file = File::open(file_path)
+        .with_context(|| format!("failed to open the file '{}'", debug_filename))?;
     let mut reader = BufReader::new(file);
     let mut hasher = Xxh64::new(0);
     let mut buffer = [0u8; 64 * 1024]; // Read in 64 KB chunks
     loop {
-        let bytes_read = reader.read(&mut buffer).await?;
+        let bytes_read = reader
+            .read(&mut buffer)
+            .context("failed to read the buffer")?;
         if bytes_read == 0 {
             break;
         }
@@ -258,25 +260,24 @@ mod tests_fileutil {
         assert!(matches!(result.unwrap_err(), Error::MissingModsDirectory));
     }
 
-    #[tokio::test]
-    async fn test_hash_file_success() {
+    #[test]
+    fn test_hash_file_success() {
         let temp_file = NamedTempFile::new().unwrap();
         write!(temp_file.as_file(), "test data").unwrap();
 
-        let result = hash_file(temp_file.path()).await;
+        let result = hash_file(temp_file.path());
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 16); // Should return a valid 16-character hash
     }
 
-    #[tokio::test]
-    async fn test_hash_file_nonexistent() {
+    #[test]
+    fn test_hash_file_nonexistent() {
         let nonexistent_path = Path::new("nonexistent_file");
 
-        let result = hash_file(nonexistent_path).await;
+        let result = hash_file(nonexistent_path);
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::Io(_)));
     }
 
     #[test]
