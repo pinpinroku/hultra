@@ -147,8 +147,7 @@ async fn run() -> Result<()> {
                 }
             };
 
-            let local_mods = LocalMod::load_local_mods(&archive_paths);
-            let installed_mod_names = local::collect_installed_mod_names(local_mods)?;
+            let installed_mod_names = LocalMod::names(&archive_paths);
             if installed_mod_names.contains(mod_name) {
                 println!("You already have [{}] installed.", mod_name);
                 return Ok(());
@@ -171,7 +170,7 @@ async fn run() -> Result<()> {
             // Filter installed mods according to the `updaterblacklist.txt`
             let mut local_mods = LocalMod::load_local_mods(&archive_paths);
             if let Some(blacklist) = fileutil::read_updater_blacklist(mods_directory)? {
-                local::remove_blacklisted_mods(&mut local_mods, &blacklist);
+                local_mods.retain(|local_mod| !blacklist.contains(&local_mod.file_path));
             }
 
             // Update installed mods by checking for available updates in the mod registry.

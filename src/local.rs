@@ -3,15 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Context;
+use anyhow::{Context, Result};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use zip_search::ZipSearcher;
 
-use crate::{
-    error::Error,
-    fileutil::{hash_file, replace_home_dir_with_tilde},
-};
+use crate::fileutil::{hash_file, replace_home_dir_with_tilde};
 
 /// Represents the `everest.yaml` manifest file that defines a mod.
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
@@ -39,9 +36,10 @@ pub struct Dependency {
 
 impl ModManifest {
     /// Parses a YAML buffer to return a value of this type.
-    fn from_yaml(yaml_buffer: &[u8]) -> Result<Option<Self>, Error> {
+    fn from_yaml(yaml_buffer: &[u8]) -> Result<Option<Self>> {
         // NOTE: We always need first entry from this collection since that is the primal mod, so we use the `VecDeque<T>` here instead of the `Vec<T>`.
-        let mut manifest_entries = serde_yaml_ng::from_slice::<VecDeque<Self>>(yaml_buffer)?;
+        let mut manifest_entries = serde_yaml_ng::from_slice::<VecDeque<Self>>(yaml_buffer)
+            .context("Failed to parse mod manifest")?;
 
         // Attempt to retrieve the first entry without unnecessary cloning or element shifting.
         let entry = manifest_entries.pop_front();
@@ -61,9 +59,10 @@ pub struct LocalMod {
 }
 
 pub trait Generatable {
-    fn checksum(&self) -> anyhow::Result<&str>;
-    fn from_path(file_path: &Path) -> anyhow::Result<LocalMod>;
+    fn checksum(&self) -> Result<&str>;
+    fn from_path(file_path: &Path) -> Result<LocalMod>;
     fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<LocalMod>;
+    fn names(archive_paths: &[PathBuf]) -> HashSet<String>;
 }
 
 impl Generatable for LocalMod {
@@ -71,7 +70,7 @@ impl Generatable for LocalMod {
     ///
     /// # Errors
     /// Returns an error if the file cannot be read.
-    fn checksum(&self) -> anyhow::Result<&str> {
+    fn checksum(&self) -> Result<&str> {
         self.checksum
             .get_or_try_init(|| {
                 let computed_hash = hash_file(&self.file_path)?;
@@ -80,11 +79,11 @@ impl Generatable for LocalMod {
             .map(|hash| hash.as_str())
     }
 
-    /// Creates a `LocalMod` instance from the given file path.
+    /// Returns a value of this type from the given file path.
     ///
     /// # Errors
     /// Returns an error if the manifest file cannot be found or parsed.
-    fn from_path(file_path: &Path) -> anyhow::Result<Self> {
+    fn from_path(file_path: &Path) -> Result<Self> {
         const MANIFEST: &str = "everest.yaml";
 
         let debug_filename = replace_home_dir_with_tilde(file_path);
@@ -148,30 +147,15 @@ impl Generatable for LocalMod {
 
         local_mods
     }
-}
 
-/// Removes LocalMod whose file path matches any blacklisted path from the given vector.
-///
-/// If the given collection is empty, this function does nothing.
-///
-/// # Arguments
-/// * `local_mods` - A mutable reference of the vector which stored LocalMods
-/// * `blacklisted_paths` - A reference to the `HashSet` which stored **full path** of the blacklisted files
-pub fn remove_blacklisted_mods(
-    local_mods: &mut Vec<LocalMod>,
-    blacklisted_paths: &HashSet<PathBuf>,
-) {
-    local_mods.retain(|local_mod| !blacklisted_paths.contains(&local_mod.file_path))
-}
-
-/// Collects and returns mod names which are already installed locally.
-pub fn collect_installed_mod_names(local_mods: Vec<LocalMod>) -> Result<HashSet<String>, Error> {
-    let installed_mod_names: HashSet<_> = local_mods
-        .into_iter()
-        .map(|installed| installed.manifest.name)
-        .collect();
-    tracing::debug!("Installed mod names: {:?}", installed_mod_names);
-    Ok(installed_mod_names)
+    /// Returns a set of unique mod names from the provided archive paths.
+    fn names(archive_paths: &[PathBuf]) -> HashSet<String> {
+        let local_mods = Self::load_local_mods(archive_paths);
+        local_mods
+            .into_iter()
+            .map(|installed| installed.manifest.name)
+            .collect()
+    }
 }
 
 #[cfg(test)]

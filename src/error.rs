@@ -10,10 +10,6 @@ pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
 
-    /// Represents a YAML parsing error, transparently wrapping `serde_yaml_ng::Error`
-    #[error(transparent)]
-    Yaml(#[from] serde_yaml_ng::Error),
-
     /// Represents a network request error, transparently wrapping `reqwest::Error`
     #[error(transparent)]
     Request(#[from] reqwest::Error),
