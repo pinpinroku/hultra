@@ -19,6 +19,8 @@ use config::Config;
 use dependency::ModDependencyQuery;
 use mod_registry::{ModRegistryQuery, RemoteModRegistry};
 
+use crate::local::{Generatable, LocalMod};
+
 fn setup_logging(verbose: bool) {
     use tracing_subscriber::{
         Layer, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt,
@@ -69,7 +71,7 @@ async fn run() -> Result<()> {
     );
 
     // Gathering mod paths
-    let archive_paths = fileutil::find_installed_mod_archives(mods_directory)?;
+    let archive_paths = config.find_installed_mod_archives()?;
 
     match &cli.command {
         // Show mod name and file name of installed mods.
@@ -79,7 +81,7 @@ async fn run() -> Result<()> {
                 return Ok(());
             }
 
-            let local_mods = local::load_local_mods(&archive_paths)?;
+            let local_mods = LocalMod::load_local_mods(&archive_paths);
 
             local_mods.iter().for_each(|local_mod| {
                 if let Some(os_str) = local_mod.file_path.file_name() {
@@ -98,7 +100,7 @@ async fn run() -> Result<()> {
         Commands::Show(args) => {
             tracing::info!("Checking installed mod information...");
 
-            let local_mods = local::load_local_mods(&archive_paths)?;
+            let local_mods = LocalMod::load_local_mods(&archive_paths);
 
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
                 println!(
@@ -145,7 +147,7 @@ async fn run() -> Result<()> {
                 }
             };
 
-            let local_mods = local::load_local_mods(&archive_paths)?;
+            let local_mods = LocalMod::load_local_mods(&archive_paths);
             let installed_mod_names = local::collect_installed_mod_names(local_mods)?;
             if installed_mod_names.contains(mod_name) {
                 println!("You already have [{}] installed.", mod_name);
@@ -167,7 +169,7 @@ async fn run() -> Result<()> {
 
         Commands::Update(args) => {
             // Filter installed mods according to the `updaterblacklist.txt`
-            let mut local_mods = local::load_local_mods(&archive_paths)?;
+            let mut local_mods = LocalMod::load_local_mods(&archive_paths);
             if let Some(blacklist) = fileutil::read_updater_blacklist(mods_directory)? {
                 local::remove_blacklisted_mods(&mut local_mods, &blacklist);
             }
