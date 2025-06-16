@@ -1,8 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::Result;
 use clap::Parser;
-use reqwest::Client;
 
 mod cli;
 mod config;
@@ -158,7 +157,7 @@ async fn run() -> Result<()> {
                 &mod_registry,
                 &dependency_graph,
                 &installed_mod_names,
-                &config,
+                config,
             )
             .await?;
         }
@@ -182,7 +181,6 @@ async fn run() -> Result<()> {
             drop(spinner);
 
             let registry = Arc::new(mod_registry);
-            let config = Arc::new(config);
 
             let available_updates = update::check_updates(&local_mods, registry);
 
@@ -190,12 +188,7 @@ async fn run() -> Result<()> {
                 println!("All mods are up to date!");
             } else if args.install {
                 println!("\nInstalling updates...");
-
-                let install_client = Client::builder()
-                    .connect_timeout(Duration::from_secs(5))
-                    .build()?;
-
-                update::install_updates(&install_client, config, &available_updates).await?;
+                update::install_updates(config, &available_updates).await?;
             } else {
                 println!("\nRun with --install to install these updates");
             }

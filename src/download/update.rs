@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use indicatif::{MultiProgress, ProgressBar};
@@ -47,11 +47,10 @@ pub fn check_updates(
 }
 
 /// Installs updates for the mods that have available updates.
-/// 
+///
 /// # Errors
 /// Returns an error if any of the downloads fail or if there are issues with the tasks.
 pub async fn install_updates(
-    client: &Client,
     config: Arc<Config>,
     available_updates: &[(String, RemoteModInfo)],
 ) -> Result<()> {
@@ -59,11 +58,15 @@ pub async fn install_updates(
     let semaphore = Arc::new(Semaphore::new(CONCURRENT_LIMIT));
     let mp = MultiProgress::new();
 
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()?;
+
     let mut handles = Vec::with_capacity(available_updates.len());
 
     for (name, remote_mod) in available_updates {
         let name = name.to_owned();
-        let remote_mod = remote_mod.clone();
+        let remote_mod = remote_mod.to_owned();
 
         let semaphore = semaphore.clone();
         let config = config.clone();

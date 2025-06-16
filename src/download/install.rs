@@ -1,8 +1,8 @@
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
-use futures_util::{StreamExt, stream};
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Url};
+use tokio::sync::Semaphore;
 
 use crate::{
     config::Config,
@@ -11,6 +11,104 @@ use crate::{
     error::Error,
     mod_registry::RemoteModRegistry,
 };
+
+/// Downloads all mods with dependencies if any of them are missing.
+///
+/// # Errors
+/// Returns an error if any of the downloads fail or if there are issues with the tasks.
+pub async fn install_mod(
+    mod_name: &str,
+    mod_registry: &RemoteModRegistry,
+    dependency_graph: &DependencyGraph,
+    installed_mod_names: &HashSet<String>,
+    config: Arc<Config>,
+) -> anyhow::Result<()> {
+    const CONCURRENT_LIMIT: usize = 6;
+    let semaphore = Arc::new(Semaphore::new(CONCURRENT_LIMIT));
+
+    // Collects required dependencies for the mod including the mod itself
+    let dependencies = dependency_graph.collect_all_dependencies_bfs(mod_name);
+
+    // Filters out missing dependencies
+    let missing_deps = dependencies
+        .difference(installed_mod_names)
+        .collect::<Vec<_>>();
+    tracing::debug!("Missing dependencies are found: {:?}", missing_deps);
+
+    tracing::info!("Start installing the new mod [{}]", mod_name);
+    let client = Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .build()?;
+    let mp = MultiProgress::new();
+
+    let mut handles = Vec::with_capacity(missing_deps.len());
+
+    for name in missing_deps {
+        if let Some(remote_mod) = mod_registry.get(name) {
+            let name = name.to_owned();
+            let remote_mod = remote_mod.to_owned();
+
+            let semaphore = semaphore.clone();
+            let client = client.clone();
+            let config = config.clone();
+
+            let mp = mp.clone();
+
+            let handle = tokio::spawn(async move {
+                let _permit = semaphore.acquire().await?;
+
+                let pb = mp.add(ProgressBar::new(remote_mod.file_size));
+                pb.set_style(super::pb_style::new());
+
+                let msg = super::pb_style::truncate_msg(&name);
+                pb.set_message(msg.to_string());
+
+                let mirror_urls = mirror_list::get_all_mirror_urls(
+                    &remote_mod.download_url,
+                    config.mirror_preferences(),
+                );
+
+                download::download_mod(
+                    &client,
+                    &name,
+                    &mirror_urls,
+                    &remote_mod.checksums,
+                    config.directory(),
+                    &pb,
+                )
+                .await
+            });
+            handles.push(handle)
+        };
+    }
+
+    let mut errors = Vec::with_capacity(handles.len());
+
+    for handle in handles {
+        match handle.await {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => {
+                tracing::error!("Failed to download the mod: {}", err);
+                errors.push(err);
+            }
+            Err(err) => {
+                tracing::error!("Failed to join tasks: {}", err);
+                errors.push(err.into());
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        tracing::info!("Successfully download the mods")
+    } else {
+        for (i, error) in errors.iter().enumerate() {
+            tracing::error!("Error {}: {}", i + 1, error)
+        }
+        anyhow::bail!("Failed to download the mods: {:?}", errors)
+    }
+
+    Ok(())
+}
 
 /// Parses the given url string, converts it to the mod ID.
 pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, Error> {
@@ -43,80 +141,6 @@ pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, Error> {
         }
         _ => Err(Error::InvalidGameBananaUrl(page_url.clone())),
     }
-}
-
-/// Newly implemented install function to download all mods including dependencies at once.
-pub async fn install_mod(
-    mod_name: &str,
-    mod_registry: &RemoteModRegistry,
-    dependency_graph: &DependencyGraph,
-    installed_mod_names: &HashSet<String>,
-    config: &Config,
-) -> anyhow::Result<()> {
-    // Collects required dependencies for the mod including the mod itself
-    let dependencies = dependency_graph.collect_all_dependencies_bfs(mod_name);
-
-    // Filters out missing dependencies
-    let missing_deps = dependencies
-        .difference(installed_mod_names)
-        .collect::<Vec<_>>();
-    tracing::debug!("Missing dependencies are found: {:?}", missing_deps);
-
-    tracing::info!("Start installing the new mod [{}]", mod_name);
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .build()?;
-    let mp = MultiProgress::new();
-    let style = super::pb_style::new();
-
-    // Collects metadata of the mods for the downloads
-    let tasks = missing_deps
-        .iter()
-        .filter_map(|k| mod_registry.get(*k).map(|v| (*k, v)))
-        .map(|(name, info)| {
-            let client = client.clone();
-            let mp = mp.clone();
-            let style = style.clone();
-
-            let mirror_urls =
-                mirror_list::get_all_mirror_urls(&info.download_url, config.mirror_preferences());
-
-            async move {
-                let pb = mp.add(ProgressBar::new(info.file_size));
-                pb.set_style(style);
-
-                if let Err(e) = download::download_mod(
-                    &client,
-                    name,
-                    &mirror_urls,
-                    &info.checksums,
-                    config.directory(),
-                    &pb,
-                )
-                .await
-                {
-                    Err((name.to_string(), e))
-                } else {
-                    Ok(())
-                }
-            }
-        });
-
-    let results = stream::iter(tasks)
-        .buffer_unordered(6)
-        .collect::<Vec<_>>()
-        .await;
-    let errors: Vec<_> = results.into_iter().filter_map(|r| r.err()).collect();
-
-    if !errors.is_empty() {
-        eprintln!("\nSome mods failed to install:");
-        for (name, err) in errors {
-            eprintln!("- {}: {}", name, err);
-        }
-        anyhow::bail!("Some mods failed to download.");
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

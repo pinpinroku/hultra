@@ -1,6 +1,7 @@
 use std::{
     env,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use thiserror::Error;
@@ -35,17 +36,17 @@ impl Config {
     /// # Errors
     ///
     /// If the user's home directory could not be determined, an error is returned.
-    pub fn new(cli: &Cli) -> Result<Self, ConfigError> {
+    pub fn new(cli: &Cli) -> Result<Arc<Self>, ConfigError> {
         let directory = cli
             .mods_directory
             .clone()
             .or_else(get_default_mods_directory)
             .ok_or(ConfigError::CouldNotDetermineHomeDirectory)?;
 
-        Ok(Self {
+        Ok(Arc::new(Self {
             directory,
             mirror_preferences: cli.mirror_preferences.to_string(),
-        })
+        }))
     }
 
     /// Path to the mods directory
