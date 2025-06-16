@@ -1,50 +1,5 @@
 use std::borrow::Cow;
 
-use reqwest::Url;
-
-use crate::error::ModPageUrlParseError;
-
-/// Parses the given url string, converts it to the mod ID.
-///
-/// # Errors
-/// Returns an error if the URL is invalid, has an unsupported scheme,
-/// or does not match the expected GameBanana mod page format.
-pub fn parse_mod_page_url(page_url_str: &str) -> Result<u32, ModPageUrlParseError> {
-    let page_url = Url::parse(page_url_str)
-        .map_err(|_| ModPageUrlParseError::InvalidUrl(page_url_str.to_owned()))?;
-
-    // Check scheme
-    match page_url.scheme() {
-        "http" | "https" => {}
-        _ => {
-            return Err(ModPageUrlParseError::UnsupportedScheme(
-                page_url_str.to_owned(),
-            ));
-        }
-    }
-
-    // Check host
-    if page_url.host_str() != Some("gamebanana.com") {
-        return Err(ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone()));
-    }
-
-    // Check path segments
-    let mut segments = page_url
-        .path_segments()
-        .ok_or_else(|| ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone()))?;
-
-    // Expected path: /mods/12345
-    match (segments.next(), segments.next()) {
-        (Some("mods"), Some(id_str)) => {
-            let id = id_str
-                .parse::<u32>()
-                .map_err(|_| ModPageUrlParseError::InvalidModId(id_str.to_owned()))?;
-            Ok(id)
-        }
-        _ => Err(ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone())),
-    }
-}
-
 /// Returns sanitized mod name or "unnamed" if the given mod name is empty.
 ///
 /// This function replaces any invalid characters with underscores, trims whitespace,
@@ -89,41 +44,6 @@ pub fn sanitize(mod_name: &str) -> Cow<'_, str> {
         Cow::Borrowed(mod_name)
     } else {
         Cow::Owned(result)
-    }
-}
-
-#[cfg(test)]
-mod tests_page_url {
-    use super::*;
-
-    #[test]
-    fn test_valid_url() {
-        let url = "https://gamebanana.com/mods/12345";
-        assert_eq!(parse_mod_page_url(url).unwrap(), 12345);
-    }
-
-    #[test]
-    fn test_invalid_scheme() {
-        let url = "ftp://gamebanana.com/mods/12345";
-        assert!(parse_mod_page_url(url).is_err());
-    }
-
-    #[test]
-    fn test_invalid_host() {
-        let url = "https://example.com/mods/12345";
-        assert!(parse_mod_page_url(url).is_err());
-    }
-
-    #[test]
-    fn test_missing_id() {
-        let url = "https://gamebanana.com/mods/";
-        assert!(parse_mod_page_url(url).is_err());
-    }
-
-    #[test]
-    fn test_non_numeric_id() {
-        let url = "https://gamebanana.com/mods/abc";
-        assert!(parse_mod_page_url(url).is_err());
     }
 }
 

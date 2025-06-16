@@ -16,7 +16,7 @@ mod mod_registry;
 
 use cli::{Cli, Commands};
 use config::Config;
-use download::{install, update, util};
+use dependency::ModDependencyQuery;
 use mod_registry::{ModRegistryQuery, RemoteModRegistry};
 
 fn setup_logging(verbose: bool) {
@@ -132,7 +132,7 @@ async fn run() -> Result<()> {
 
         // Install a mod by fetching its information from the mod registry.
         Commands::Install(args) => {
-            let mod_id = util::parse_mod_page_url(&args.mod_page_url)?;
+            let mod_id = args.parse_mod_page_url()?;
             // Fetching online database
             let (mod_registry, dependency_graph) = fetch::fetch_online_database().await?;
 
@@ -152,12 +152,8 @@ async fn run() -> Result<()> {
                 return Ok(());
             }
 
-            let downloadable_mods = install::check_dependencies(
-                mod_name,
-                &mod_registry,
-                &dependency_graph,
-                &installed_mod_names,
-            );
+            let downloadable_mods =
+                dependency_graph.check_dependencies(mod_name, &mod_registry, &installed_mod_names);
             if downloadable_mods.is_empty() {
                 println!(
                     "All dependencies for mod [{}] are already installed",
@@ -189,7 +185,7 @@ async fn run() -> Result<()> {
 
             let registry = Arc::new(mod_registry);
 
-            let available_updates = update::check_updates(&local_mods, registry);
+            let available_updates = registry.check_updates(&local_mods);
 
             if available_updates.is_empty() {
                 println!("All mods are up to date!");

@@ -4,7 +4,12 @@ use anyhow::Result;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-use crate::{constant::MOD_DEPENDENCY_GRAPH, fetch, local::Dependency};
+use crate::{
+    constant::MOD_DEPENDENCY_GRAPH,
+    fetch,
+    local::Dependency,
+    mod_registry::{RemoteModInfo, RemoteModRegistry},
+};
 
 /// Each entry of the `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
@@ -20,10 +25,17 @@ pub struct ModDependency {
 /// Represents `mod_dependency_graph.yaml` which is the dependency graph.
 pub type DependencyGraph = HashMap<String, ModDependency>;
 
+/// A trait for querying mod dependencies.
 pub trait ModDependencyQuery {
     async fn fetch(client: &Client) -> Result<DependencyGraph>;
     fn get_mod_info_by_name(&self, name: &str) -> Option<&ModDependency>;
     fn collect_all_dependencies_bfs(&self, mod_name: &str) -> HashSet<String>;
+    fn check_dependencies(
+        &self,
+        mod_name: &str,
+        mod_registry: &RemoteModRegistry,
+        installed_mod_names: &HashSet<String>,
+    ) -> Vec<(String, RemoteModInfo)>;
 }
 
 impl ModDependencyQuery for DependencyGraph {
@@ -67,6 +79,43 @@ impl ModDependencyQuery for DependencyGraph {
         }
 
         visited
+    }
+
+    /// Checks for missing dependencies of a mod.
+    ///
+    /// Returns a vector of tuples containing the missing dependency name and its remote information.
+    fn check_dependencies(
+        &self,
+        mod_name: &str,
+        mod_registry: &RemoteModRegistry,
+        installed_mod_names: &HashSet<String>,
+    ) -> Vec<(String, RemoteModInfo)> {
+        // Collects required dependencies for the mod including the mod itself
+        let dependencies = self.collect_all_dependencies_bfs(mod_name);
+
+        // Filters out missing dependencies
+        let missing_deps = dependencies
+            .difference(installed_mod_names)
+            .collect::<Vec<_>>();
+        tracing::debug!("Missing dependencies are found: {:?}", missing_deps);
+
+        missing_deps
+            .iter()
+            .filter_map(|name| {
+                let name = (*name).clone();
+                if let Some(remote_mod) = mod_registry.get(&name) {
+                    tracing::info!(
+                        "Dependency [{}] is available: {}",
+                        name,
+                        remote_mod.download_url
+                    );
+                    Some((name, remote_mod.to_owned()))
+                } else {
+                    tracing::warn!("Dependency [{}] is not available in the registry", name);
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
     }
 }
 
@@ -137,5 +186,20 @@ mod tests_dependency {
         let info = graph.get_mod_info_by_name("A");
         assert!(info.is_some());
         assert!(graph.get_mod_info_by_name("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_check_dependencies() {
+        let graph = sample_graph();
+        let mut mod_registry = RemoteModRegistry::new(); // Assume this is properly initialized
+        for name in ["A", "B", "C", "D"] {
+            mod_registry.insert(name.to_string(), RemoteModInfo::default());
+        }
+        let installed_mods: HashSet<String> = ["A", "B"].iter().map(|s| s.to_string()).collect();
+
+        let missing_deps = graph.check_dependencies("A", &mod_registry, &installed_mods);
+        assert_eq!(missing_deps.len(), 2); // C and D should be missing
+        assert!(missing_deps.iter().any(|(name, _)| name == "C"));
+        assert!(missing_deps.iter().any(|(name, _)| name == "D"));
     }
 }

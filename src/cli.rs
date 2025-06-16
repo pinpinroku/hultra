@@ -1,6 +1,9 @@
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand};
+use reqwest::Url;
+
+use crate::error::ModPageUrlParseError;
 
 /// The main CLI structure for the Everest Mod CLI application
 #[derive(Debug, Parser)]
@@ -61,6 +64,50 @@ pub struct InstallArgs {
     pub mod_page_url: String,
 }
 
+impl InstallArgs {
+    /// Parses the given url string, converts it to the mod ID.
+    ///
+    /// # Errors
+    /// Returns an error if the URL is invalid, has an unsupported scheme,
+    /// or does not match the expected GameBanana mod page format.
+    pub fn parse_mod_page_url(&self) -> Result<u32, ModPageUrlParseError> {
+        let page_url_str = &self.mod_page_url;
+        let page_url = Url::parse(page_url_str)
+            .map_err(|_| ModPageUrlParseError::InvalidUrl(page_url_str.to_owned()))?;
+
+        // Check scheme
+        match page_url.scheme() {
+            "http" | "https" => {}
+            _ => {
+                return Err(ModPageUrlParseError::UnsupportedScheme(
+                    page_url_str.to_owned(),
+                ));
+            }
+        }
+
+        // Check host
+        if page_url.host_str() != Some("gamebanana.com") {
+            return Err(ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone()));
+        }
+
+        // Check path segments
+        let mut segments = page_url
+            .path_segments()
+            .ok_or_else(|| ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone()))?;
+
+        // Expected path: /mods/12345
+        match (segments.next(), segments.next()) {
+            (Some("mods"), Some(id_str)) => {
+                let id = id_str
+                    .parse::<u32>()
+                    .map_err(|_| ModPageUrlParseError::InvalidModId(id_str.to_owned()))?;
+                Ok(id)
+            }
+            _ => Err(ModPageUrlParseError::InvalidGameBananaUrl(page_url.clone())),
+        }
+    }
+}
+
 /// Arguments for the `show` subcommand
 #[derive(Debug, Args)]
 pub struct ShowArgs {
@@ -74,4 +121,49 @@ pub struct UpdateArgs {
     /// Install available updates
     #[arg(long, action)]
     pub install: bool,
+}
+
+#[cfg(test)]
+mod tests_page_url {
+    use super::*;
+
+    #[test]
+    fn test_valid_url() {
+        let args = InstallArgs {
+            mod_page_url: "https://gamebanana.com/mods/12345".to_string(),
+        };
+        assert_eq!(args.parse_mod_page_url().unwrap(), 12345);
+    }
+
+    #[test]
+    fn test_invalid_scheme() {
+        let args = InstallArgs {
+            mod_page_url: "ftp://gamebanana.com/mods/12345".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
+
+    #[test]
+    fn test_invalid_host() {
+        let args = InstallArgs {
+            mod_page_url: "https://example.com/mods/12345".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
+
+    #[test]
+    fn test_missing_id() {
+        let args = InstallArgs {
+            mod_page_url: "https://gamebanana.com/mods/".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
+
+    #[test]
+    fn test_non_numeric_id() {
+        let args = InstallArgs {
+            mod_page_url: "https://gamebanana.com/mods/abc".to_string(),
+        };
+        assert!(args.parse_mod_page_url().is_err());
+    }
 }

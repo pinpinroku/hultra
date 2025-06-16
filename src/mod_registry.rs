@@ -1,11 +1,15 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
 use reqwest::Client;
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::{constant::MOD_REGISTRY_URL, fetch};
+use crate::{
+    constant::MOD_REGISTRY_URL,
+    fetch,
+    local::{Generatable, LocalMod},
+};
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -42,6 +46,7 @@ pub type RemoteModRegistry = HashMap<String, RemoteModInfo>;
 pub trait ModRegistryQuery {
     async fn fetch(client: &Client) -> Result<RemoteModRegistry>;
     fn get_mod_name_by_id(&self, mod_id: u32) -> Option<&String>;
+    fn check_updates(self: Arc<Self>, local_mods: &[LocalMod]) -> Vec<(String, RemoteModInfo)>;
 }
 
 impl ModRegistryQuery for RemoteModRegistry {
@@ -59,6 +64,39 @@ impl ModRegistryQuery for RemoteModRegistry {
         self.iter()
             .find(|(_, manifest)| manifest.gamebanana_id == mod_id)
             .map(|(mod_name, _)| mod_name)
+    }
+
+    /// Checks for updates of local mods.
+    ///
+    /// Returns a vector of tuples containing the mod name and its updated remote information.
+    fn check_updates(self: Arc<Self>, local_mods: &[LocalMod]) -> Vec<(String, RemoteModInfo)> {
+        use rayon::prelude::*;
+
+        local_mods
+            .par_iter()
+            .filter_map(|local_mod| {
+                let name = &local_mod.manifest.name;
+                let remote_mod = self.get(name)?;
+
+                let local_hash = match local_mod.checksum() {
+                    Ok(hash) => hash,
+                    Err(e) => {
+                        tracing::warn!("Failed to compute checksum for {}: {}", name, e);
+                        return None;
+                    }
+                };
+
+                if remote_mod.has_matching_hash(local_hash) {
+                    None
+                } else {
+                    println!(
+                        "Update available for '{}': {} -> {}",
+                        name, local_mod.manifest.version, remote_mod.version
+                    );
+                    Some((name.clone(), remote_mod.clone()))
+                }
+            })
+            .collect()
     }
 }
 

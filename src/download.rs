@@ -9,12 +9,10 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{config::Config, download, error::Error, fileutil, mod_registry::RemoteModInfo};
 
-pub mod install;
-pub mod update;
-pub mod util;
+mod util;
 
 /// Downloads a mod file, returns the file path.
-pub async fn download_mod(
+async fn download_mod(
     client: &Client,
     mod_name: &str,
     mirror_urls: &[Cow<'_, str>],
@@ -23,7 +21,7 @@ pub async fn download_mod(
     pb: &ProgressBar,
 ) -> anyhow::Result<()> {
     tracing::debug!("Original mod name: {}", mod_name);
-    let sanitized_name = super::util::sanitize(mod_name);
+    let sanitized_name = util::sanitize(mod_name);
 
     tracing::debug!("Sanitized name: {}", sanitized_name);
     let filename = format!("{}.zip", &sanitized_name);
