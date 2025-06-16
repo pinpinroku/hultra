@@ -146,20 +146,23 @@ fn get_default_mods_directory() -> Option<PathBuf> {
 mod tests {
     use super::*;
     use std::io::Write;
+    use tempfile::{TempDir, tempdir};
 
-    use tempfile::tempdir;
-
-    #[test]
-    fn test_find_installed_mod_archives_success() {
+    /// Helper to create a Config with a temp mods directory.
+    fn config_with_temp_dir() -> (Config, TempDir) {
         let temp_dir = tempdir().unwrap();
-        let file_path = temp_dir.path().join("test.zip");
-        fs::File::create(&file_path).unwrap();
-
-        // Create a Config instance with the temp_dir as the mods directory
         let config = Config {
             directory: temp_dir.path().to_path_buf(),
             mirror_preferences: String::new(),
         };
+        (config, temp_dir)
+    }
+
+    #[test]
+    fn test_find_installed_mod_archives_success() {
+        let (config, temp_dir) = config_with_temp_dir();
+        let file_path = temp_dir.path().join("test.zip");
+        fs::File::create(&file_path).unwrap();
 
         let result = config.find_installed_mod_archives();
 
@@ -172,30 +175,24 @@ mod tests {
     #[test]
     fn test_find_installed_mod_archives_missing_directory() {
         let nonexistent_path = Path::new("nonexistent_directory");
-
         let config = Config {
             directory: nonexistent_path.to_path_buf(),
             mirror_preferences: String::new(),
         };
 
         let result = config.find_installed_mod_archives();
-
         assert!(result.is_err());
     }
 
     #[test]
     fn test_read_updater_blacklist_success() {
-        let temp_dir = tempdir().unwrap();
+        let (config, temp_dir) = config_with_temp_dir();
         let blacklist_file = temp_dir.path().join(UPDATER_BLACKLIST_FILE);
 
         let mut file = File::create(&blacklist_file).unwrap();
         writeln!(file, "blacklisted_mod_1.zip").unwrap();
         writeln!(file, "blacklisted_mod_2.zip").unwrap();
 
-        let config = Config {
-            directory: temp_dir.path().to_path_buf(),
-            mirror_preferences: String::new(),
-        };
         let result = config.read_updater_blacklist();
         assert!(result.is_ok());
 
@@ -209,11 +206,7 @@ mod tests {
 
     #[test]
     fn test_read_updater_blacklist_missing() {
-        let temp_dir = tempdir().unwrap();
-        let config = Config {
-            directory: temp_dir.path().to_path_buf(),
-            mirror_preferences: String::new(),
-        };
+        let (config, _) = config_with_temp_dir();
         let result = config.read_updater_blacklist();
         assert!(result.is_ok());
 
