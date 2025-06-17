@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use crate::{
     cli::Cli,
     constant::{STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE},
-    fileutil::replace_home_dir_with_tilde,
+    fileutil,
 };
 
 /// Config to manage mods.
@@ -62,7 +62,7 @@ impl Config {
     /// # Errors
     /// If the mods directory does not exist or cannot be read, an error is returned.
     pub fn find_installed_mod_archives(&self) -> Result<Vec<PathBuf>> {
-        let debug_filename = replace_home_dir_with_tilde(&self.directory);
+        let debug_filename = fileutil::replace_home_dir_with_tilde(&self.directory);
         if !self.directory.exists() {
             anyhow::bail!("The mods directory does not exist: {}", debug_filename);
         }

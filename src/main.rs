@@ -14,12 +14,13 @@ mod fileutil;
 mod local;
 mod mod_registry;
 
-use cli::{Cli, Commands};
-use config::Config;
-use dependency::ModDependencyQuery;
-use mod_registry::{ModRegistryQuery, RemoteModRegistry};
-
-use crate::local::{Generatable, LocalMod};
+use crate::{
+    cli::{Cli, Commands},
+    config::Config,
+    dependency::ModDependencyQuery,
+    local::LocalMod,
+    mod_registry::{ModRegistryQuery, RemoteModRegistry},
+};
 
 fn setup_logging(verbose: bool) {
     use tracing_subscriber::{

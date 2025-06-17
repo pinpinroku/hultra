@@ -5,11 +5,7 @@ use reqwest::Client;
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::{
-    constant::MOD_REGISTRY_URL,
-    fetch,
-    local::{Generatable, LocalMod},
-};
+use crate::{constant::MOD_REGISTRY_URL, fetch, local::LocalMod};
 
 /// Each entry in `everest_update.yaml` containing information about a mod.
 #[derive(Debug, Deserialize, Clone, Default)]
