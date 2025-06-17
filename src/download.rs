@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fs, io::Write, path::Path, sync::Arc, time::Duration};
 
+use anyhow::Result;
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::{Client, Response};
@@ -7,7 +8,7 @@ use tempfile::NamedTempFile;
 use tokio::sync::Semaphore;
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{config::Config, download, error::Error, fileutil, mod_registry::RemoteModInfo};
+use crate::{config::Config, download, fileutil, mod_registry::RemoteModInfo};
 
 mod util;
 
@@ -19,7 +20,7 @@ async fn download_mod(
     expected_hashes: &[String],
     download_dir: &Path,
     pb: &ProgressBar,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     tracing::debug!("Original mod name: {}", mod_name);
     let sanitized_name = util::sanitize(mod_name);
 
@@ -45,7 +46,6 @@ async fn download_mod(
                 }
                 Err(e) => {
                     tracing::error!("{}", e);
-                    tracing::warn!("Checksum verification failed, trying another mirror");
                     pb.set_message("Checksum verification failed, trying another mirror");
                     continue; // to the next mirror
                 }
@@ -67,7 +67,8 @@ async fn download_and_write(
     install_destination: &Path,
     expected_hashes: &[String],
     pb: &ProgressBar,
-) -> Result<(), Error> {
+) -> Result<()> {
+    let debug_filename = fileutil::replace_home_dir_with_tilde(install_destination);
     let mut temp_file = NamedTempFile::new()?;
 
     let mut stream = response.bytes_stream();
@@ -86,34 +87,34 @@ async fn download_and_write(
     tracing::debug!("computed hash: {:?}", hash_str,);
     tracing::debug!("expected hash: {:?}", expected_hashes);
 
-    if expected_hashes.contains(&hash_str) {
-        tracing::info!("Checksum verified");
-
-        let debug_filename = fileutil::replace_home_dir_with_tilde(install_destination);
-
-        if install_destination.exists() {
-            tracing::debug!(
-                "'{}' is already exists. Trying to remove it",
-                debug_filename
-            );
-            fs::remove_file(install_destination)?;
-            tracing::info!("The previous version has been deleted");
-        }
-
-        // NOTE: The permissions are set to 0600 because of copy operation.
-        // This is a restriction in the linux system which uses tempfs as external mount point.
-        fs::copy(temp_file, install_destination)?;
-        tracing::info!("The file saved in '{}'", debug_filename);
-
-        Ok(())
-    } else {
+    if !expected_hashes.contains(&hash_str) {
+        anyhow::bail!(
+            "Checksum verification failed for '{}': computed hash '{}' does not match expected hashes: {:?}",
+            debug_filename,
+            hash_str,
+            expected_hashes
+        );
         // NOTE: The temp file will be removed automatically when they goes out scope
-        Err(Error::InvalidChecksum {
-            file: install_destination.to_path_buf(),
-            computed: hash_str,
-            expected: expected_hashes.to_vec(),
-        })
+        // or when the program exits. So we don't need to remove it manually.
     }
+
+    tracing::info!("Checksum verified");
+
+    if install_destination.exists() {
+        tracing::debug!(
+            "'{}' is already exists. Trying to remove it",
+            debug_filename
+        );
+        fs::remove_file(install_destination)?;
+        tracing::info!("The previous version has been deleted");
+    }
+
+    // NOTE: The permissions are set to 0600 because of copy operation.
+    // This is a restriction in the linux system which uses tempfs as external mount point.
+    fs::copy(temp_file, install_destination)?;
+    tracing::info!("The file saved in '{}'", debug_filename);
+
+    Ok(())
 }
 
 /// Downloads mods concurrently with a limit on the number of concurrent downloads.
@@ -124,7 +125,7 @@ pub async fn download_mods_concurrently(
     mods: &[(String, RemoteModInfo)],
     config: Arc<Config>,
     concurrent_limit: usize,
-) -> anyhow::Result<()> {
+) -> Result<()> {
     let semaphore = Arc::new(Semaphore::new(concurrent_limit));
     let mp = MultiProgress::new();
     let client = Client::builder()
