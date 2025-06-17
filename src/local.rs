@@ -58,19 +58,12 @@ pub struct LocalMod {
     checksum: OnceCell<String>,
 }
 
-pub trait Generatable {
-    fn checksum(&self) -> Result<&str>;
-    fn from_path(file_path: &Path) -> Result<LocalMod>;
-    fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<LocalMod>;
-    fn names(archive_paths: &[PathBuf]) -> HashSet<String>;
-}
-
-impl Generatable for LocalMod {
+impl LocalMod {
     /// Compute checksum if not already computed, then cache it.
     ///
     /// # Errors
     /// Returns an error if the file cannot be read.
-    fn checksum(&self) -> Result<&str> {
+    pub fn checksum(&self) -> Result<&str> {
         self.checksum
             .get_or_try_init(|| {
                 let computed_hash = hash_file(&self.file_path)?;
@@ -123,7 +116,7 @@ impl Generatable for LocalMod {
     }
 
     /// Loads all local mods from the provided archive paths.
-    fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<Self> {
+    pub fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<Self> {
         use rayon::prelude::*;
 
         tracing::info!("Start parsing archive files.");
@@ -145,7 +138,7 @@ impl Generatable for LocalMod {
     }
 
     /// Returns a set of unique mod names from the provided archive paths.
-    fn names(archive_paths: &[PathBuf]) -> HashSet<String> {
+    pub fn names(archive_paths: &[PathBuf]) -> HashSet<String> {
         let local_mods = Self::load_local_mods(archive_paths);
         local_mods
             .into_iter()
