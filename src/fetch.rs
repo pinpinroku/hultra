@@ -16,7 +16,7 @@ where
 {
     let response = client.get(url).send().await?.error_for_status()?;
 
-    tracing::debug!("Response headers: {:#?}", response.headers());
+    tracing::info!("Fetched response status: {}", response.status());
     let bytes = response.bytes().await?;
 
     tracing::info!("Parsing the binary data from the response");
