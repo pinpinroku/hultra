@@ -98,7 +98,7 @@ impl Config {
         let path = self.directory.join(UPDATER_BLACKLIST_FILE);
 
         tracing::info!(
-            "Reading updater blacklist from {}",
+            "Reading updater blacklist from '{}'",
             fileutil::replace_home_dir_with_tilde(&path)
         );
 
@@ -120,7 +120,7 @@ impl Config {
                         tracing::debug!("Skipping line {}: '{}'", line_number + 1, trimmed);
                         continue;
                     }
-                    tracing::debug!("Blacklist entry: {:?}", trimmed);
+                    tracing::info!("Blacklist entry: {:?}", trimmed);
 
                     // NOTE: It is easier to compare them as full paths.
                     filenames.insert(self.directory.join(trimmed));

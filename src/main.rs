@@ -69,7 +69,7 @@ async fn run() -> Result<()> {
     // Determine the mods directory.
     let mods_directory = config.directory();
     tracing::info!(
-        "Using mods directory: {}",
+        "Using mods directory: '{}'",
         fileutil::replace_home_dir_with_tilde(mods_directory)
     );
     tracing::info!("Mirror preference: {}", config.mirror_preferences());
