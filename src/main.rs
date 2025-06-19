@@ -23,7 +23,8 @@ use crate::{
     mod_registry::{ModRegistryQuery, RemoteModRegistry},
 };
 
-async fn run() -> Result<()> {
+/// Initialize logger
+fn setup_logger() -> Result<()> {
     let state_home = env::home_dir()
         .context("Could not determine home directory")?
         .join(".local/state/everest-mod-cli/");
@@ -50,6 +51,11 @@ async fn run() -> Result<()> {
 
     // Start configuring a `fmt` subscriber
     tracing::subscriber::set_global_default(subscriber)?;
+    Ok(())
+}
+
+async fn run() -> Result<()> {
+    setup_logger()?;
 
     tracing::info!("Application starts");
 
