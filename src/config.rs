@@ -120,6 +120,8 @@ impl Config {
                         tracing::debug!("Skipping line {}: '{}'", line_number + 1, trimmed);
                         continue;
                     }
+                    tracing::debug!("Blacklist entry: {:?}", trimmed);
+
                     // NOTE: It is easier to compare them as full paths.
                     filenames.insert(self.directory.join(trimmed));
                 }
@@ -136,7 +138,6 @@ impl Config {
         }
 
         tracing::debug!("Blacklist contains {} entries.", filenames.len());
-        tracing::debug!("Blacklist entries: {:?}", filenames);
 
         Ok(Some(filenames))
     }
