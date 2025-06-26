@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "everest-mod-cli"
-version = "3.1.0"
+version = "3.2.1"
 dependencies = [
  "anyhow",
  "clap",

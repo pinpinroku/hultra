@@ -36,7 +36,7 @@ fn setup_logger(verbose: bool) -> Result<()> {
     let log_level = if verbose {
         "everest_mod_cli=debug"
     } else {
-        "everest_mod_cli=error"
+        "everest_mod_cli=info"
     };
 
     // construct a subscriber that prints formatted traces to stdout
