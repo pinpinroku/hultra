@@ -1,6 +1,6 @@
 [package]
 name = "everest-mod-cli"
-version = "3.2.3"
+version = "3.2.4"
 edition = "2024"
 description = "A simple cli tool to manage mods for Celeste."
 authors = ["pinpinroku <pinpinroku11600@tutanota.com>"]
@@ -13,7 +13,7 @@ rust-version = "1.87"
 anyhow = "1.0.98"
 clap = { version = "4.5.23", features = ["derive"] }
 futures-util = "0.3.31"
-indicatif = "0.17.9"
+indicatif = "0.18.0"
 mirror-list = { path = "./mirror-list" }
 once_cell = "1.21.3"
 rayon = "1.10.0"
