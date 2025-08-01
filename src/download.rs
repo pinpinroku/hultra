@@ -41,7 +41,7 @@ async fn download_mod(
             pb.set_message(msg.to_string());
             match download_and_write(response, &install_destination, expected_hashes, pb).await {
                 Ok(_) => {
-                    pb.finish_with_message(format!("🍓 {} [{}]", mod_name, filename));
+                    pb.finish_with_message(format!("🍓 {mod_name} [{filename}]"));
                     return Ok(());
                 }
                 Err(e) => {
@@ -82,7 +82,7 @@ async fn download_and_write(
         pb.inc(chunk.len() as u64);
     }
     let computed_hash = hasher.digest();
-    let hash_str = format!("{:016x}", computed_hash);
+    let hash_str = format!("{computed_hash:016x}");
 
     tracing::debug!("computed hash: {:?}", hash_str,);
     tracing::debug!("expected hash: {:?}", expected_hashes);
