@@ -30,16 +30,13 @@ pub fn get_all_mirror_urls<'a>(url: &'a str, mirror_preferences: &str) -> Vec<Co
         .filter_map(|mirror_id| match mirror_id.trim() {
             "gb" => Some(Cow::Borrowed(url)),
             "jade" => Some(Cow::Owned(format!(
-                "https://celestemodupdater.0x0a.de/banana-mirror/{}.zip",
-                gbid
+                "https://celestemodupdater.0x0a.de/banana-mirror/{gbid}.zip"
             ))),
             "wegfan" => Some(Cow::Owned(format!(
-                "https://celeste.weg.fan/api/v2/download/gamebanana-files/{}",
-                gbid
+                "https://celeste.weg.fan/api/v2/download/gamebanana-files/{gbid}"
             ))),
             "otobot" => Some(Cow::Owned(format!(
-                "https://banana-mirror-mods.celestemods.com/{}.zip",
-                gbid
+                "https://banana-mirror-mods.celestemods.com/{gbid}.zip"
             ))),
             _ => None,
         })

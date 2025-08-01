@@ -14,7 +14,7 @@ anyhow = "1.0.98"
 clap = { version = "4.5.23", features = ["derive"] }
 futures-util = "0.3.31"
 indicatif = "0.18.0"
-mirror-list = { path = "./mirror-list" }
+mirror-list = { version = "0.1.1", path = "./mirror-list" }
 once_cell = "1.21.3"
 rayon = "1.10.0"
 reqwest = { version = "0.12.12", features = ["gzip", "stream"] }
