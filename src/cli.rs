@@ -21,7 +21,7 @@ pub struct Cli {
         long_help = "Priority of the mirror list separated by commas (e.g., \"wegfan,jade,gb,otobot\").
         This option only applies to the `install` and the `update` commands,
 
-        * gb     => 'Default GameBanana Server',
+        * gb     => 'Default GameBanana Server (United States)',
         * jade   => 'Germany',
         * wegfan => 'China',
         * otobot => 'North America',
@@ -31,7 +31,7 @@ pub struct Cli {
         retry the download. You can also restrict the fallback servers by
         providing a comma-separated list (e.g., \"otobot,jade\"), which will
         limit the retries to only those specified servers.",
-        default_value = "gb,jade,wegfan,otobot"
+        default_value = "otobot,gb,jade,wegfan"
     )]
     pub mirror_preferences: String,
 
