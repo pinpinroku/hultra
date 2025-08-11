@@ -197,7 +197,7 @@ alias emc='everest-mod-cli --mods-dir $HOME/game/exokgames/celeste/Mods/'
 
 > This option only applies to the `install` and the `update` commands.
 
-Mirror priority can be specified by a comma-separated list. Default is "gb,jade,wegfan,otobot".
+Mirror priority can be specified by a comma-separated list. Default is "otobot,gb,jade,wegfan".
 
 | name    | location                      |
 |---------|-------------------------------|
