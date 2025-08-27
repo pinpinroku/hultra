@@ -182,10 +182,10 @@ impl ZipSearcher {
             let mut buf = [0u8; MIN_EOCD_SIZE];
             file.read_exact(&mut buf)?;
 
-            if buf[0..4] == EOCD_SIGNATURE {
-                if let Some(eocd) = Self::parse_eocd(&buf) {
-                    return Ok(eocd);
-                }
+            if buf[0..4] == EOCD_SIGNATURE
+                && let Some(eocd) = Self::parse_eocd(&buf)
+            {
+                return Ok(eocd);
             }
         }
 
@@ -202,13 +202,13 @@ impl ZipSearcher {
 
             if sig_bytes == EOCD_SIGNATURE {
                 // Check if we have enough space for complete EOCD
-                if pos + MIN_EOCD_SIZE <= buffer.len() {
-                    if let Some(eocd) = Self::parse_eocd(&buffer[pos..pos + MIN_EOCD_SIZE]) {
-                        // Additional validation: check if comment length makes sense
-                        let comment_len = read_u16_le(&buffer[pos + 20..]) as usize;
-                        if pos + MIN_EOCD_SIZE + comment_len <= buffer.len() {
-                            return Ok(eocd);
-                        }
+                if pos + MIN_EOCD_SIZE <= buffer.len()
+                    && let Some(eocd) = Self::parse_eocd(&buffer[pos..pos + MIN_EOCD_SIZE])
+                {
+                    // Additional validation: check if comment length makes sense
+                    let comment_len = read_u16_le(&buffer[pos + 20..]) as usize;
+                    if pos + MIN_EOCD_SIZE + comment_len <= buffer.len() {
+                        return Ok(eocd);
                     }
                 }
             }

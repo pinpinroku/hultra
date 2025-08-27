@@ -53,10 +53,10 @@ fn extract_gamebanana_id(url: &str) -> u32 {
     ];
 
     for prefix in &prefixes {
-        if let Some(id_str) = url.strip_prefix(prefix) {
-            if let Ok(id) = id_str.parse::<u32>() {
-                return id;
-            }
+        if let Some(id_str) = url.strip_prefix(prefix)
+            && let Ok(id) = id_str.parse::<u32>()
+        {
+            return id;
         }
     }
 
