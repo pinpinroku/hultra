@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs, io::Write, path::Path, sync::Arc, time::Duration};
+use std::{borrow::Cow, fs, io::Write, path::Path, sync::Arc};
 
 use anyhow::Result;
 use futures_util::StreamExt;
@@ -123,15 +123,11 @@ async fn download_and_write(
 /// # Errors
 /// Returns an error if any of the downloads fail or if there are issues with the tasks.
 pub async fn download_mods_concurrently(
+    client: &Client,
     mods: &[(String, RemoteModInfo)],
     config: Arc<Config>,
-    concurrent_limit: usize,
+    semaphore: &Arc<Semaphore>,
 ) -> Result<()> {
-    tracing::info!(
-        "Preparing to download {} mods with concurrency limit {}",
-        mods.len(),
-        concurrent_limit
-    );
     tracing::debug!(
         "Mods to download: {:?}",
         mods.iter().map(|(n, _)| n).collect::<Vec<_>>()
@@ -142,11 +138,7 @@ pub async fn download_mods_concurrently(
         return Ok(());
     }
 
-    let semaphore = Arc::new(Semaphore::new(concurrent_limit));
     let mp = MultiProgress::new();
-    let client = Client::builder()
-        .connect_timeout(Duration::from_secs(5))
-        .build()?;
 
     let mut handles = Vec::with_capacity(mods.len());
 
