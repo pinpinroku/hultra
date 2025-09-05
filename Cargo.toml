@@ -24,7 +24,7 @@ tempfile = "3.15.0"
 thiserror = "2.0.12"
 tokio = { version = "1.46.0", features = ["full"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 zip-search = { version = "0.1.0", path = "./zip-search" }
 
