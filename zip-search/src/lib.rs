@@ -2,18 +2,28 @@ use std::{
     fs::File,
     io::{self, Read, Seek, SeekFrom},
     path::Path,
+    result::Result,
 };
 
 use thiserror::Error;
 
+/// Errors that can occur while searching for a file in the ZIP central directory.
 #[derive(Error, Debug)]
 pub enum ZipSearchError {
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error),
+    /// An I/O error occurred while reading the ZIP file.
+    ///
+    /// This can happen due to issues like file truncation, read permissions, or hardware failures.
+    /// Check the file's integrity and accessibility.
+    #[error("I/O error while reading central directory: {0}")]
+    Io(#[from] std::io::Error),
     #[error("File too small to be a valid ZIP")]
     FileTooSmall,
     #[error("Valid End of Central Directory record not found")]
     EndOfCentralDirectoryNotFound,
+    /// The central directory entry has an invalid signature (expected 0x02014b50).
+    ///
+    /// This typically indicates a corrupted ZIP file or incorrect parsing of the central directory.
+    /// Ensure the ZIP file is valid and the central directory offset is correct.
     #[error("Invalid central directory entry signature")]
     InvalidCentralDirectoryEntrySignature,
     #[error("Invalid local file header signature")]
@@ -26,9 +36,24 @@ pub enum ZipSearchError {
     DecompressedSizeMismatch,
 }
 
-pub type ZipSearchResult<T> = std::result::Result<T, ZipSearchError>;
+#[derive(Debug, Error)]
+pub enum EocdError {
+    #[error("Data too short: {0} bytes, minimum 22 bytes required")]
+    InsufficientData(usize),
+    #[error("Invalid disk number: found {0}, expected 0")]
+    InvalidDiskNumber(u16),
+    #[error("Disk with central directory does not match: expected 0")]
+    DiskMismatch,
+    #[error("Mismatch between entries on disk and total entries")]
+    EntryCountMismatch,
+    #[error("Invalid central directory: size or offset is zero")]
+    InvalidCentralDirectory,
+}
 
-/// High-performance ZIP file searcher with zero-copy optimizations
+/// Type alias for the result of ZIP file search operations.
+pub type ZipSearchResult<T> = Result<T, ZipSearchError>;
+
+/// A structure representing a ZIP file with a reader and EOCD metadata.
 ///
 /// # Examples
 ///
@@ -44,8 +69,8 @@ pub type ZipSearchResult<T> = std::result::Result<T, ZipSearchError>;
 ///     println!("Archive contains {} files", searcher.file_count());
 ///
 ///     let target_file = "everest.yaml";
-///     match searcher.find_file(target_file)? {
-///         Some(entry) => {
+///     match searcher.find_file(target_file) {
+///         Ok(Some(entry)) => {
 ///             println!(
 ///                 "Found: {} ({} bytes, compression: {})",
 ///                 entry.file_name, entry.uncompressed_size, entry.compression_method
@@ -62,9 +87,8 @@ pub type ZipSearchResult<T> = std::result::Result<T, ZipSearchError>;
 ///                 );
 ///             }
 ///         }
-///         None => {
-///             println!("File '{}' not found in archive", target_file);
-///         }
+///         Ok(None) => println!("File '{}' not found in archive", target_file),
+///         Err(err) => eprintln!("{}", e),
 ///     }
 ///
 ///     Ok(())
@@ -76,7 +100,7 @@ pub struct ZipSearcher {
     eocd: EndOfCentralDirectory,
 }
 
-/// End of central directory record
+/// Represents the End of Central Directory (EOCD) record of the ZIP file.
 #[derive(Debug)]
 struct EndOfCentralDirectory {
     total_entries: u16,
@@ -84,7 +108,7 @@ struct EndOfCentralDirectory {
     central_directory_size: u32,
 }
 
-/// Central directory file header entry
+/// Represents a single entry in the ZIP file's central directory.
 #[derive(Debug)]
 pub struct CentralDirectoryEntry {
     pub file_name: String,
@@ -94,7 +118,7 @@ pub struct CentralDirectoryEntry {
     pub local_header_offset: u32,
 }
 
-/// Fast buffer for chunked reading
+/// A buffer for efficient reading of the ZIP file in chunks.
 struct ReadBuffer {
     data: Vec<u8>,
     valid_len: usize,
@@ -183,7 +207,7 @@ impl ZipSearcher {
             file.read_exact(&mut buf)?;
 
             if buf[0..4] == EOCD_SIGNATURE
-                && let Some(eocd) = Self::parse_eocd(&buf)
+                && let Ok(eocd) = Self::parse_eocd(&buf)
             {
                 return Ok(eocd);
             }
@@ -203,7 +227,7 @@ impl ZipSearcher {
             if sig_bytes == EOCD_SIGNATURE {
                 // Check if we have enough space for complete EOCD
                 if pos + MIN_EOCD_SIZE <= buffer.len()
-                    && let Some(eocd) = Self::parse_eocd(&buffer[pos..pos + MIN_EOCD_SIZE])
+                    && let Ok(eocd) = Self::parse_eocd(&buffer[pos..pos + MIN_EOCD_SIZE])
                 {
                     // Additional validation: check if comment length makes sense
                     let comment_len = read_u16_le(&buffer[pos + 20..]) as usize;
@@ -217,10 +241,10 @@ impl ZipSearcher {
         Err(ZipSearchError::EndOfCentralDirectoryNotFound)
     }
 
-    /// Parse and validate EOCD record
-    fn parse_eocd(data: &[u8]) -> Option<EndOfCentralDirectory> {
+    /// Parses and validate EOCD record.
+    fn parse_eocd(data: &[u8]) -> Result<EndOfCentralDirectory, EocdError> {
         if data.len() < 22 {
-            return None;
+            return Err(EocdError::InsufficientData(data.len()));
         }
 
         // Skip signature (already verified)
@@ -232,23 +256,80 @@ impl ZipSearcher {
         let cd_offset = read_u32_le(&data[16..]);
 
         // Basic validation for single-disk ZIP files
-        if disk_number == 0
-            && disk_with_cd == 0
-            && entries_on_disk == total_entries
-            && cd_size > 0
-            && cd_offset > 0
-        {
-            Some(EndOfCentralDirectory {
-                total_entries,
-                central_directory_offset: cd_offset,
-                central_directory_size: cd_size,
-            })
-        } else {
-            None
+        if disk_number != 0 {
+            return Err(EocdError::InvalidDiskNumber(disk_number));
         }
+        if disk_with_cd != 0 {
+            return Err(EocdError::DiskMismatch);
+        }
+        if entries_on_disk != total_entries {
+            return Err(EocdError::EntryCountMismatch);
+        }
+        if cd_size == 0 || cd_offset == 0 {
+            return Err(EocdError::InvalidCentralDirectory);
+        }
+
+        Ok(EndOfCentralDirectory {
+            total_entries,
+            central_directory_offset: cd_offset,
+            central_directory_size: cd_size,
+        })
     }
 
-    /// High-performance file search with chunked reading and zero-copy comparisons
+    /// Searches for a file in the ZIP central directory by name.
+    ///
+    /// This function scans the central directory of the ZIP file to find an entry
+    /// with a matching file name. It reads the central directory in chunks to
+    /// minimize memory usage and performs zero-copy comparisons for efficiency.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_name` - The name of the file to search for (case-sensitive).
+    ///   The name should match the file name stored in the ZIP, including any
+    ///   path components (e.g., "path/to/file.txt").
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(CentralDirectoryEntry))` - If a matching file is found, returns
+    ///   the corresponding central directory entry containing metadata like file
+    ///   name, compression method, sizes, and local header offset.
+    /// * `Ok(None)` - If no file with the specified name is found in the central
+    ///   directory after scanning all entries.
+    /// * `Err(ZipSearchError)` - If an error occurs during parsing, such as:
+    ///   - `InvalidCentralDirectoryEntrySignature`: The central directory entry
+    ///     has an invalid signature, indicating a corrupted ZIP file.
+    ///   - `IoError`: An I/O error occurred while reading the file.
+    ///
+    /// # Notes
+    ///
+    /// - The function assumes the central directory offset and total entries in
+    ///   `self.eocd` are valid. Ensure the `EndOfCentralDirectory` is correctly
+    ///   parsed before calling this function (e.g., via `parse_eocd`).
+    /// - File names are compared as raw bytes, so the search is case-sensitive.
+    /// - The function uses a 64KB buffer for reading, balancing memory usage and
+    ///   performance. If an entry is larger than the buffer, it will be refilled
+    ///   as needed.
+    /// - File names are converted to UTF-8 strings only when a match is found,
+    ///   using `from_utf8_lossy` to handle potentially invalid UTF-8 data.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// let mut zip = ZipFile {
+    ///     file: std::fs::File::open("example.zip")?,
+    ///     eocd: EndOfCentralDirectory {
+    ///         total_entries: 10,
+    ///         central_directory_offset: 1000,
+    ///         central_directory_size: 500,
+    ///     },
+    /// };
+    ///
+    /// match zip.find_file("target.txt") {
+    ///     Ok(Some(entry)) => println!("Found file: {}", entry.file_name),
+    ///     Ok(None) => println!("File not found"),
+    ///     Err(e) => eprintln!("Error: {}", e),
+    /// }
+    /// ```
     pub fn find_file(
         &mut self,
         target_name: &str,
