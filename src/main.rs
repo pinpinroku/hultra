@@ -91,7 +91,7 @@ async fn run() -> Result<()> {
             let local_mods = LocalMod::load_local_mods(&archive_paths);
 
             local_mods.iter().for_each(|local_mod| {
-                if let Some(os_str) = local_mod.file_path.file_name() {
+                if let Some(os_str) = local_mod.location.file_name() {
                     println!(
                         "- {} ({})",
                         local_mod.manifest.name,
@@ -113,7 +113,7 @@ async fn run() -> Result<()> {
             if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
                 println!(
                     "📂 {}",
-                    fileutil::replace_home_dir_with_tilde(&local_mod.file_path)
+                    fileutil::replace_home_dir_with_tilde(&local_mod.location)
                 );
                 println!("- Name: {}", local_mod.manifest.name);
                 println!("  Version: {}", local_mod.manifest.version);
@@ -200,7 +200,7 @@ async fn run() -> Result<()> {
                     // Filter installed mods according to the `updaterblacklist.txt`
                     let mut local_mods = LocalMod::load_local_mods(&archive_paths);
                     if let Some(blacklist) = config.read_updater_blacklist()? {
-                        local_mods.retain(|local_mod| !blacklist.contains(&local_mod.file_path));
+                        local_mods.retain(|local_mod| !blacklist.contains(&local_mod.location));
                     }
 
                     // Update installed mods by checking for available updates in the mod registry.

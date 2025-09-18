@@ -26,7 +26,7 @@ pub enum ZipSearchError {
     DecompressedSizeMismatch,
 }
 
-type ZipSearchResult<T> = std::result::Result<T, ZipSearchError>;
+pub type ZipSearchResult<T> = std::result::Result<T, ZipSearchError>;
 
 /// High-performance ZIP file searcher with zero-copy optimizations
 ///

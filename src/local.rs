@@ -51,7 +51,7 @@ impl ModManifest {
 #[derive(Debug, Clone)]
 pub struct LocalMod {
     /// Path to the local mod file which contains the mod's assets and manifest
-    pub file_path: PathBuf,
+    pub location: PathBuf,
     /// Mod manifest resides in the mod file
     pub manifest: ModManifest,
     /// Computed XXH64 hash of the file for update check
@@ -59,18 +59,27 @@ pub struct LocalMod {
 }
 
 impl LocalMod {
+    /// Returns a value of this type from the given file path and manifest of the mod.
+    pub fn new(file_path: &Path, manifest: &ModManifest) -> Self {
+        Self {
+            location: file_path.to_path_buf(),
+            manifest: manifest.clone(),
+            checksum: OnceCell::new(),
+        }
+    }
+
     /// Compute checksum if not already computed, then cache it.
     ///
     /// # Errors
     /// Returns an error if the file cannot be read.
     pub fn checksum(&self) -> Result<&str> {
         self.checksum
-            .get_or_try_init(|| match fileutil::hash_file(&self.file_path) {
+            .get_or_try_init(|| match fileutil::hash_file(&self.location) {
                 Ok(it) => Ok(it),
                 Err(e) => {
                     tracing::error!(
                         "Could not open or read the file: {}",
-                        fileutil::replace_home_dir_with_tilde(&self.file_path)
+                        fileutil::replace_home_dir_with_tilde(&self.location)
                     );
                     anyhow::bail!("{}", e)
                 }
@@ -102,7 +111,7 @@ impl LocalMod {
                     format!("Failed to parse manifest file '{MANIFEST}' in '{debug_filename}'")
                 })? {
                     Ok(Self {
-                        file_path: file_path.to_path_buf(),
+                        location: file_path.to_path_buf(),
                         manifest,
                         checksum: OnceCell::new(),
                     })
@@ -151,6 +160,39 @@ impl LocalMod {
             .collect()
     }
 }
+
+// --- WIP starts from here --- //
+// Re-impelements necessary functions while maintaning modularity and scalability.
+
+/// Finds manifest file and returns the slice of contents.
+fn find_manifest(file_path: &Path) -> anyhow::Result<Vec<u8>> {
+    const MANIFEST: &str = "everest.yaml";
+    let debug_filename = fileutil::replace_home_dir_with_tilde(file_path);
+
+    let mut zip_searcher = ZipSearcher::new(file_path)?;
+    match zip_searcher.find_file(MANIFEST)? {
+        Some(entry) => {
+            let mut buffer = zip_searcher.read_file(&entry)?;
+            // Check for UTF-8 BOM and remove if present
+            if buffer.starts_with(&[0xEF, 0xBB, 0xBF]) {
+                buffer.drain(0..3);
+            }
+            Ok(buffer)
+        }
+        None => anyhow::bail!("'{}' not found in '{}'", MANIFEST, debug_filename),
+    }
+}
+
+/// Deserializes manifest in YAML format from buffer.
+fn get_manifest(buffer: &[u8]) -> anyhow::Result<ModManifest> {
+    match ModManifest::from_yaml(buffer) {
+        Ok(Some(manifest)) => Ok(manifest),
+        Ok(None) => anyhow::bail!("No entries in manifest file."),
+        Err(err) => anyhow::bail!("Manifest file is empty or invalid: {:?}", err),
+    }
+}
+
+// --- WIP ends at here --- //
 
 #[cfg(test)]
 mod tests_for_files {
@@ -211,7 +253,7 @@ mod tests_local_mod {
         let result = LocalMod::from_path(&valid_path);
         assert!(result.is_ok());
         let local_mod = result.unwrap();
-        assert_eq!(local_mod.file_path, valid_path);
+        assert_eq!(local_mod.location, valid_path);
     }
 
     #[test]
