@@ -68,11 +68,11 @@ impl LocalMod {
     ///     }
     /// }
     /// ```
-    pub fn from_path<P: AsRef<Path>>(mod_path: &P) -> Result<Self, LoadModsError> {
+    pub fn from_path(mod_path: &Path) -> Result<Self, LoadModsError> {
         let manifest_bytes = zip::find_manifest(mod_path)?;
         let manifest = ModManifest::from_slice(&manifest_bytes)?;
         Ok(Self {
-            location: mod_path.as_ref().to_path_buf(),
+            location: mod_path.to_path_buf(),
             manifest,
             checksum: OnceCell::new(),
         })
@@ -111,7 +111,7 @@ impl LocalMod {
     ///     println!("Loaded mod: {} version {}", local_mod.manifest.name, local_mod.manifest.version);
     /// }
     /// ```
-    pub fn load_local_mods<P: AsRef<Path> + Sync>(archive_paths: &[P]) -> Vec<LocalMod> {
+    pub fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<LocalMod> {
         use rayon::prelude::*;
 
         tracing::info!("Found {} mod archives to load", archive_paths.len());
@@ -121,15 +121,11 @@ impl LocalMod {
             .filter_map(|archive_path| match LocalMod::from_path(archive_path) {
                 Ok(local_mod) => Some(local_mod),
                 Err(e) if matches!(e, LoadModsError::Zip(ZipError::NotFound)) => {
-                    tracing::warn!("{:?}: {}", archive_path.as_ref().file_name(), e);
+                    tracing::warn!("{:?}: {}", archive_path.file_name(), e);
                     None
                 }
                 Err(e) => {
-                    tracing::error!(
-                        "Failed to load mod from {}: {}",
-                        archive_path.as_ref().display(),
-                        e
-                    );
+                    tracing::error!("Failed to load mod from {}: {}", archive_path.display(), e);
                     None
                 }
             })
@@ -147,7 +143,7 @@ mod tests_local_mod {
     #[test]
     fn test_checksum_computation() -> anyhow::Result<()> {
         let mod_path = Path::new("./test/test-mod.zip");
-        let local_mod = LocalMod::from_path(&mod_path).unwrap();
+        let local_mod = LocalMod::from_path(mod_path).unwrap();
         let checksum = local_mod.checksum()?;
         assert!(!checksum.is_empty());
         Ok(())
@@ -156,7 +152,7 @@ mod tests_local_mod {
     #[test]
     fn test_from_path_valid_file() -> anyhow::Result<()> {
         let valid_path = Path::new("./test/test-mod.zip");
-        let result = LocalMod::from_path(&valid_path);
+        let result = LocalMod::from_path(valid_path);
         assert!(result.is_ok());
 
         let local_mod = result?;
@@ -168,13 +164,13 @@ mod tests_local_mod {
     #[test]
     fn test_from_path_invalid_file() {
         let invalid_path = Path::new("invalid_mod.zip");
-        let result = LocalMod::from_path(&invalid_path);
+        let result = LocalMod::from_path(invalid_path);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_load_local_mods() {
-        let archive_paths = vec![Path::new("./test/test-mod.zip")];
+        let archive_paths = vec![PathBuf::from("./test/test-mod.zip")];
         let local_mods = LocalMod::load_local_mods(&archive_paths);
         assert!(!local_mods.is_empty());
         assert_eq!(local_mods[0].manifest.name, "test-mod");

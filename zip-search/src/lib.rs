@@ -183,7 +183,7 @@ fn read_u32_le(bytes: &[u8]) -> u32 {
 
 impl ZipSearcher {
     /// Create a new ZIP searcher with minimal initialization overhead
-    pub fn new<P: AsRef<Path>>(zip_path: P) -> ZipSearchResult<Self> {
+    pub fn new(zip_path: &Path) -> ZipSearchResult<Self> {
         let mut file = File::open(zip_path)?;
         let eocd = Self::find_end_of_central_directory(&mut file)?;
         Ok(ZipSearcher { file, eocd })

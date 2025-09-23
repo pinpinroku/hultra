@@ -47,7 +47,7 @@ pub enum ZipError {
 ///     }
 /// }
 /// ```
-pub(crate) fn find_manifest<P: AsRef<Path>>(file_path: &P) -> Result<Vec<u8>, ZipError> {
+pub(crate) fn find_manifest(file_path: &Path) -> Result<Vec<u8>, ZipError> {
     const MANIFEST_FILE_NAME: &str = "everest.yaml";
 
     let mut zip_searcher = ZipSearcher::new(file_path)?;
@@ -80,7 +80,7 @@ mod tests_zip {
     #[test]
     fn test_find_manifest_in_zip_valid() -> anyhow::Result<()> {
         let mod_path = Path::new("./test/test-mod.zip");
-        let result = find_manifest(&mod_path);
+        let result = find_manifest(mod_path);
         assert!(result.is_ok());
 
         let manifest_bytes = result?;
@@ -92,7 +92,7 @@ mod tests_zip {
     #[test]
     fn test_find_manifest_in_zip_invalid() {
         let mod_path = Path::new("./test/missing-manifest.zip");
-        let result = find_manifest(&mod_path);
+        let result = find_manifest(mod_path);
         assert!(result.is_err());
         assert!(
             result
