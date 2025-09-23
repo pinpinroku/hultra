@@ -50,24 +50,6 @@ impl LocalMod {
     /// - `ZipError::NotFound`: The manifest file not found in given path.
     /// - `ManifestParseError::Parse`: Failed to parse YAML format.
     /// - `ManifestParseError::NoEntries`: The manifest file does not have any entries.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use std::path::Path;
-    ///
-    /// use crate::local::LocalMod;
-    ///
-    /// let mod_path = Path::new("./test/test-mod.zip");
-    /// match LocalMod::from_path(mod_path) {
-    ///     Ok(local_mod) => {
-    ///         println!("Loaded mod: {} version {}", local_mod.manifest.name, local_mod.manifest.version);
-    ///     }
-    ///     Err(e) => {
-    ///         println!("An error occurred: {}", e);
-    ///     }
-    /// }
-    /// ```
     pub fn from_path(mod_path: &Path) -> Result<Self, LoadModsError> {
         let manifest_bytes = zip::find_manifest(mod_path)?;
         let manifest = ModManifest::from_slice(&manifest_bytes)?;
@@ -97,20 +79,6 @@ impl LocalMod {
     /// This function does not return errors directly. Instead, it logs errors when the manifest file could not be parsed or invalid.
     ///
     /// It's because we cannot do anything if some of the mod archives are broken but that's are not critical to stop the whole process.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use std::path::Path;
-    ///
-    /// use crate::local::LocalMod;
-    ///
-    /// let archive_paths = vec![Path::new("./test/test-mod.zip")];
-    /// let local_mods = LocalMod::load_local_mods(&archive_paths);
-    /// for local_mod in local_mods {
-    ///     println!("Loaded mod: {} version {}", local_mod.manifest.name, local_mod.manifest.version);
-    /// }
-    /// ```
     pub fn load_local_mods(archive_paths: &[PathBuf]) -> Vec<LocalMod> {
         use rayon::prelude::*;
 

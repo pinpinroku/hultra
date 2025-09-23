@@ -22,31 +22,8 @@ pub enum ZipError {
 ///
 /// # Errors
 ///
-/// - `ModManifestError::NotFound`: The manifest file not found in given path.
-/// - `ModManifestError::Zip`: Broken ZIP format.
-///
-/// # Examples
-///
-/// ```
-/// use std::path::Path;
-///
-/// use crate::{zip, zip::ZipError};
-///
-/// let mod_path = Path::new("test/test-mod.zip");
-/// match zip::find_manifest(mod_path) {
-///     Ok(manifest_bytes) => {
-///         // Process the manifest bytes
-///         println!("Manifest found with {} bytes", manifest_bytes.len());
-///         // let manifest = ModManifest::from_yaml(&manifest_bytes).unwrap();
-///     }
-///     Err(ZipError::NotFound) => {
-///         println!("Manifest file not found in the ZIP archive.");
-///     }
-///     Err(e) => {
-///         eprintln!("An error occurred: {}", e);
-///     }
-/// }
-/// ```
+/// - `ZipError::NotFound`: The manifest file not found in given path.
+/// - `ZipError::Parse`: Could not parse ZIP archive. Broken or invalid.
 pub(crate) fn find_manifest(file_path: &Path) -> Result<Vec<u8>, ZipError> {
     const MANIFEST_FILE_NAME: &str = "everest.yaml";
 
