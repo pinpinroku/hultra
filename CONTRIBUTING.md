@@ -1,6 +1,6 @@
-# Contributing to Everest Mod CLI
+# Contributing to hultra
 
-First off, thank you for considering contributing to Everest Mod CLI! Your support and involvement are greatly appreciated. Below are some guidelines to help you get started.
+First off, thank you for considering contributing to hultra! Your support and involvement are greatly appreciated. Below are some guidelines to help you get started.
 
 ---
 
@@ -8,12 +8,12 @@ First off, thank you for considering contributing to Everest Mod CLI! Your suppo
 
 ### 1. Reporting Bugs
 If you encounter any bugs, please help us by reporting them. Here's how:
-- Use the [Bug Report Template](https://github.com/pinpinroku/everest-mod-cli/issues/new?template=bug_report.md) to submit a detailed bug report.
+- Use the [Bug Report Template](https://github.com/pinpinroku/hultra/issues/new?template=bug_report.md) to submit a detailed bug report.
 - Include steps to reproduce the bug, expected behavior, and screenshots if applicable.
 
 ### 2. Suggesting Features
 Have an idea for a new feature? We'd love to hear it! Please:
-- Use the [Feature Request Template](https://github.com/pinpinroku/everest-mod-cli/issues/new?template=feature_request.md) to propose your idea.
+- Use the [Feature Request Template](https://github.com/pinpinroku/hultra/issues/new?template=feature_request.md) to propose your idea.
 - Provide as much detail as possible about the feature and how it will benefit the project.
 
 ### 3. Improving Documentation
@@ -25,8 +25,8 @@ If you want to contribute code, follow these steps:
 1. **Fork** the repository.
 2. **Clone** your fork to your local machine:
    ```bash
-   git clone https://github.com/<your-username>/everest-mod-cli.git
-   cd everest-mod-cli
+   git clone https://github.com/<your-username>/hultra.git
+   cd hultra
    ```
 3. **Create a new branch** for your changes:
    ```bash
@@ -88,7 +88,7 @@ If you're unfamiliar with Gitmoji or prefer using plain text commit messages, th
 ## Community Guidelines
 
 - Be respectful to all contributors and maintainers.
-- Ask questions and seek help in the [Discussions tab](https://github.com/pinpinroku/everest-mod-cli/discussions).
+- Ask questions and seek help in the [Discussions tab](https://github.com/pinpinroku/hultra/discussions).
 
 ---
 
