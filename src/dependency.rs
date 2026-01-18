@@ -1,206 +1,136 @@
+//! Dependency graph to resolve dependency efficiently.
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use anyhow::Result;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-
-use crate::{
-    constant::MOD_DEPENDENCY_GRAPH,
-    fetch,
-    manifest::Dependency,
-    mod_registry::{RemoteModInfo, RemoteModRegistry},
-};
+use serde::Deserialize;
 
 /// Each entry of the `mod_dependency_graph.yaml`.
-#[derive(Debug, Default, Deserialize, Serialize, Clone, Hash, PartialEq, Eq)]
-pub struct DependencyInfo {
-    #[serde(rename = "OptionalDependencies")]
-    optional_dependencies: Vec<Dependency>,
+#[derive(Debug, Default, Deserialize)]
+pub struct DependencyNode {
+    /// A list of dependencies.
     #[serde(rename = "Dependencies")]
     dependencies: Vec<Dependency>,
-    #[serde(rename = "URL")]
-    url: String,
 }
 
-/// Represents `mod_dependency_graph.yaml` which is the dependency graph.
-pub type DependencyGraph = HashMap<String, DependencyInfo>;
-
-/// A trait for querying mod dependencies.
-pub trait ModDependencyQuery {
-    async fn fetch(client: &Client) -> Result<DependencyGraph>;
-    fn get_mod_info_by_name(&self, name: &str) -> Option<&DependencyInfo>;
-    fn collect_all_dependencies_bfs(&self, mod_name: &str) -> HashSet<String>;
-    fn check_dependencies(
-        &self,
-        mod_name: &str,
-        mod_registry: &RemoteModRegistry,
-        installed_mod_names: &HashSet<String>,
-    ) -> Vec<(String, RemoteModInfo)>;
+/// Represents `mod_dependency_graph.yaml`.
+#[derive(Debug, Default, Deserialize)]
+pub struct DependencyGraph {
+    /// Detail of nodes
+    pub nodes: HashMap<String, DependencyNode>,
 }
 
-impl ModDependencyQuery for DependencyGraph {
-    /// Fetches the Dependency Graph from the maddie480's server.
-    async fn fetch(client: &Client) -> Result<Self> {
-        fetch::fetch_remote_data::<Self>(MOD_DEPENDENCY_GRAPH, client).await
+impl DependencyGraph {
+    /// Creates a new instance of `DependencyGraph`.
+    fn new(nodes: HashMap<String, DependencyNode>) -> Self {
+        Self { nodes }
     }
 
-    /// Gets a mod registry entry that matches the given name.
-    fn get_mod_info_by_name(&self, name: &str) -> Option<&DependencyInfo> {
-        tracing::debug!(
-            "Getting the dependency information matching the name: {}",
-            name
-        );
-        self.get(name)
+    /// Parses YAML bytes to return a value of this type.
+    pub fn from_slice(bytes: &[u8]) -> Result<Self, serde_yaml_ng::Error> {
+        tracing::info!("parsing dependency graph");
+        let nodes = serde_yaml_ng::from_slice(bytes).inspect_err(|err| {
+            tracing::error!(?err, "failed to parse 'mod_dependency_graph.yaml'")
+        })?;
+        Ok(Self::new(nodes))
     }
 
-    /// Collects all dependencies for a given mod name using iterative BFS.
-    fn collect_all_dependencies_bfs(&self, mod_name: &str) -> HashSet<String> {
+    /// Traverses the dependency graph using BFS from multiple starting mods.
+    ///
+    /// # Returns
+    ///
+    /// A `HashSet` containing all required mods, including:
+    /// - The starting mods themselves
+    /// - All direct and transitive dependencies
+    pub fn bfs_traversal(&self, start_mods: HashSet<&str>) -> HashSet<String> {
+        tracing::info!("starting to traverse dependency graph");
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
-        queue.push_back(mod_name);
 
-        while let Some(current_mod) = queue.pop_front() {
-            if !visited.insert(current_mod.to_string()) {
-                continue;
+        // Adds starting mods to queue
+        for start_mod in start_mods {
+            queue.push_back(start_mod.to_string());
+        }
+
+        while let Some(current) = queue.pop_front() {
+            if !visited.insert(current.clone()) {
+                continue; // Already visited
             }
-
-            if let Some(mod_dep) = self.get_mod_info_by_name(current_mod) {
-                for dep in &mod_dep.dependencies {
-                    if !matches!(dep.name.as_str(), "Everest" | "EverestCore") {
-                        queue.push_back(&dep.name);
+            if let Some(node) = self.get_node_by_key(&current) {
+                for dep in &node.dependencies {
+                    if !matches!(dep.name(), "Celeste" | "Everest" | "EverestCore") {
+                        queue.push_back(dep.name().to_string());
                     }
                 }
             } else {
-                tracing::warn!(
-                    "Could not find the mod matching '{}' in the online database",
-                    current_mod
-                );
+                tracing::warn!(?current, "not found in dep graph");
             }
         }
+
+        tracing::debug!("found dependencies: {:?}", visited);
 
         visited
     }
 
-    /// Checks for missing dependencies of a mod.
-    ///
-    /// Returns a vector of tuples containing the missing dependency name and its remote information.
-    fn check_dependencies(
-        &self,
-        mod_name: &str,
-        mod_registry: &RemoteModRegistry,
-        installed_mod_names: &HashSet<String>,
-    ) -> Vec<(String, RemoteModInfo)> {
-        tracing::info!("Checking dependencies for mod: {}", mod_name);
+    /// Gets the node information for a given mod name.
+    fn get_node_by_key(&self, key: &str) -> Option<&DependencyNode> {
+        self.nodes.get(key)
+    }
+}
 
-        // Collects required dependencies for the mod including the mod itself
-        let dependencies = self.collect_all_dependencies_bfs(mod_name);
+/// Dependency of the mod.
+#[derive(Debug, Default, Deserialize)]
+pub struct Dependency {
+    #[serde(rename = "Name")]
+    name: String,
+}
 
-        tracing::debug!("Installed mods: {:?}", installed_mod_names);
-        tracing::debug!("Dependencies to check: {:?}", dependencies);
-
-        // Filters out missing dependencies
-        let missing_deps = dependencies
-            .difference(installed_mod_names)
-            .collect::<Vec<_>>();
-
-        tracing::info!("Missing mods: {:?}", missing_deps);
-
-        missing_deps
-            .into_iter()
-            .filter_map(|name| {
-                let name = name.clone();
-                if let Some(remote_mod) = mod_registry.get(&name) {
-                    tracing::info!("Mod [{}] is available: {}", name, remote_mod.download_url);
-                    Some((name, remote_mod.to_owned()))
-                } else {
-                    tracing::warn!("Mod [{}] is not available in the registry", name);
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
+impl Dependency {
+    /// Returns the name of the dependency.
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
 #[cfg(test)]
-mod tests_dependency {
+mod tests_graph {
     use super::*;
 
-    impl DependencyInfo {
-        pub fn new(dependencies: Vec<Dependency>) -> Self {
-            Self {
-                dependencies,
-                ..Default::default()
-            }
-        }
-    }
-
-    fn mock_dep(name: &str) -> Dependency {
-        Dependency {
-            name: name.to_string(),
-            ..Default::default()
-        }
-    }
-
-    fn sample_graph() -> DependencyGraph {
-        let mut graph = DependencyGraph::new();
-
-        // A depends on B and C
-        graph.insert(
-            "A".to_string(),
-            DependencyInfo::new(vec![mock_dep("B"), mock_dep("C")]),
-        );
-        // B depends on D
-        graph.insert("B".to_string(), DependencyInfo::new(vec![mock_dep("D")]));
-        // C has no dependencies
-        graph.insert("C".to_string(), DependencyInfo::new(vec![]));
-        // D has no dependencies
-        graph.insert("D".to_string(), DependencyInfo::new(vec![]));
-
-        graph
-    }
-
     #[test]
-    fn test_collect_all_dependencies_bfs() {
-        let graph = sample_graph();
-        let deps = graph.collect_all_dependencies_bfs("A");
-        let expected: std::collections::HashSet<_> =
-            ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(deps, expected);
-    }
+    fn test_bfs_traversal() {
+        let yaml_data = r#"
+DarkMatterJourney:
+  Dependencies:
+    - Name: "MoreLockBlocks"
+      Version: "1.0.0"
+MoreLockBlocks:
+  Dependencies: []
+darkmoonruins:
+  Dependencies:
+    - Name: "AvBdayHelper2021"
+      Version: "1.0.0"
+AvBdayHelper2021:
+  Dependencies:
+    - Name: "ExtendedVariantMode"
+      Version: "1.0.0"
+ExtendedVariantMode:
+  Dependencies: []
+"#;
+        let graph = DependencyGraph::from_slice(yaml_data.as_bytes()).unwrap();
+        let mut start_mods = HashSet::new();
+        start_mods.insert("DarkMatterJourney");
+        start_mods.insert("darkmoonruins");
+        let all_required = graph.bfs_traversal(start_mods);
 
-    #[test]
-    fn test_collect_all_dependencies_bfs_handles_cycles() {
-        let mut graph = sample_graph();
-        // Add a cycle: D depends on A
-        if let Some(d) = graph.get_mut("D") {
-            d.dependencies.push(mock_dep("A"));
-        }
-        let deps = graph.collect_all_dependencies_bfs("A");
-        let expected: std::collections::HashSet<_> =
-            ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(deps, expected); // Should not infinite loop
-    }
+        let expected_mods: HashSet<String> = [
+            "DarkMatterJourney",
+            "MoreLockBlocks",
+            "darkmoonruins",
+            "AvBdayHelper2021",
+            "ExtendedVariantMode",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
-    #[test]
-    fn test_get_mod_info_by_name() {
-        let graph = sample_graph();
-        let info = graph.get_mod_info_by_name("A");
-        assert!(info.is_some());
-        assert!(graph.get_mod_info_by_name("nonexistent").is_none());
-    }
-
-    #[test]
-    fn test_check_dependencies() {
-        let graph = sample_graph();
-        let mut mod_registry = RemoteModRegistry::new(); // Assume this is properly initialized
-        for name in ["A", "B", "C", "D"] {
-            mod_registry.insert(name.to_string(), RemoteModInfo::default());
-        }
-        let installed_mods: HashSet<String> = ["A", "B"].iter().map(|s| s.to_string()).collect();
-
-        let missing_deps = graph.check_dependencies("A", &mod_registry, &installed_mods);
-        assert_eq!(missing_deps.len(), 2); // C and D should be missing
-        assert!(missing_deps.iter().any(|(name, _)| name == "C"));
-        assert!(missing_deps.iter().any(|(name, _)| name == "D"));
+        assert_eq!(all_required, expected_mods);
     }
 }

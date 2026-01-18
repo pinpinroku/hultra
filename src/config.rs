@@ -2,226 +2,184 @@ use std::{
     collections::HashSet,
     env,
     fs::{self, File},
-    io::{BufRead, BufReader},
+    io::{self, BufRead, BufReader},
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
-use anyhow::{Context, Result};
+use tracing::{error, info, warn};
 
-use crate::{
-    cli::Cli,
-    constant::{STEAM_MODS_DIRECTORY_PATH, UPDATER_BLACKLIST_FILE},
-    fileutil,
-};
+use crate::{cli::Mirror, download::DatabaseUrlSet};
 
-/// Config to manage mods.
-#[derive(Debug, Clone)]
-pub struct Config {
-    /// The path to the directory where the mods are stored.
-    directory: PathBuf,
-    /// List of mirror names, separated by commas (e.g., "gb,wegfan,jade,otobot")
-    mirror_preferences: String,
+pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
+pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+const STEAM_MODS_DIRECTORY: &str = ".local/share/Steam/steamapps/common/Celeste/Mods/";
+// NOTE maybe add default path of epic games and itch.io in the future
+
+#[derive(thiserror::Error, Debug)]
+pub enum AppConfigError {
+    #[error("failed to determine user home directory from environment variable")]
+    DetermineHomeDirectory,
 }
 
-impl Config {
-    /// Returns an instance of this type.
-    ///
-    /// If the directory field is `None`, it will fall back to the default.
-    ///
-    /// # Errors
-    ///
-    /// If the user's home directory could not be determined, an error is returned.
-    pub fn new(cli: &Cli) -> Result<Arc<Self>> {
-        let directory = cli
-            .mods_directory
-            .clone()
-            .or_else(get_default_mods_directory)
-            .context(
-                "could not determine home directory location!\
-                please specify the mods directory using --mods-dir",
-            )?;
+/// Application config.
+#[derive(Debug, Clone)]
+pub struct AppConfig {
+    /// A mods directory where all of mod files stored.
+    mods_dir: PathBuf,
 
-        Ok(Arc::new(Self {
-            directory,
-            mirror_preferences: cli.mirror_preferences.to_string(),
-        }))
+    /// A path to the cache file which caches file hashes.
+    cache_db_path: PathBuf,
+
+    /// A type of database URL. (Primary or Mirror)
+    api_url_type: DatabaseUrlSet,
+
+    /// A priority of mirror list for downloading.
+    mirror_priority: Vec<Mirror>,
+}
+
+impl AppConfig {
+    pub fn new(
+        mods_dir: Option<&Path>,
+        use_api_mirror: bool,
+        mirror_priority: Vec<Mirror>,
+    ) -> Result<Self, AppConfigError> {
+        // Determine user home directory
+        let Some(home) = env::home_dir() else {
+            return Err(AppConfigError::DetermineHomeDirectory);
+        };
+
+        let cache_db_path = env::var("XDG_STATE_HOME")
+            .map(|value| value.into())
+            .unwrap_or_else(|_| home.join(".local").join("state"))
+            .join(CARGO_PKG_NAME)
+            .join("checksum")
+            .with_extension("cache");
+
+        let api_url_type = if use_api_mirror {
+            DatabaseUrlSet::Mirror
+        } else {
+            DatabaseUrlSet::Primary
+        };
+
+        let mods_dir = mods_dir
+            .map(|dir| dir.into())
+            .unwrap_or_else(|| home.join(STEAM_MODS_DIRECTORY));
+
+        Ok(Self {
+            mods_dir,
+            cache_db_path,
+            api_url_type,
+            mirror_priority,
+        })
     }
 
-    /// Path to the mods directory
-    pub fn directory(&self) -> &Path {
-        &self.directory
+    pub fn mods_dir(&self) -> &Path {
+        &self.mods_dir
     }
 
-    /// Priority of download mirrors
-    pub fn mirror_preferences(&self) -> &str {
-        &self.mirror_preferences
+    pub fn cache_db_path(&self) -> &Path {
+        &self.cache_db_path
     }
 
-    /// Scans the mods directory and returns a list of all installed mod archive files.
-    ///
-    /// # Errors
-    ///
-    /// If the mods directory does not exist or cannot be read, an error is returned.
-    pub fn find_installed_mod_archives(&self) -> Result<Vec<PathBuf>> {
-        let debug_filename = fileutil::replace_home_dir_with_tilde(&self.directory);
-        if !self.directory.exists() {
-            anyhow::bail!("The mods directory does not exist: {}", debug_filename);
-        }
+    pub fn url_set(&self) -> &DatabaseUrlSet {
+        &self.api_url_type
+    }
 
-        tracing::debug!("Scanning the installed mod archives in {}", debug_filename);
+    pub fn mirror_priority(&self) -> &Vec<Mirror> {
+        &self.mirror_priority
+    }
 
-        let directory_entries = fs::read_dir(&self.directory)
-            .map_err(|e| anyhow::anyhow!("Failed to read mods directory: {}", e))?;
-        let mod_archives = directory_entries
-            .flatten() // eliminates unreadable directory entries
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.is_file()
-                    && path
-                        .extension()
-                        .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    /// Returns a list of archive path by scanning mods directory.
+    pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
+        info!("scan mods directory for archives");
+
+        let found_paths: Vec<PathBuf> = fs::read_dir(&self.mods_dir)
+            .inspect_err(|err| error!(?err, "failed to read mods directory"))?
+            .filter_map(|res| {
+                res.inspect_err(|err| warn!(?err, "failed to read entry"))
+                    .map(|entry| entry.path())
+                    .ok() // Some(PathBuf)
             })
-            .collect::<Vec<PathBuf>>();
+            .filter(|path| is_mod_archive(path))
+            .collect();
 
-        tracing::info!("Found local mod files: {}", mod_archives.len());
+        info!(found_archives = found_paths.len());
 
-        Ok(mod_archives)
+        Ok(found_paths)
     }
 
-    /// Returns a set of file paths if any are found in the `updaterblacklist.txt`.
-    ///
-    /// Returns `None` if the file is not found in the given mods directory.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the file cannot be opened.
-    pub fn read_updater_blacklist(&self) -> Result<Option<HashSet<PathBuf>>> {
-        tracing::info!("Checking for the blacklisted mods...");
-        let path = self.directory.join(UPDATER_BLACKLIST_FILE);
+    const UPDATER_BLACKLIST_FILE: &str = "updaterblacklist.txt";
 
-        tracing::info!(
-            "Reading updater blacklist from '{}'",
-            fileutil::replace_home_dir_with_tilde(&path)
-        );
+    /// Returns paths of blacklisted mod by reading `updaterblacklist.txt`.
+    pub fn read_updater_blacklist(&self) -> io::Result<HashSet<String>> {
+        info!("reading updater blacklist");
 
-        if !path.exists() {
-            tracing::info!("The updater blacklist file does not exist.");
-            return Ok(None);
-        }
+        let path = self.mods_dir.join(Self::UPDATER_BLACKLIST_FILE);
+        let mut blacklist = HashSet::new();
 
-        let file = File::open(&path)?;
-        let reader = BufReader::new(file);
+        let mut file = match File::open(&path) {
+            Ok(value) => value,
+            // NOTE the file might be missing but it's ok, just returns empty list
+            Err(err) if err.kind().eq(&io::ErrorKind::NotFound) => return Ok(blacklist),
+            Err(err) => {
+                error!(?err, "failed to open blacklist file");
+                return Err(err);
+            }
+        };
 
-        // NOTE: Stores the results in HashSet for O(1) lookups
-        let mut filenames: HashSet<PathBuf> = HashSet::new();
-        for (line_number, line_result) in reader.lines().enumerate() {
-            match line_result {
-                Ok(line) => {
-                    let trimmed = line.trim();
-                    if trimmed.is_empty() || trimmed.starts_with('#') {
-                        tracing::debug!("Skipping line {}: '{}'", line_number + 1, trimmed);
-                        continue;
-                    }
-                    tracing::info!("Blacklist entry: {:?}", trimmed);
+        // NOTE default 8KiB buffer is too large to read simple text file with few lines
+        let reader = BufReader::with_capacity(1024, &mut file);
 
-                    // NOTE: It is easier to compare them as full paths.
-                    filenames.insert(self.directory.join(trimmed));
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to read line {} in {}: {}",
-                        line_number + 1,
-                        path.display(),
-                        e
-                    );
-                    continue;
-                }
+        for line in reader.lines() {
+            let line = line.inspect_err(|err| error!(?err, "failed to read line in blacklist"))?;
+            let line = line.trim();
+            if !line.starts_with('#') && !line.is_empty() {
+                info!("'{}' will be excluded from updates", line);
+                blacklist.insert(line.to_string());
             }
         }
 
-        tracing::debug!("Blacklist contains {} entries.", filenames.len());
-
-        Ok(Some(filenames))
+        Ok(blacklist)
     }
 }
 
-/// Returns the path to the mods directory.
-///
-/// If the user's home directory could not be determined, it returns None.
-fn get_default_mods_directory() -> Option<PathBuf> {
-    env::home_dir().map(|home_path| home_path.join(STEAM_MODS_DIRECTORY_PATH))
+fn is_mod_archive(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
-    use std::io::Write;
-    use tempfile::{TempDir, tempdir};
 
-    /// Helper to create a Config with a temp mods directory.
-    fn config_with_temp_dir() -> (Config, TempDir) {
-        let temp_dir = tempdir().unwrap();
-        let config = Config {
-            directory: temp_dir.path().to_path_buf(),
-            mirror_preferences: String::new(),
-        };
-        (config, temp_dir)
-    }
+    use std::fs::File;
+
+    use tempfile::TempDir;
 
     #[test]
-    fn test_find_installed_mod_archives_success() {
-        let (config, temp_dir) = config_with_temp_dir();
-        let file_path = temp_dir.path().join("test.zip");
-        fs::File::create(&file_path).unwrap();
+    fn test_is_mod_archive() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
 
-        let result = config.find_installed_mod_archives();
+        let valid_target = temp_dir.path().join("SpeedrunTool.zip");
+        let valid_target_upper = temp_dir.path().join("SPEEDRUNTOOL.ZIP");
+        let blacklist_file = temp_dir.path().join("updaterblacklist.txt");
+        let cache_dir = temp_dir.path().join("Cache/");
+        let custom_mod = temp_dir.path().join("LocalCustomMod/");
 
-        assert!(result.is_ok());
-        let archives = result.unwrap();
-        assert_eq!(archives.len(), 1);
-        assert_eq!(archives[0], file_path);
-    }
+        File::create_new(&valid_target)?;
+        File::create_new(&valid_target_upper)?;
+        File::create_new(&blacklist_file)?;
+        fs::create_dir(&cache_dir)?;
+        fs::create_dir(&custom_mod)?;
 
-    #[test]
-    fn test_find_installed_mod_archives_missing_directory() {
-        let nonexistent_path = Path::new("nonexistent_directory");
-        let config = Config {
-            directory: nonexistent_path.to_path_buf(),
-            mirror_preferences: String::new(),
-        };
+        assert!(is_mod_archive(&valid_target));
+        assert!(is_mod_archive(&valid_target_upper));
+        assert!(!is_mod_archive(&blacklist_file));
+        assert!(!is_mod_archive(&cache_dir));
+        assert!(!is_mod_archive(&custom_mod));
 
-        let result = config.find_installed_mod_archives();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_read_updater_blacklist_success() {
-        let (config, temp_dir) = config_with_temp_dir();
-        let blacklist_file = temp_dir.path().join(UPDATER_BLACKLIST_FILE);
-
-        let mut file = File::create(&blacklist_file).unwrap();
-        writeln!(file, "blacklisted_mod_1.zip").unwrap();
-        writeln!(file, "blacklisted_mod_2.zip").unwrap();
-
-        let result = config.read_updater_blacklist();
-        assert!(result.is_ok());
-
-        let optional_blacklist = result.unwrap();
-        assert!(optional_blacklist.is_some());
-
-        let blacklist = optional_blacklist.unwrap();
-        assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_1.zip")));
-        assert!(blacklist.contains(&temp_dir.path().join("blacklisted_mod_2.zip")));
-    }
-
-    #[test]
-    fn test_read_updater_blacklist_missing() {
-        let (config, _) = config_with_temp_dir();
-        let result = config.read_updater_blacklist();
-        assert!(result.is_ok());
-
-        let optional_blacklist = result.unwrap();
-        assert!(optional_blacklist.is_none());
+        Ok(())
     }
 }

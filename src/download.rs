@@ -1,291 +1,392 @@
-use std::{borrow::Cow, fs, io::Write, path::Path, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use anyhow::Result;
+use bytes::Bytes;
 use futures_util::StreamExt;
-use indicatif::{MultiProgress, ProgressBar};
-use reqwest::{Client, Response};
-use tempfile::NamedTempFile;
-use tokio::sync::Semaphore;
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use reqwest::Client;
+use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
+use tracing::{error, info, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{config::Config, download, fileutil, mod_registry::RemoteModInfo};
+use crate::{config::AppConfig, mirrorlist, registry::RemoteMod};
 
-mod util;
+/// A kind of database.
+#[derive(Debug, Clone, Copy)]
+pub enum DatabaseKind {
+    Update,
+    DependencyGraph,
+}
 
-/// Downloads a mod file, returns the file path.
-async fn download_mod(
-    client: &Client,
-    mod_name: &str,
-    mirror_urls: &[Cow<'_, str>],
-    expected_hashes: &[String],
-    download_dir: &Path,
-    pb: &ProgressBar,
-) -> Result<()> {
-    tracing::debug!("Original mod name: {}", mod_name);
-    let sanitized_name = util::sanitize(mod_name);
+/// A type of database URL set.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum DatabaseUrlSet {
+    #[default]
+    Primary,
+    Mirror,
+}
 
-    tracing::debug!("Sanitized name: {}", sanitized_name);
-    let filename = format!("{}.zip", &sanitized_name);
-
-    let install_destination = download_dir.join(&filename);
-    tracing::debug!(
-        "Install destination: {}",
-        fileutil::replace_home_dir_with_tilde(&install_destination)
-    );
-
-    let msg = pb_style::truncate_msg(mod_name);
-
-    for url in mirror_urls {
-        let response = client.get(url.as_ref()).send().await?;
-        if response.status().is_success() {
-            pb.set_message(msg.to_string());
-            match download_and_write(response, &install_destination, expected_hashes, pb).await {
-                Ok(_) => {
-                    pb.finish_with_message(format!("🍓 {mod_name} [{filename}]"));
-                    return Ok(());
-                }
-                Err(e) => {
-                    tracing::error!("{}", e);
-                    pb.set_message("Checksum verification failed, trying another mirror");
-                    continue; // to the next mirror
-                }
+impl DatabaseUrlSet {
+    #[inline]
+    pub fn get_url(self, kind: DatabaseKind) -> &'static str {
+        match (self, kind) {
+            (Self::Primary, DatabaseKind::Update) => {
+                "https://maddie480.ovh/celeste/everest_update.yaml"
             }
-        } else {
-            tracing::warn!("Status: {}", response.status());
-            tracing::warn!("Download failed, trying another mirror");
-            pb.set_message("Download failed, trying another mirror");
-            continue; // to the next mirror
+            (Self::Primary, DatabaseKind::DependencyGraph) => {
+                "https://maddie480.ovh/celeste/mod_dependency_graph.yaml"
+            }
+            (Self::Mirror, DatabaseKind::Update) => {
+                "https://everestapi.github.io/updatermirror/everest_update.yaml"
+            }
+            (Self::Mirror, DatabaseKind::DependencyGraph) => {
+                "https://everestapi.github.io/updatermirror/mod_dependency_graph.yaml"
+            }
         }
     }
-    pb.finish_and_clear();
-    anyhow::bail!("Failed to download the mod: {}", mod_name)
 }
 
-/// Writes all bytes to the temporary file, verifies the checksum when the write is complete, and then moves them to the destination.
-async fn download_and_write(
-    response: Response,
-    install_destination: &Path,
-    expected_hashes: &[String],
-    pb: &ProgressBar,
-) -> Result<()> {
-    let debug_filename = fileutil::replace_home_dir_with_tilde(install_destination);
-    let mut temp_file = NamedTempFile::new()?;
-
-    let mut stream = response.bytes_stream();
-    let mut hasher = Xxh64::new(0);
-
-    tracing::info!("Verifying checksum for '{}'", debug_filename);
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk?;
-        temp_file.write_all(&chunk)?;
-        hasher.update(&chunk);
-        pb.inc(chunk.len() as u64);
-    }
-    let computed_hash = hasher.digest();
-    let hash_str = format!("{computed_hash:016x}");
-
-    tracing::debug!("computed hash: {:?}", hash_str,);
-    tracing::debug!("expected hash: {:?}", expected_hashes);
-    tracing::info!("Checksum verification passed for '{}'", debug_filename);
-
-    if !expected_hashes.contains(&hash_str) {
-        anyhow::bail!(
-            "Checksum verification failed for '{}': computed hash '{}' does not match expected hashes: {:?}",
-            debug_filename,
-            hash_str,
-            expected_hashes
-        );
-        // NOTE: The temp file will be removed automatically when they goes out scope
-        // or when the program exits. So we don't need to remove it manually.
-    }
-
-    tracing::info!("Checksum verified.");
-
-    if install_destination.exists() {
-        tracing::debug!(
-            "'{}' is already exists. Trying to remove it.",
-            debug_filename
-        );
-        fs::remove_file(install_destination)?;
-        tracing::info!("The previous version has been deleted.");
-    }
-
-    // NOTE: The permissions are set to 0600 because of copy operation.
-    // This is a restriction in the linux system which uses tempfs as external mount point.
-    fs::copy(temp_file, install_destination)?;
-    tracing::info!("The file saved in '{}'", debug_filename);
-
-    Ok(())
+#[derive(thiserror::Error, Debug)]
+pub enum DownloadError {
+    #[error(transparent)]
+    Network(#[from] reqwest::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(
+        "failed to verify checksum for {file_path:?}: computed {computed}, expected {expected:?}"
+    )]
+    FileHashMissMatch {
+        file_path: PathBuf,
+        computed: u64,
+        expected: Vec<u64>,
+    },
 }
 
-/// Downloads mods concurrently with a limit on the number of concurrent downloads.
-///
-/// # Errors
-///
-/// Returns an error if any of the downloads fail or if there are issues with the tasks.
-pub async fn download_mods_concurrently(
-    client: &Client,
-    mods: &[(String, RemoteModInfo)],
-    config: Arc<Config>,
-    semaphore: &Arc<Semaphore>,
-) -> Result<()> {
-    tracing::debug!(
-        "Mods to download: {:?}",
-        mods.iter().map(|(n, _)| n).collect::<Vec<_>>()
-    );
+#[derive(Debug, Clone)]
+pub struct Downloader {
+    client: Client,
+    semaphore: Arc<Semaphore>,
+}
 
-    if mods.is_empty() {
-        tracing::info!("No mods to download");
-        return Ok(());
+impl Downloader {
+    pub fn new(timeout: u64, limit: usize) -> Self {
+        Self {
+            client: Client::builder()
+                .https_only(true)
+                .gzip(true)
+                .timeout(Duration::from_secs(timeout))
+                .build()
+                .inspect_err(|err| warn!(?err, "failed to build client, fallbacks to default"))
+                .unwrap_or_default(),
+            semaphore: Arc::new(Semaphore::new(limit)),
+        }
     }
 
-    let mp = MultiProgress::new();
+    /// Fetches a database from the specified URL set and kind.
+    #[instrument(skip(self, config))]
+    pub async fn fetch_database(
+        &self,
+        kind: DatabaseKind,
+        config: &AppConfig,
+    ) -> Result<Bytes, reqwest::Error> {
+        info!("starting to fetch");
+        let db_url = config.url_set().get_url(kind);
+        let response = self
+            .client
+            .get(db_url)
+            .send()
+            .await
+            .inspect_err(|err| error!(?err, "failed to receive response"))?
+            .error_for_status()
+            .inspect_err(|err| error!(?err, "got bad status"))?;
+        let bytes = response
+            .bytes()
+            .await
+            .inspect_err(|err| error!(?err, "failed to get full response body as bytes"))?;
+        info!("successfully fetched");
+        // HACK we don't need Bytes if we deserialize response directly at here
+        // HACK to inmplement that, we need to introduce trait object ApiResponse for ModRegistry and DependencyGraph
+        Ok(bytes)
+    }
 
-    let mut handles = Vec::with_capacity(mods.len());
+    /// Download multiple files concurrently with a limit on the number of simultaneous downloads.
+    #[instrument(skip_all)]
+    pub async fn download_files(&self, mods: HashMap<String, RemoteMod>, config: &AppConfig) {
+        if mods.is_empty() {
+            info!("no mods to download");
+            return;
+        }
 
-    for (name, remote_mod) in mods {
-        let semaphore = semaphore.clone();
-        let config = config.clone();
-        let client = client.clone();
-        let mp = mp.clone();
-        let name = name.clone();
-        let remote_mod = remote_mod.clone();
+        info!("starting to download files");
 
-        let handle = tokio::spawn(async move {
-            let _permit = semaphore.acquire().await?;
-            let pb = mp.add(ProgressBar::new(remote_mod.file_size));
-            pb.set_style(pb_style::new());
-            let msg = pb_style::truncate_msg(&name);
-            pb.set_message(msg.to_string());
+        let mp = MultiProgress::new();
 
-            let mirror_urls = mirror_list::get_all_mirror_urls(
-                &remote_mod.download_url,
-                config.mirror_preferences(),
-            );
+        let handles: Vec<_> = mods
+            .iter()
+            .map(|(name, remote_mod)| {
+                let client = self.client.clone();
+                let semaphore = self.semaphore.clone();
+                let pb = mp.add(create_download_progress_bar(name));
 
-            download::download_mod(
-                &client,
-                &name,
-                &mirror_urls,
-                &remote_mod.checksums,
-                config.directory(),
-                &pb,
+                let mod_name = name.to_owned();
+                let mod_info = remote_mod.clone();
+
+                let config = config.clone();
+
+                tokio::spawn(async move {
+                    let _permit = semaphore.acquire().await.unwrap();
+                    Self::retry_download_with_mirrros(&client, &mod_name, &mod_info, &pb, &config)
+                        .await;
+                })
+            })
+            .collect();
+
+        // Wait for all downloads to complete
+        for handle in handles {
+            if let Err(err) = handle.await {
+                error!(?err)
+            }
+        }
+
+        info!("successfully downloaded all mods")
+    }
+
+    /// Retry downloading a file from multiple mirrors until success or all mirrors are exhausted.
+    #[instrument(skip(client, pb, config))]
+    async fn retry_download_with_mirrros(
+        client: &Client,
+        mod_name: &str,
+        mod_info: &RemoteMod,
+        pb: &ProgressBar,
+        config: &AppConfig,
+    ) {
+        let mut success = false;
+
+        let clean_name = util::sanitize_stem(mod_name).await;
+        let file_path = config.mods_dir().join(clean_name).with_extension("zip");
+
+        let mirror_urls =
+            mirrorlist::generate_mirrors(&mod_info.download_url, config.mirror_priority()).await;
+
+        for url in mirror_urls {
+            match Self::download_file(
+                client,
+                &url,
+                mod_info.file_size,
+                &mod_info.checksums,
+                &file_path,
+                pb,
             )
             .await
-        });
-        handles.push(handle);
-    }
+            {
+                Ok(_) => {
+                    info!("download completed");
+                    pb.finish_with_message(format!("{} 🍓", mod_name));
+                    success = true;
+                    break;
+                }
+                Err(err) => {
+                    warn!(?err, "failed to download, trying another mirror");
+                    pb.set_message(format!(
+                        "{}: Failed to download, trying another mirror.",
+                        mod_name
+                    ));
+                    pb.reset();
+                }
+            }
+        }
 
-    let mut errors = Vec::with_capacity(handles.len());
-    for handle in handles {
-        match handle.await {
-            Ok(Ok(())) => {}
-            Ok(Err(err)) => {
-                tracing::error!("Failed to download the mod: {}", err);
-                errors.push(err);
-            }
-            Err(err) => {
-                tracing::error!("Failed to join tasks: {}", err);
-                errors.push(err.into());
-            }
+        // indicates failure for all mirrors
+        if !success {
+            error!(
+                "failed to download '{}' after trying all mirrors.",
+                mod_name
+            );
+            pb.finish_with_message(format!("{} ❌ Failed", mod_name));
         }
     }
 
-    if errors.is_empty() {
-        tracing::info!("Successfully download the mods.")
-    } else {
-        for (i, error) in errors.iter().enumerate() {
-            tracing::error!("Error {}: {}", i + 1, error)
-        }
-        anyhow::bail!("Failed to download the mods: {:?}", errors)
-    }
+    /// Downloads a single file while hashing the file.
+    #[instrument(skip(client, expected_hashes, pb))]
+    async fn download_file(
+        client: &Client,
+        url: &str,
+        file_size: u64,
+        expected_hashes: &[u64],
+        file_path: &Path,
+        pb: &ProgressBar,
+    ) -> Result<(), DownloadError> {
+        info!("starting to download mod");
+        let response = client
+            .get(url)
+            .send()
+            .await
+            .inspect_err(|err| error!(?err))?
+            .error_for_status()
+            .inspect_err(|err| error!(?err))?;
 
-    Ok(())
+        let total_size = response.content_length().unwrap_or(file_size);
+        pb.set_length(total_size);
+        pb.reset();
+
+        // NOTE `tmpfs` vs `in-memory buffer`: It doesn't matter for modern linux system
+        let mut buffer = Vec::with_capacity(total_size as usize);
+
+        let mut hasher = Xxh64::new(0);
+        let mut stream = response.bytes_stream();
+
+        info!("starting to retrieve response body");
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.inspect_err(|err| error!(?err))?;
+            hasher.update(&chunk);
+            buffer.extend_from_slice(&chunk);
+            pb.inc(chunk.len() as u64);
+        }
+
+        let computed_hash = hasher.digest();
+        if !expected_hashes.contains(&computed_hash) {
+            return Err(DownloadError::FileHashMissMatch {
+                file_path: file_path.to_path_buf(),
+                computed: computed_hash,
+                expected: expected_hashes.to_vec(),
+            });
+        }
+        info!(computed=computed_hash, expected=?expected_hashes, "file hash matched");
+
+        // NOTE BufWriter has no significant performance improvement here
+        let mut file = fs::File::create(file_path)
+            .await
+            .inspect_err(|err| error!(?err))?;
+        file.write_all(&buffer).await?;
+        file.flush().await?;
+
+        info!("successfully downloaded and saved");
+        // HACK it'd be better to return `computed_hash`, `file_path`, `mtime`, and `size`
+
+        Ok(())
+    }
 }
 
-/// Style configurations of a progress bar.
-pub mod pb_style {
-    use indicatif::{ProgressBar, ProgressStyle};
-    use std::borrow::Cow;
-
-    const MAX_MSG_LENGTH: usize = 40;
-    const ELLIPSIS: &str = "...";
-
-    /// Builds a ProgressBar style, fallbacks to the default.
-    pub fn new() -> ProgressStyle {
+/// Create a progress bar for downloading a file.
+fn create_download_progress_bar(mod_name: &str) -> ProgressBar {
+    let pb = ProgressBar::hidden();
+    pb.set_style(
         ProgressStyle::with_template(
-        "{wide_msg} {total_bytes:>10.1.cyan/blue} {bytes_per_sec:>11.2} {elapsed_precise:>8} [{bar:>40}] {percent:>3}%",
-    )
-    .unwrap_or_else(|_| ProgressStyle::default_bar())
-    .progress_chars("#>-")
-    }
+            "{wide_msg} {total_bytes:>10.1.cyan/blue} {bytes_per_sec:>11.2} {elapsed_precise:>8} [{bar:>40}] {percent:>3}%"
+        )
+        .unwrap_or_else(|_| ProgressStyle::default_bar())
+        .progress_chars("#>-")
+    );
+    pb.set_message(mod_name.to_string());
+    pb
+}
 
-    /// Truncates a given string and adds an ellipsis at the end if the length exceeds `MAX_MSG_LENGTH`.
-    pub fn truncate_msg(msg: &str) -> Cow<'_, str> {
-        if msg.len() > MAX_MSG_LENGTH {
-            Cow::Owned(format!(
-                "{}{}",
-                &msg[..MAX_MSG_LENGTH - ELLIPSIS.len()],
-                ELLIPSIS
-            ))
-        } else {
-            Cow::Borrowed(msg)
-        }
-    }
+/// Create a spinner progress bar for fetching online database.
+pub fn create_spinner() -> ProgressBar {
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100));
+    spinner.set_style(
+        ProgressStyle::with_template("{spinner:.bold} {msg}")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    spinner.set_message("fetching databases...");
+    spinner
+}
 
-    pub fn create_spinner() -> ProgressBar {
-        use indicatif::ProgressStyle;
-        use std::time::Duration;
+mod util {
+    /// Sanitizes a mod name as file stem for Unix file systems.
+    ///
+    /// # Rules
+    /// - Trims leading/trailing whitespace.
+    /// - Removes control characters.
+    /// - Replaces characters not in the whitelist `[A-Za-z0-9 -_'()]` with `_`.
+    /// - Truncates the result to 255 bytes.
+    ///
+    /// # Panics
+    /// All characters in given string must be ASCII, otherwise it will panic.
+    ///
+    /// # Notes
+    /// Mod database only allows ASCII characters for the mod name. So the name should always valid UTF-8 and ASCII.
+    pub async fn sanitize_stem(input: &str) -> String {
+        let trimmed = input.trim();
 
-        let spinner = ProgressBar::new_spinner();
-        spinner.enable_steady_tick(Duration::from_millis(100));
-        spinner.set_style(
-            ProgressStyle::with_template("{spinner:.bold} {msg}")
-                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        assert!(
+            trimmed.is_ascii(),
+            "Input string should contains only ASCII characters"
         );
-        spinner.set_message("Fetching online database...");
-        spinner
+
+        let sanitized_bytes = trimmed
+            .bytes()
+            .filter(|c| !c.is_ascii_control())
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || is_allowed_byte(c) {
+                    c
+                } else {
+                    b'_'
+                }
+            })
+            .take(u8::MAX as usize)
+            .collect();
+
+        // NOTE This is safe because `input` is always valid UFT-8 and ASCII
+        unsafe { String::from_utf8_unchecked(sanitized_bytes) }
+    }
+
+    /// Checks if a byte is allowed in the filename stem.
+    #[inline(always)]
+    fn is_allowed_byte(b: u8) -> bool {
+        matches!(
+            b,
+            b'A'..=b'Z' |            // Uppercase
+            b'a'..=b'z' |            // Lowercase
+            b'0'..=b'9' |            // Digits
+            b' ' | b'-' | b'_' |     // Separators
+            b'\'' | b'(' | b')' |    // Special allowed chars
+            b'+' | b','              // Special allowed chars 2 (common in mods name)
+        )
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
 
-        #[test]
-        fn test_truncate_msg_no_truncation() {
-            let msg = "Short message";
-            // The message length is less than MAX_MSG_LENGTH.
-            let result = truncate_msg(msg);
-            assert_eq!(result, msg);
+        #[tokio::test]
+        async fn test_no_change() {
+            let input = "valid-filename_123(final)";
+            let result = sanitize_stem(input).await;
+            assert_eq!(result, "valid-filename_123(final)");
         }
 
-        #[test]
-        fn test_truncate_msg_exact_length() {
-            let msg = "a".repeat(MAX_MSG_LENGTH);
-            // If the message length is exactly MAX_MSG_LENGTH,
-            // then it should not be truncated.
-            let result = truncate_msg(&msg);
-            assert_eq!(result, msg);
+        #[tokio::test]
+        async fn test_replace_invalid_chars() {
+            let input = "file!?.txt";
+            let result = sanitize_stem(input).await;
+            assert_eq!(result, "file___txt");
         }
 
-        #[test]
-        fn test_truncate_msg_with_truncation() {
-            let original = "Long Name Helper by Helen, Helen's Helper, hELPER"; // 50 chars
-            let result = truncate_msg(original);
-            // Expected: first (MAX_MSG_LENGTH - ELLIPSIS.len()) characters plus ELLIPSIS.
-            let expected = format!(
-                "{}{}",
-                &original[..(MAX_MSG_LENGTH - ELLIPSIS.len())],
-                ELLIPSIS
-            );
-            assert_eq!(result, expected);
+        #[tokio::test]
+        async fn test_remove_control_chars() {
+            // Control chars should be removed, not replaced
+            let input = "file\0name\n";
+            let result = sanitize_stem(input).await;
+            assert_eq!(result, "filename");
         }
 
-        #[test]
-        fn test_truncate_msg_empty_string() {
-            let msg = "";
-            let result = truncate_msg(msg);
-            assert_eq!(result, msg);
+        #[tokio::test]
+        async fn test_mixed_whitelist() {
+            // Ensure added whitelist chars ' and () are respected
+            let input = "  Spooooky's Asset Pack (WIP)  ";
+            let result = sanitize_stem(input).await;
+            assert_eq!(result, "Spooooky's Asset Pack (WIP)");
+        }
+
+        #[tokio::test]
+        #[should_panic(expected = "Input string should contains only ASCII characters")]
+        async fn test_panic_on_non_ascii() {
+            sanitize_stem("Error_日本語").await;
         }
     }
 }
