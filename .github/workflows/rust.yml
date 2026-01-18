@@ -41,14 +41,8 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked
 
-      - name: Package binary
-        run: |
-          cd target/release
-          BINARY_NAME=$(find . -maxdepth 1 -type f -executable -not -name ".*" -printf "%f\n")
-          tar -czf ../../${{ github.event.repository.name }}-linux.tar.gz $BINARY_NAME
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ github.event.repository.name }}-linux.tar.gz
+          files: target/release/${{ github.event.repository.name }}
           generate_release_notes: true
