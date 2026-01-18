@@ -1,13 +1,13 @@
 [package]
 name = "everest-mod-cli"
-version = "3.3.2"
+version = "3.3.3"
 edition = "2024"
 description = "A simple cli tool to manage mods for Celeste."
 authors = ["pinpinroku <pinpinroku11600@tutanota.com>"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/pinpinroku/everest-mod-cli"
-rust-version = "1.91"
+rust-version = "1.92"
 
 [dependencies]
 anyhow = "1.0.98"
