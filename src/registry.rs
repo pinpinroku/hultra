@@ -106,17 +106,7 @@ impl RemoteMod {
 mod tests_registry {
     use super::*;
 
-    const YAML_BYTES: &[u8; 666] = br#"
-CSRC Frog:
-  GameBananaType: Tool
-  Version: 1.0.1
-  LastUpdate: 1728796397
-  Size: 508
-  GameBananaId: 15836
-  GameBananaFileId: 1298450
-  xxHash:
-  - f437bf0515368130
-  URL: https://gamebanana.com/mmdl/1298450
+    const YAML_BYTES: &[u8; 670] = br#"
 puppyposting:
   GameBananaType: Mod
   Version: 1.1.0
@@ -127,50 +117,31 @@ puppyposting:
   xxHash:
   - 7f4d96733b93c52c
   URL: https://gamebanana.com/mmdl/1520739
-viewpoint-dreampoint-point:
+BreezeContest:
   GameBananaType: Mod
-  Version: '1.0'
-  LastUpdate: 1721585539
-  Size: 7196727
-  GameBananaId: 529652
-  GameBananaFileId: 1241237
+  Version: 1.1.2
+  LastUpdate: 1760568856
+  Size: 234447819
+  GameBananaId: 554453
+  GameBananaFileId: 1539722
   xxHash:
-  - 5aaf7ee3550f2d70
-  URL: https://gamebanana.com/mmdl/1241237
+  - e4d62f4733631949
+  URL: https://gamebanana.com/mmdl/1539722
+BreezeContestAudio:
+  GameBananaType: Mod
+  Version: 1.0.1
+  LastUpdate: 1731192314
+  Size: 707675460
+  GameBananaId: 554453
+  GameBananaFileId: 1318934
+  xxHash:
+  - de98a344ea44aea4
+  URL: https://gamebanana.com/mmdl/1318934
 "#;
 
     fn load_registry_from_yaml() -> ModRegistry {
         let mods = serde_yaml_ng::from_slice(YAML_BYTES).expect("YAML format should be parsed");
         ModRegistry::new(mods)
-    }
-
-    #[test]
-    fn test_mod_registry_new_and_inverted_index() {
-        let mut mods = HashMap::new();
-        mods.insert(
-            "SpeedrunTool".to_string(),
-            RemoteMod {
-                gamebanana_id: 42,
-                ..Default::default()
-            },
-        );
-        mods.insert(
-            "SkinModHelper".to_string(),
-            RemoteMod {
-                gamebanana_id: 42,
-                ..Default::default()
-            },
-        );
-        let registry = ModRegistry::new(mods);
-
-        assert!(
-            registry
-                .id_to_names
-                .get(&42)
-                .is_some_and(|value| value.len() == 2
-                    && value.contains(&"SpeedrunTool".to_string())
-                    && value.contains(&"SkinModHelper".to_string()))
-        );
     }
 
     #[test]
@@ -190,5 +161,16 @@ viewpoint-dreampoint-point:
         let names = registry.get_names_by_ids(&[619550]);
         assert!(!names.is_empty());
         assert!(names.contains("puppyposting"))
+    }
+
+    #[test]
+    fn test_get_mod_names_by_id_multiple() {
+        let registry = load_registry_from_yaml();
+        let result = registry.get_names_by_ids(&[554453]);
+        assert!(
+            result.len() == 2
+                && result.contains("BreezeContest")
+                && result.contains("BreezeContestAudio")
+        );
     }
 }
