@@ -129,7 +129,7 @@ By default, this tool buffers downloads in memory to ensure:
 1. **Performance:** Avoiding slow I/O overhead on filesystems, especially when `tmpfs` and `zram` are available.
 2. **Security/Privacy:** Minimizing the trace of sensitive data on physical storage.
 
-In the worst-case scenario (specific file combinations; especially audio files), memory usage can peak at ~2.2 GiB. If your environment is memory-constrained, please use the `--jobs 1` (or `-j 1`) flag to reduce the memory footprint.
+In the worst-case scenario (specific file combinations; especially audio files), memory usage can peak at ~2.2 GiB. If you want to keep memory usage low, please use the `--jobs 1` (or `-j 1`) flag to reduce the memory footprint.
 
 ### High-Impact Files (Examples)
 
