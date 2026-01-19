@@ -187,8 +187,8 @@ viewpoint-dreampoint-point:
     #[test]
     fn test_get_mod_names_by_id() {
         let registry = load_registry_from_yaml();
-        let known_id = registry.id_to_names.keys().next().cloned().unwrap();
-        let names_opt = registry.get_names_by_ids(&[known_id]);
-        assert!(!names_opt.is_empty());
+        let names = registry.get_names_by_ids(&[619550]);
+        assert!(!names.is_empty());
+        assert!(names.contains("puppyposting"))
     }
 }
