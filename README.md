@@ -15,14 +15,10 @@ A commandline installer and updater for Celeste mods.
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
-  - [list](#list)
-  - [show](#show)
-  - [install](#install)
-  - [update](#update)
+- [Options](#options)
+- [Technical Details](#technical-details)
 - [Motivation](#motivation)
-- [Notes](#notes)
 - [Bug Reports](#bug-reports)
-- [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
 - [Contact](#contact)
@@ -117,6 +113,33 @@ You can also restrict the fallback servers by providing a comma-separated list (
 ### `--use-api-mirror`
 
 Enable this option to fetch the database from a GitHub Pages mirror. This may result in substantially faster processing time for installation and updates, especially for users experiencing connectivity issues with the primary source.
+
+### `-j, --jobs` \<NUM\>
+
+Limit concurrent downloads by specifying number from 1 to 6. Default to 4.
+
+> Caution: See [Technical Details](#technical-details) section below about RAM usage.
+---
+
+## Technical Details
+
+**Memory Usage & Privacy**
+By default, this tool buffers downloads in memory to ensure:
+1. **Performance:** Avoiding slow I/O overhead on filesystems, especially when `tmpfs` and `zram` are available.
+2. **Security/Privacy:** Minimizing the trace of sensitive data on physical storage.
+
+In the worst-case scenario (specific file combinations; especially audio files), memory usage can peak at ~2.2 GiB. If your environment is memory-constrained, please use the `--jobs 1` (or `-j 1`) flag to reduce the memory footprint.
+
+### High-Impact Files (Examples)
+
+The following mods contain large assets that significantly increase memory pressure:
+
+* **Breeze Contest (Audio):** ~707 MB
+* **The Celeste Parable:** ~523 MB
+* **Spring Collab 2020 (Audio):** ~513 MB
+* **Secret Santa Collab 2023 (Audio):** ~489 MB
+* **Strawberry Jam (Audio):** 3 files, ~300 MB each
+* **Secret Santa Collab 2024 (Audio):** 3 files, 450 MB + 350 MB (x2)
 
 ---
 
