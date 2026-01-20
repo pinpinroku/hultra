@@ -19,18 +19,18 @@ enum LogError {
 
 pub fn set_up_logger(verbose: bool) {
     let log_level = if verbose {
-        format!("{}=debug", APP_NAME)
+        tracing::Level::DEBUG
     } else {
-        format!("{}=info", APP_NAME)
+        tracing::Level::INFO
     };
 
     match create_log_file() {
         Ok(writer) => tracing_subscriber::fmt()
             .compact()
             .with_span_events(FmtSpan::CLOSE)
-            .with_env_filter(log_level)
-            .with_file(true)
-            .with_line_number(true)
+            .with_max_level(log_level)
+            .with_file(false)
+            .with_line_number(false)
             .with_thread_ids(true)
             .with_target(false)
             .with_writer(writer)
@@ -42,7 +42,7 @@ pub fn set_up_logger(verbose: bool) {
             tracing_subscriber::fmt()
                 .compact()
                 .with_span_events(FmtSpan::CLOSE)
-                .with_env_filter(log_level)
+                .with_max_level(log_level)
                 .with_file(false)
                 .with_line_number(false)
                 .with_thread_ids(false)
