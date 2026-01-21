@@ -6,13 +6,14 @@ A commandline installer and updater for Celeste mods.
 - Introduces a lot of breaking changes 
 - Increases code readability, maintability, and scalaiblity
 - Huge performance improvements
-> See [[CHANGELOG.md]] for more information
+> See [CHANGELOG.md](https://github.com/pinpinroku/hultra/CHANGELOG.md) for more information
 
 ---
 
 ## Table of Contents
 
 - [Features](#features)
+- [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Options](#options)
@@ -32,6 +33,14 @@ A commandline installer and updater for Celeste mods.
 - **Blazingly Fast Update**: Update your installed mods more faster than in-game update.
 - **Install Mods by URL**: Just type the URL of the mod page to install the mod. All missing dependencies are resolved automatically.
 - **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience. 
+
+---
+
+## Prerequisites
+
+- Linux is running
+- Celeste is installed on Steam
+- Everest is installed
 
 ---
 
@@ -78,6 +87,34 @@ This will automatically install the binary in ~/.cargo/bin, so you can use it im
 hultra --help
 ```
 
+- Run a Command
+```bash
+hultra [OPTIONS] [COMMAND]
+```
+
+- List installed mods
+```bash
+hultra list
+```
+> The file name and mod name may differ. If so, it will be displayed in an informative way.
+
+- Update installed mods
+```bash
+hultra update
+```
+
+- Install mods
+```bash
+# usage
+hultra install URL [URL...]
+
+# install a mod
+hultra install https://gamebanana.com/mods/123456
+
+# install multiple mods at once
+hultra install https://gamebanana.com/mods/123456 https://gamebanana.com/mods/456789
+```
+
 ## Options
 
 ### `-d, --mods-dir` \<DIR\>
@@ -109,6 +146,11 @@ Mirror priority can be specified by a comma-separated list. Default is "otobot,g
 If the download from the current server fails, the application will automatically fall back to the next server in the priority list to retry the download.
 
 You can also restrict the fallback servers by providing a comma-separated list (e.g., \"otobot,jade\"), which will limit the retries to only those specified servers.
+
+**Example**
+```bash
+hultra -m jade,wegfan update
+```
 
 ### `--use-api-mirror`
 
