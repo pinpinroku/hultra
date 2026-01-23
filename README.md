@@ -16,7 +16,8 @@ A commandline installer and updater for Celeste mods.
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Options](#options)
+- [Global Options](#global-options)
+- [Download Options](#download-options)
 - [Technical Details](#technical-details)
 - [Motivation](#motivation)
 - [Bug Reports](#bug-reports)
@@ -89,7 +90,7 @@ hultra --help
 
 - Run a Command
 ```bash
-hultra [OPTIONS] [COMMAND]
+hultra [global_opts] [command] [options] [\<args...\>]
 ```
 
 - List installed mods
@@ -115,7 +116,9 @@ hultra install https://gamebanana.com/mods/123456
 hultra install https://gamebanana.com/mods/123456 https://gamebanana.com/mods/456789
 ```
 
-## Options
+## Global Options
+
+Options can be applied globally.
 
 ### `-d, --mods-dir` \<DIR\>
 
@@ -130,9 +133,11 @@ hultra --mods-dir ~/game/exokgames/celeste/Mods/ install "SpeedrunTool"
 ```
 > The directory should have permissions of at least 0700.
 
-### `-m, --mirror-priority` \<MIRROR\>
+## Downlaod Options
 
-> This option only applies to the `install` and the `update` commands.
+Options can be used for commands: `install` and `update`.
+
+### `-p, --mirror-priority` \<MIRROR\>
 
 Mirror priority can be specified by a comma-separated list. Default is "otobot,gb,jade,wegfan".
 
@@ -149,10 +154,10 @@ You can also restrict the fallback servers by providing a comma-separated list (
 
 **Example**
 ```bash
-hultra -m jade,wegfan update
+hultra update -p jade,wegfan update
 ```
 
-### `--use-api-mirror`
+### `-m, --use-api-mirror`
 
 Enable this option to fetch the database from a GitHub Pages mirror. This may result in substantially faster processing time for installation and updates, especially for users experiencing connectivity issues with the primary source.
 

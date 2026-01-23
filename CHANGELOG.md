@@ -7,8 +7,10 @@ Changes from `v3.x` to `v4`.
 * The repository name becomes `hultra` from `everest-mod-cli`. It should indicate more explicit that this tool does not actually related to `Everest`. The new name feels more unique and easy to type!
 * The `LICENSE` of this project changed to `GPLv3` from `MIT`
 * The `install` command now accepts multiple URLs at once. No need to install mods one by one
-* The `update` command now runs without any arguments. It automatically updates all mods
-* New option `--use-api-mirror` is introduced. Now we can use mirror for prior database fetching
+* The `update` command now automatically updates all mods. No need to add `--install` option
+* Option tweeks: `-v, --verbose` and `-d, --directory` now global, you can use it before or after subcommands
+* Short form of `--mirror-priority` now changed to `-p` instead of `-m`
+* New option `-m, --use-api-mirror` is introduced. Now we can use mirror for prior database fetching
 * File hash caching is implemented. It will saved to `~/.local/state/hultra/checksum.cache` once it hashed
 
 ## Changed
