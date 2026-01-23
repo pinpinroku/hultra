@@ -3,6 +3,8 @@ use std::{ops::Deref, path::PathBuf, str::FromStr};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::download::DatabaseUrlSet;
+
 /// Enum representing supported mirrors.
 #[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
 #[value(rename_all = "lower")]
@@ -48,7 +50,7 @@ impl Mirror {
 }
 
 /// Command line interface.
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 #[command(version, about = "A simple cli tool to update/install mods for Celeste.", long_about = None)]
 pub struct Cli {
     /// Subcommands of the CLI.
@@ -56,13 +58,41 @@ pub struct Cli {
     pub commands: Command,
 
     /// Directory where mods are installed.
-    #[arg(short = 'd', long = "directory", value_name = "DIR")]
+    #[arg(short = 'd', long = "directory", value_name = "DIR", global = true)]
     pub directory: Option<PathBuf>,
 
+    /// Set log level to DEBUG.
+    #[arg(short, long, global = true)]
+    pub verbose: bool,
+}
+
+/// Subcommands of the CLI.
+#[derive(Debug, Clone, Subcommand)]
+pub enum Command {
+    /// List installed mods.
+    List,
+
+    /// Install mods by the URL of the GameBanana page.
+    Install {
+        /// URL(s) of mod page on GameBanana.
+        #[arg(required = true, num_args = 1..20)]
+        urls: Vec<GamebananaUrl>,
+
+        /// An option can be used for downloading.
+        #[command(flatten)]
+        option: DownloadOption,
+    },
+
+    /// Update installed mods.
+    Update(DownloadOption),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DownloadOption {
     /// Priority of the mirror list separated by commas.
     #[arg(
         value_enum,
-        short = 'm',
+        short = 'p',
         long = "mirror-priority",
         value_name = "MIRROR",
         value_delimiter = ',',
@@ -73,36 +103,26 @@ pub struct Cli {
     )]
     pub mirror_priority: Vec<Mirror>,
 
-    /// Use a GitHub mirror for database retrieval to reduce pre-processing time.
-    #[arg(long)]
+    /// Use a GitHub mirror for database retrieval.
+    #[arg(short = 'm', long)]
     pub use_api_mirror: bool,
 
     /// The limit for concurrent downloads (1 to 6).
     #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
     pub jobs: u8,
-
-    /// Verbose mode.
-    #[arg(short, long)]
-    pub verbose: bool,
 }
 
-/// Subcommands of the CLI.
-#[derive(Debug, Subcommand)]
-pub enum Command {
-    /// List installed mods.
-    List,
-    /// Install mods by the URL of the GameBanana page where the mod featured on.
-    Install(InstallArgs),
-    /// Update installed mods.
-    Update,
-}
+impl DownloadOption {
+    pub fn url_set(&self) -> DatabaseUrlSet {
+        match self.use_api_mirror {
+            true => DatabaseUrlSet::Mirror,
+            false => DatabaseUrlSet::Primary,
+        }
+    }
 
-/// Arguments of `Install` command.
-#[derive(Debug, Args)]
-pub struct InstallArgs {
-    /// URL(s) of mod page on GameBanana.
-    #[arg(required = true, num_args = 1..20)]
-    pub urls: Vec<GamebananaUrl>,
+    pub fn mirror_priority(&self) -> &Vec<Mirror> {
+        &self.mirror_priority
+    }
 }
 
 #[derive(thiserror::Error, Debug)]

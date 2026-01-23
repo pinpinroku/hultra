@@ -12,7 +12,7 @@ use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
 use tracing::{error, info, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{config::AppConfig, mirrorlist, registry::RemoteMod};
+use crate::{cli::DownloadOption, config::AppConfig, mirrorlist, registry::RemoteMod};
 
 /// A kind of database.
 #[derive(Debug, Clone, Copy)]
@@ -86,14 +86,14 @@ impl Downloader {
     }
 
     /// Fetches a database from the specified URL set and kind.
-    #[instrument(skip(self, config))]
+    #[instrument(skip(self, option))]
     pub async fn fetch_database(
         &self,
         kind: DatabaseKind,
-        config: &AppConfig,
+        option: &DownloadOption,
     ) -> Result<Bytes, reqwest::Error> {
         info!("starting to fetch");
-        let db_url = config.url_set().get_url(kind);
+        let db_url = option.url_set().get_url(kind);
         let response = self
             .client
             .get(db_url)
@@ -114,7 +114,12 @@ impl Downloader {
 
     /// Download multiple files concurrently with a limit on the number of simultaneous downloads.
     #[instrument(skip_all)]
-    pub async fn download_files(&self, mods: HashMap<String, RemoteMod>, config: &AppConfig) {
+    pub async fn download_files(
+        &self,
+        mods: HashMap<String, RemoteMod>,
+        config: &AppConfig,
+        option: &DownloadOption,
+    ) {
         if mods.is_empty() {
             info!("no mods to download");
             return;
@@ -135,11 +140,14 @@ impl Downloader {
                 let mod_info = remote_mod.clone();
 
                 let config = config.clone();
+                let option = option.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.unwrap();
-                    Self::retry_download_with_mirrros(&client, &mod_name, &mod_info, &pb, &config)
-                        .await;
+                    Self::retry_download_with_mirrros(
+                        &client, &mod_name, &mod_info, &pb, &config, &option,
+                    )
+                    .await;
                 })
             })
             .collect();
@@ -162,6 +170,7 @@ impl Downloader {
         mod_info: &RemoteMod,
         pb: &ProgressBar,
         config: &AppConfig,
+        option: &DownloadOption,
     ) {
         let mut success = false;
 
@@ -169,7 +178,7 @@ impl Downloader {
         let file_path = config.mods_dir().join(clean_name).with_extension("zip");
 
         let mirror_urls =
-            mirrorlist::generate_mirrors(&mod_info.download_url, config.mirror_priority()).await;
+            mirrorlist::generate_mirrors(&mod_info.download_url, option.mirror_priority()).await;
 
         for url in mirror_urls {
             match Self::download_file(

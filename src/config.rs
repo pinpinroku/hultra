@@ -8,8 +8,6 @@ use std::{
 
 use tracing::{error, info, warn};
 
-use crate::{cli::Mirror, download::DatabaseUrlSet};
-
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const STEAM_MODS_DIRECTORY: &str = ".local/share/Steam/steamapps/common/Celeste/Mods/";
@@ -29,20 +27,10 @@ pub struct AppConfig {
 
     /// A path to the cache file which caches file hashes.
     cache_db_path: PathBuf,
-
-    /// A type of database URL. (Primary or Mirror)
-    api_url_type: DatabaseUrlSet,
-
-    /// A priority of mirror list for downloading.
-    mirror_priority: Vec<Mirror>,
 }
 
 impl AppConfig {
-    pub fn new(
-        mods_dir: Option<&Path>,
-        use_api_mirror: bool,
-        mirror_priority: Vec<Mirror>,
-    ) -> Result<Self, AppConfigError> {
+    pub fn new(mods_dir: Option<&Path>) -> Result<Self, AppConfigError> {
         // Determine user home directory
         let Some(home) = env::home_dir() else {
             return Err(AppConfigError::DetermineHomeDirectory);
@@ -55,12 +43,6 @@ impl AppConfig {
             .join("checksum")
             .with_extension("cache");
 
-        let api_url_type = if use_api_mirror {
-            DatabaseUrlSet::Mirror
-        } else {
-            DatabaseUrlSet::Primary
-        };
-
         let mods_dir = mods_dir
             .map(|dir| dir.into())
             .unwrap_or_else(|| home.join(STEAM_MODS_DIRECTORY));
@@ -68,8 +50,6 @@ impl AppConfig {
         Ok(Self {
             mods_dir,
             cache_db_path,
-            api_url_type,
-            mirror_priority,
         })
     }
 
@@ -79,14 +59,6 @@ impl AppConfig {
 
     pub fn cache_db_path(&self) -> &Path {
         &self.cache_db_path
-    }
-
-    pub fn url_set(&self) -> &DatabaseUrlSet {
-        &self.api_url_type
-    }
-
-    pub fn mirror_priority(&self) -> &Vec<Mirror> {
-        &self.mirror_priority
     }
 
     /// Returns a list of archive path by scanning mods directory.

@@ -58,11 +58,7 @@ async fn run() -> anyhow::Result<()> {
     debug!("\n{:#?}", args);
 
     // Init app config
-    let config = AppConfig::new(
-        args.directory.as_deref(),
-        args.use_api_mirror,
-        args.mirror_priority,
-    )?;
+    let config = AppConfig::new(args.directory.as_deref())?;
     debug!("\n{:#?}", config);
 
     // Load already installed mods
@@ -80,22 +76,21 @@ async fn run() -> anyhow::Result<()> {
             }
         }
 
-        Command::Install(arg) => {
+        Command::Install { urls, option } => {
             info!("starting install mods");
 
             // Parse mod page URLs to get mod IDs
-            let ids: Vec<u32> = arg
-                .urls
+            let ids: Vec<u32> = urls
                 .iter()
                 .filter_map(|url| url.extract_id().ok())
                 .collect();
 
             // Fetch metadata
-            let downloader = Downloader::new(60, args.jobs as usize);
+            let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
             let (reg_bytes, graph_bytes) = tokio::try_join!(
-                downloader.fetch_database(DatabaseKind::Update, &config),
-                downloader.fetch_database(DatabaseKind::DependencyGraph, &config)
+                downloader.fetch_database(DatabaseKind::Update, &option),
+                downloader.fetch_database(DatabaseKind::DependencyGraph, &option)
             )?;
             spinner.finish_and_clear();
             let registry = ModRegistry::from_slice(&reg_bytes)?;
@@ -128,9 +123,9 @@ async fn run() -> anyhow::Result<()> {
             let targets = registry::extract_target_mods(registry.mods, &missing_dep_names);
 
             // Download missing mods
-            downloader.download_files(targets, &config).await
+            downloader.download_files(targets, &config, &option).await
         }
-        Command::Update => {
+        Command::Update(option) => {
             info!("starting update mods");
 
             let mut local_mods = installed_mods;
@@ -147,10 +142,10 @@ async fn run() -> anyhow::Result<()> {
             let cache_db = cache::sync(&config).context("failed to sync file cache")?;
 
             // fetch metadata
-            let downloader = Downloader::new(60, args.jobs as usize);
+            let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
             let bytes = downloader
-                .fetch_database(DatabaseKind::Update, &config)
+                .fetch_database(DatabaseKind::Update, &option)
                 .await?;
             spinner.finish_and_clear();
             let registry = ModRegistry::from_slice(&bytes)?;
@@ -169,7 +164,7 @@ async fn run() -> anyhow::Result<()> {
             }
 
             // Download updates
-            downloader.download_files(targets, &config).await
+            downloader.download_files(targets, &config, &option).await
         }
     }
 
