@@ -92,7 +92,7 @@ impl Downloader {
         kind: DatabaseKind,
         option: &DownloadOption,
     ) -> Result<Bytes, reqwest::Error> {
-        info!("starting to fetch");
+        info!("fetching database");
         let db_url = option.url_set().get_url(kind);
         let response = self
             .client
@@ -106,7 +106,7 @@ impl Downloader {
             .bytes()
             .await
             .inspect_err(|err| error!(?err, "failed to get full response body as bytes"))?;
-        info!("successfully fetched");
+        info!("successfully fetched database");
         // HACK we don't need Bytes if we deserialize response directly at here
         // HACK to inmplement that, we need to introduce trait object ApiResponse for ModRegistry and DependencyGraph
         Ok(bytes)
@@ -125,7 +125,7 @@ impl Downloader {
             return;
         }
 
-        info!("starting to download files");
+        info!("starting to download mods");
 
         let mp = MultiProgress::new();
 
@@ -163,7 +163,7 @@ impl Downloader {
     }
 
     /// Retry downloading a file from multiple mirrors until success or all mirrors are exhausted.
-    #[instrument(skip(client, pb, config))]
+    #[instrument(skip_all, fields(name = mod_name))]
     async fn retry_download_with_mirrros(
         client: &Client,
         mod_name: &str,
@@ -192,7 +192,6 @@ impl Downloader {
             .await
             {
                 Ok(_) => {
-                    info!("download completed");
                     pb.finish_with_message(format!("{} 🍓", mod_name));
                     success = true;
                     break;
@@ -219,7 +218,7 @@ impl Downloader {
     }
 
     /// Downloads a single file while hashing the file.
-    #[instrument(skip(client, expected_hashes, pb))]
+    #[instrument(skip_all, fields(url = %url))]
     async fn download_file(
         client: &Client,
         url: &str,
@@ -228,7 +227,7 @@ impl Downloader {
         file_path: &Path,
         pb: &ProgressBar,
     ) -> Result<(), DownloadError> {
-        info!("starting to download mod");
+        info!("sending GET request");
         let response = client
             .get(url)
             .send()
@@ -247,13 +246,14 @@ impl Downloader {
         let mut hasher = Xxh64::new(0);
         let mut stream = response.bytes_stream();
 
-        info!("starting to retrieve response body");
+        info!("streaming response body");
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.inspect_err(|err| error!(?err))?;
             hasher.update(&chunk);
             buffer.extend_from_slice(&chunk);
             pb.inc(chunk.len() as u64);
         }
+        info!(filesize = %file_size, "download completed");
 
         let computed_hash = hasher.digest();
         if !expected_hashes.contains(&computed_hash) {
@@ -263,7 +263,7 @@ impl Downloader {
                 expected: expected_hashes.to_vec(),
             });
         }
-        info!(computed=computed_hash, expected=?expected_hashes, "file hash matched");
+        info!(xxhash64 = %computed_hash, "hash check passed");
 
         // NOTE BufWriter has no significant performance improvement here
         let mut file = fs::File::create(file_path)
@@ -272,7 +272,7 @@ impl Downloader {
         file.write_all(&buffer).await?;
         file.flush().await?;
 
-        info!("successfully downloaded and saved");
+        info!(path = ?file_path.display(), "file saved to disk");
         // HACK it'd be better to return `computed_hash`, `file_path`, `mtime`, and `size`
 
         Ok(())

@@ -78,6 +78,7 @@ async fn run() -> anyhow::Result<()> {
 
         Command::Install { urls, option } => {
             info!("starting install mods");
+            debug!("\n{:#?}\n{:#?}", urls, option);
 
             // Parse mod page URLs to get mod IDs
             let ids: Vec<u32> = urls
@@ -127,6 +128,7 @@ async fn run() -> anyhow::Result<()> {
         }
         Command::Update(option) => {
             info!("starting update mods");
+            debug!("\n{:#?}", option);
 
             let mut local_mods = installed_mods;
 
