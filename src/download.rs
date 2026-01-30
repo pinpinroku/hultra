@@ -107,8 +107,6 @@ impl Downloader {
             .await
             .inspect_err(|err| error!(?err, "failed to get full response body as bytes"))?;
         info!("successfully fetched database");
-        // HACK we don't need Bytes if we deserialize response directly at here
-        // HACK to inmplement that, we need to introduce trait object ApiResponse for ModRegistry and DependencyGraph
         Ok(bytes)
     }
 
@@ -273,7 +271,6 @@ impl Downloader {
         file.flush().await?;
 
         info!(path = ?file_path.display(), "file saved to disk");
-        // HACK it'd be better to return `computed_hash`, `file_path`, `mtime`, and `size`
 
         Ok(())
     }
