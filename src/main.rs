@@ -8,7 +8,7 @@ use crate::{
     cli::{Cli, Command},
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
-    download::{DatabaseKind, Downloader},
+    download::Downloader,
     local_mods::LocalMod,
     registry::ModRegistry,
 };
@@ -89,13 +89,11 @@ async fn run() -> anyhow::Result<()> {
             // Fetch metadata
             let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
-            let (reg_bytes, graph_bytes) = tokio::try_join!(
-                downloader.fetch_database(DatabaseKind::Update, &option),
-                downloader.fetch_database(DatabaseKind::DependencyGraph, &option)
+            let (registry, graph) = tokio::try_join!(
+                downloader.fetch_database::<ModRegistry>(option.url_set()),
+                downloader.fetch_database::<DependencyGraph>(option.url_set())
             )?;
             spinner.finish_and_clear();
-            let registry = ModRegistry::from_slice(&reg_bytes)?;
-            let graph = DependencyGraph::from_slice(&graph_bytes)?;
 
             // Collect mod names found by ID in registry
             let mod_names = registry.get_names_by_ids(&ids);
@@ -146,11 +144,10 @@ async fn run() -> anyhow::Result<()> {
             // fetch metadata
             let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
-            let bytes = downloader
-                .fetch_database(DatabaseKind::Update, &option)
+            let registry = downloader
+                .fetch_database::<ModRegistry>(option.url_set())
                 .await?;
             spinner.finish_and_clear();
-            let registry = ModRegistry::from_slice(&bytes)?;
 
             // check updates
             let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);

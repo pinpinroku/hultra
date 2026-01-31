@@ -3,6 +3,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::Deserialize;
 
+use crate::download::Database;
+
 /// Each entry of the `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
 pub struct DependencyNode {
@@ -13,26 +15,17 @@ pub struct DependencyNode {
 
 /// Represents `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
+#[serde(transparent)]
 pub struct DependencyGraph {
     /// Detail of nodes
     pub nodes: HashMap<String, DependencyNode>,
 }
 
+impl Database for DependencyGraph {
+    const ENDPOINT: &'static str = "mod_dependency_graph.yaml";
+}
+
 impl DependencyGraph {
-    /// Creates a new instance of `DependencyGraph`.
-    fn new(nodes: HashMap<String, DependencyNode>) -> Self {
-        Self { nodes }
-    }
-
-    /// Parses YAML bytes to return a value of this type.
-    pub fn from_slice(bytes: &[u8]) -> Result<Self, serde_yaml_ng::Error> {
-        tracing::info!("parsing dependency graph");
-        let nodes = serde_yaml_ng::from_slice(bytes).inspect_err(|err| {
-            tracing::error!(?err, "failed to parse 'mod_dependency_graph.yaml'")
-        })?;
-        Ok(Self::new(nodes))
-    }
-
     /// Traverses the dependency graph using BFS from multiple starting mods.
     ///
     /// # Returns
@@ -114,7 +107,7 @@ AvBdayHelper2021:
 ExtendedVariantMode:
   Dependencies: []
 "#;
-        let graph = DependencyGraph::from_slice(yaml_data.as_bytes()).unwrap();
+        let graph: DependencyGraph = serde_yaml_ng::from_slice(yaml_data.as_bytes()).unwrap();
         let mut start_mods = HashSet::new();
         start_mods.insert("DarkMatterJourney");
         start_mods.insert("darkmoonruins");

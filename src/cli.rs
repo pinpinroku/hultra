@@ -3,7 +3,7 @@ use std::{ops::Deref, path::PathBuf, str::FromStr};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use crate::download::DatabaseUrlSet;
+use crate::download::DbBaseUrl;
 
 /// Enum representing supported mirrors.
 #[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
@@ -113,10 +113,10 @@ pub struct DownloadOption {
 }
 
 impl DownloadOption {
-    pub fn url_set(&self) -> DatabaseUrlSet {
+    pub fn url_set(&self) -> DbBaseUrl {
         match self.use_api_mirror {
-            true => DatabaseUrlSet::Mirror,
-            false => DatabaseUrlSet::Primary,
+            true => DbBaseUrl::Mirror,
+            false => DbBaseUrl::Primary,
         }
     }
 

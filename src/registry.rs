@@ -4,8 +4,10 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Deserializer};
 use tracing::instrument;
 
+use crate::download::Database;
+
 /// Represents `everest_update.yaml`.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug)]
 pub struct ModRegistry {
     /// All mods in the registry mapped by their unique names.
     pub mods: HashMap<String, RemoteMod>,
@@ -13,30 +15,42 @@ pub struct ModRegistry {
     id_to_names: HashMap<u32, Vec<String>>,
 }
 
+impl Database for ModRegistry {
+    const ENDPOINT: &'static str = "everest_update.yaml";
+}
+
+/// Helper that matches the raw YAML shape
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct RawModRegistry {
+    mods: HashMap<String, RemoteMod>,
+}
+
+// Manual implementation of Deserialize
+impl<'de> Deserialize<'de> for ModRegistry {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = RawModRegistry::deserialize(deserializer)?;
+
+        // Build the inverted index
+        let mut id_to_names: HashMap<u32, Vec<String>> = HashMap::new();
+        for (name, remote) in &raw.mods {
+            id_to_names
+                .entry(remote.gamebanana_id)
+                .or_default()
+                .push(name.clone());
+        }
+
+        Ok(ModRegistry {
+            mods: raw.mods,
+            id_to_names,
+        })
+    }
+}
+
 impl ModRegistry {
-    /// Returns value of this type while generating inverted index for the mod lookup by ID.
-    pub fn new(mods: HashMap<String, RemoteMod>) -> Self {
-        let id_to_names = mods.iter().fold(
-            HashMap::new(),
-            |mut acc: HashMap<u32, Vec<String>>, (name, info)| {
-                acc.entry(info.gamebanana_id)
-                    .or_default()
-                    .push(name.clone());
-                acc
-            },
-        );
-        ModRegistry { mods, id_to_names }
-    }
-
-    /// Parses `everest_update.yaml` from the provided byte slice.
-    pub fn from_slice(bytes: &[u8]) -> Result<Self, serde_yaml_ng::Error> {
-        tracing::info!("parsing remote registry");
-        let mods: HashMap<String, RemoteMod> = serde_yaml_ng::from_slice(bytes)
-            .inspect_err(|err| tracing::error!(?err, "failed to parse 'everest_update.yaml'"))?;
-        tracing::info!(found_entries = mods.len());
-        Ok(ModRegistry::new(mods))
-    }
-
     /// Returns the mod names for the given mod IDs, if any exist in the registry.
     #[instrument(skip(self))]
     pub fn get_names_by_ids(&self, mod_ids: &[u32]) -> HashSet<&str> {
@@ -140,8 +154,7 @@ BreezeContestAudio:
 "#;
 
     fn load_registry_from_yaml() -> ModRegistry {
-        let mods = serde_yaml_ng::from_slice(YAML_BYTES).expect("YAML format should be parsed");
-        ModRegistry::new(mods)
+        serde_yaml_ng::from_slice(YAML_BYTES).expect("YAML format should be parsed")
     }
 
     #[test]

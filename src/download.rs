@@ -4,47 +4,35 @@ use std::{
     sync::Arc,
 };
 
-use bytes::Bytes;
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
 use tracing::{error, info, instrument, warn};
+use url::Url;
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{cli::DownloadOption, config::AppConfig, mirrorlist, registry::RemoteMod};
 
-/// A kind of database.
-#[derive(Debug, Clone, Copy)]
-pub enum DatabaseKind {
-    Update,
-    DependencyGraph,
+pub trait Database {
+    const ENDPOINT: &'static str;
 }
 
-/// A type of database URL set.
+/// A base URL of API.
 #[derive(Debug, Clone, Copy, Default)]
-pub enum DatabaseUrlSet {
+pub enum DbBaseUrl {
     #[default]
     Primary,
     Mirror,
 }
 
-impl DatabaseUrlSet {
+impl DbBaseUrl {
     #[inline]
-    pub fn get_url(self, kind: DatabaseKind) -> &'static str {
-        match (self, kind) {
-            (Self::Primary, DatabaseKind::Update) => {
-                "https://maddie480.ovh/celeste/everest_update.yaml"
-            }
-            (Self::Primary, DatabaseKind::DependencyGraph) => {
-                "https://maddie480.ovh/celeste/mod_dependency_graph.yaml"
-            }
-            (Self::Mirror, DatabaseKind::Update) => {
-                "https://everestapi.github.io/updatermirror/everest_update.yaml"
-            }
-            (Self::Mirror, DatabaseKind::DependencyGraph) => {
-                "https://everestapi.github.io/updatermirror/mod_dependency_graph.yaml"
-            }
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Primary => "https://maddie480.ovh/celeste/",
+            Self::Mirror => "https://everestapi.github.io/updatermirror/",
         }
     }
 }
@@ -55,6 +43,10 @@ pub enum DownloadError {
     Network(#[from] reqwest::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error("failed to parse YAML: {0}")]
+    DeserializeYaml(#[from] serde_yaml_ng::Error),
+    #[error("invalid endpoint URL: {0}")]
+    ParseUrl(#[from] url::ParseError),
     #[error(
         "failed to verify checksum for {file_path:?}: computed {computed}, expected {expected:?}"
     )]
@@ -86,28 +78,28 @@ impl Downloader {
     }
 
     /// Fetches a database from the specified URL set and kind.
-    #[instrument(skip(self, option))]
-    pub async fn fetch_database(
+    #[instrument(skip(self))]
+    pub async fn fetch_database<T: DeserializeOwned + Database>(
         &self,
-        kind: DatabaseKind,
-        option: &DownloadOption,
-    ) -> Result<Bytes, reqwest::Error> {
+        base: DbBaseUrl,
+    ) -> Result<T, DownloadError> {
         info!("fetching database");
-        let db_url = option.url_set().get_url(kind);
-        let response = self
+        let db_url = Url::parse(base.as_str())?.join(T::ENDPOINT)?;
+        let bytes = self
             .client
             .get(db_url)
             .send()
             .await
             .inspect_err(|err| error!(?err, "failed to receive response"))?
             .error_for_status()
-            .inspect_err(|err| error!(?err, "got bad status"))?;
-        let bytes = response
+            .inspect_err(|err| error!(?err, "got bad status"))?
             .bytes()
             .await
             .inspect_err(|err| error!(?err, "failed to get full response body as bytes"))?;
-        info!("successfully fetched database");
-        Ok(bytes)
+        let db = serde_yaml_ng::from_slice(&bytes)
+            .inspect_err(|err| error!(?err, "failed to parse response body"))?;
+        info!("successfully fetched and parse database");
+        Ok(db)
     }
 
     /// Download multiple files concurrently with a limit on the number of simultaneous downloads.
