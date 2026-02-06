@@ -22,7 +22,7 @@ serde_yaml_ng = "0.10.0"
 thiserror = "2.0.16"
 tokio = { version = "1.49.0", features = ["full"] }
 tracing = "0.1.44"
-tracing-subscriber = "0.3.20"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 url = "2.5.8"
 xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 zip-finder = { version = "1.0.0", path = "./zip-finder" }

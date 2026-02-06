@@ -5,11 +5,11 @@ use std::{
 };
 
 use futures_util::StreamExt;
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 use url::Url;
 use xxhash_rust::xxh64::Xxh64;
 
@@ -83,7 +83,6 @@ impl Downloader {
         &self,
         base: DbBaseUrl,
     ) -> Result<T, DownloadError> {
-        info!("fetching database");
         let db_url = Url::parse(base.as_str())?.join(T::ENDPOINT)?;
         let bytes = self
             .client
@@ -98,7 +97,6 @@ impl Downloader {
             .inspect_err(|err| error!(?err, "failed to get full response body as bytes"))?;
         let db = serde_yaml_ng::from_slice(&bytes)
             .inspect_err(|err| error!(?err, "failed to parse response body"))?;
-        info!("successfully fetched and parse database");
         Ok(db)
     }
 
@@ -118,13 +116,15 @@ impl Downloader {
         info!("starting to download mods");
 
         let mp = MultiProgress::new();
+        mp.set_alignment(MultiProgressAlignment::Bottom);
 
         let handles: Vec<_> = mods
             .iter()
             .map(|(name, remote_mod)| {
                 let client = self.client.clone();
                 let semaphore = self.semaphore.clone();
-                let pb = mp.add(create_download_progress_bar(name));
+                let size = remote_mod.file_size;
+                let pb = mp.add(create_download_progress_bar(name, size));
 
                 let mod_name = name.to_owned();
                 let mod_info = remote_mod.clone();
@@ -217,7 +217,7 @@ impl Downloader {
         file_path: &Path,
         pb: &ProgressBar,
     ) -> Result<(), DownloadError> {
-        info!("sending GET request");
+        debug!("sending GET request");
         let response = client
             .get(url)
             .send()
@@ -236,14 +236,14 @@ impl Downloader {
         let mut hasher = Xxh64::new(0);
         let mut stream = response.bytes_stream();
 
-        info!("streaming response body");
+        debug!("streaming response body");
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.inspect_err(|err| error!(?err))?;
             hasher.update(&chunk);
             buffer.extend_from_slice(&chunk);
             pb.inc(chunk.len() as u64);
         }
-        info!(filesize = %file_size, "download completed");
+        debug!(filesize = %file_size, "download completed");
 
         let computed_hash = hasher.digest();
         if !expected_hashes.contains(&computed_hash) {
@@ -253,7 +253,7 @@ impl Downloader {
                 expected: expected_hashes.to_vec(),
             });
         }
-        info!(xxhash64 = %computed_hash, "hash check passed");
+        debug!(xxhash64 = %computed_hash, "hash check passed");
 
         // NOTE BufWriter has no significant performance improvement here
         let mut file = fs::File::create(file_path)
@@ -262,15 +262,15 @@ impl Downloader {
         file.write_all(&buffer).await?;
         file.flush().await?;
 
-        info!(path = ?file_path.display(), "file saved to disk");
+        debug!(path = ?file_path.display(), "file saved to disk");
 
         Ok(())
     }
 }
 
 /// Create a progress bar for downloading a file.
-fn create_download_progress_bar(mod_name: &str) -> ProgressBar {
-    let pb = ProgressBar::hidden();
+fn create_download_progress_bar(mod_name: &str, size: u64) -> ProgressBar {
+    let pb = ProgressBar::new(size);
     pb.set_style(
         ProgressStyle::with_template(
             "{wide_msg} {total_bytes:>10.1.cyan/blue} {bytes_per_sec:>11.2} {elapsed_precise:>8} [{bar:>40}] {percent:>3}%"

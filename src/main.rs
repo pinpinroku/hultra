@@ -2,7 +2,7 @@ use std::{collections::HashSet, fmt};
 
 use anyhow::Context;
 use clap::Parser;
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 use crate::{
     cli::{Cli, Command},
@@ -30,7 +30,6 @@ enum Success {
     UpToDate,
     AllModsBlacklisted,
     AlreadyInstalled,
-    Completed,
 }
 
 /// Display message for success operation
@@ -44,7 +43,6 @@ impl fmt::Display for Success {
             Success::AlreadyInstalled => {
                 write!(f, "All mods are already installed, exiting program.")
             }
-            Success::Completed => write!(f, "Command completed successfully."),
         }
     }
 }
@@ -52,9 +50,9 @@ impl fmt::Display for Success {
 async fn run() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    log::set_up_logger(args.verbose);
+    log::init_logger(args.log_file.as_deref(), args.verbose, args.quiet);
 
-    info!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
+    debug!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
     debug!("\n{:#?}", args);
 
     // Init app config
@@ -71,6 +69,7 @@ async fn run() -> anyhow::Result<()> {
 
     match args.commands {
         Command::List => {
+            // send a list of installed mods to stdout
             for installed in installed_mods {
                 println!("{}", installed)
             }
@@ -106,7 +105,7 @@ async fn run() -> anyhow::Result<()> {
 
             // If all target mods are already installed, exit early
             if local_mod_names.is_superset(&mod_names) {
-                println!("{}", Success::AlreadyInstalled)
+                info!("{}", Success::AlreadyInstalled)
             }
 
             // Traverses dependency graph to collect missing dependency names
@@ -136,7 +135,7 @@ async fn run() -> anyhow::Result<()> {
             local_mods.retain(|local_mod| !blacklist.contains(local_mod.get_file_name().as_ref()));
 
             if local_mods.is_empty() {
-                eprintln!("{}", Success::AllModsBlacklisted)
+                info!("{}", Success::AllModsBlacklisted)
             }
 
             let cache_db = cache::sync(&config).context("failed to sync file cache")?;
@@ -153,8 +152,9 @@ async fn run() -> anyhow::Result<()> {
             let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
 
             if targets.is_empty() {
-                println!("{}", Success::UpToDate)
+                info!("{}", Success::UpToDate)
             } else {
+                // send update info to stdout
                 println!("Available updates:\n");
                 for update_info in update_info_list {
                     println!("{}", update_info);
@@ -167,13 +167,12 @@ async fn run() -> anyhow::Result<()> {
         }
     }
 
-    info!("{}", Success::Completed);
     Ok(())
 }
 
 #[tokio::main]
 async fn main() {
     if let Err(err) = run().await {
-        eprintln!("{:?}", err)
+        error!("{:?}", err)
     }
 }

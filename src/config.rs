@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -63,7 +63,7 @@ impl AppConfig {
 
     /// Returns a list of archive path by scanning mods directory.
     pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
-        info!("scan mods directory for archives");
+        debug!("scan mods directory for archives");
 
         let found_paths: Vec<PathBuf> = fs::read_dir(&self.mods_dir)
             .inspect_err(|err| error!(?err, "failed to read mods directory"))?
@@ -75,7 +75,7 @@ impl AppConfig {
             .filter(|path| is_mod_archive(path))
             .collect();
 
-        info!(found_archives = found_paths.len());
+        debug!(found_archives = found_paths.len());
 
         Ok(found_paths)
     }
@@ -84,7 +84,7 @@ impl AppConfig {
 
     /// Returns paths of blacklisted mod by reading `updaterblacklist.txt`.
     pub fn read_updater_blacklist(&self) -> io::Result<HashSet<String>> {
-        info!("reading updater blacklist");
+        debug!("reading updater blacklist");
 
         let path = self.mods_dir.join(Self::UPDATER_BLACKLIST_FILE);
         let mut blacklist = HashSet::new();

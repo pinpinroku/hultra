@@ -1,73 +1,49 @@
-use std::{
-    env,
-    fs::{self, File},
-    io,
-    path::PathBuf,
+use std::{fs::File, path::Path};
+
+use tracing_subscriber::{
+    EnvFilter, Layer,
+    fmt::{self, format::FmtSpan},
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
 };
 
-use tracing_subscriber::fmt::format::FmtSpan;
-
-const APP_NAME: &str = env!("CARGO_PKG_NAME");
-
-#[derive(thiserror::Error, Debug)]
-enum LogError {
-    #[error("failed to determine a XDG base directory")]
-    DetermineXdgBaseDirectory,
-    #[error(transparent)]
-    Io(#[from] io::Error),
-}
-
-pub fn set_up_logger(verbose: bool) {
-    let log_level = if verbose {
-        tracing::Level::DEBUG
+pub fn init_logger(log_file: Option<&Path>, verbose: bool, quiet: bool) {
+    // 1. level config for stderr
+    let console_level = if quiet {
+        "error"
+    } else if verbose {
+        "hultra=debug,info" // debug for my app, info for others
     } else {
-        tracing::Level::INFO
+        "hultra=info,warn" // info for my app, warn for others
     };
 
-    match create_log_file() {
-        Ok(writer) => tracing_subscriber::fmt()
-            .compact()
-            .with_span_events(FmtSpan::CLOSE)
-            .with_max_level(log_level)
-            .with_file(false)
-            .with_line_number(false)
-            .with_thread_ids(true)
-            .with_target(false)
-            .with_writer(writer)
+    let stderr_layer = fmt::layer()
+        .with_writer(std::io::stderr)
+        .with_target(false)
+        .without_time()
+        .with_filter(EnvFilter::new(console_level));
+
+    // 2. layer for file output
+    let file_layer = log_file.map(|path| {
+        let f = File::create(path).unwrap_or_else(|e| {
+            eprintln!(
+                "Error: failed to create the log file '{}': {}",
+                path.display(),
+                e
+            );
+            std::process::exit(1);
+        });
+
+        fmt::layer()
+            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+            .with_writer(f)
             .with_ansi(false)
-            .init(),
-        Err(err) => {
-            eprintln!("WARN failed to create log file: cause {}", err);
-            eprintln!("INFO sending log to stderr");
-            tracing_subscriber::fmt()
-                .compact()
-                .with_span_events(FmtSpan::CLOSE)
-                .with_max_level(log_level)
-                .with_file(false)
-                .with_line_number(false)
-                .with_thread_ids(false)
-                .with_thread_names(false)
-                .with_target(false)
-                .init()
-        }
-    }
-}
+            .with_filter(EnvFilter::new("hultra=debug,info"))
+    });
 
-fn create_log_file() -> Result<File, LogError> {
-    let state_home = if let Ok(val) = env::var("XDG_STATE_HOME") {
-        PathBuf::from(val)
-    } else if let Some(home) = env::home_dir() {
-        home.join(".local").join("state")
-    } else {
-        return Err(LogError::DetermineXdgBaseDirectory);
-    };
-
-    let log_dir = state_home.join(APP_NAME);
-
-    fs::create_dir_all(&log_dir)?;
-
-    let path = log_dir.join(APP_NAME).with_extension("log");
-    let writer = File::create(&path)?;
-
-    Ok(writer)
+    // 3. register by merging them all
+    tracing_subscriber::registry()
+        .with(stderr_layer)
+        .with(file_layer)
+        .init();
 }

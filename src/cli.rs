@@ -64,6 +64,14 @@ pub struct Cli {
     /// Set log level to DEBUG.
     #[arg(short, long, global = true)]
     pub verbose: bool,
+
+    /// Set log level to ERROR.
+    #[arg(short, long, global = true)]
+    pub quiet: bool,
+
+    /// Log to the file.
+    #[arg(long, global = true)]
+    pub log_file: Option<PathBuf>,
 }
 
 /// Subcommands of the CLI.

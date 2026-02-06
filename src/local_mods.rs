@@ -27,7 +27,7 @@ impl fmt::Display for LocalMod {
             .file_stem()
             .is_some_and(|name| name.eq_ignore_ascii_case(self.name()))
         {
-            write!(f, "✅ {} (v{})", self.name(), self.version())?;
+            write!(f, "{} (v{})", self.name(), self.version())?;
         } else {
             let filename = self
                 .path()
@@ -35,8 +35,7 @@ impl fmt::Display for LocalMod {
                 .map(|name| name.to_string_lossy())
                 .unwrap_or(Cow::Borrowed("unknown"));
 
-            writeln!(f, "ℹ️ {} (v{})", self.name(), self.version(),)?;
-            write!(f, "📂 {}", filename)?;
+            write!(f, "*{} (v{}) [{}]", self.name(), self.version(), filename)?;
         }
         Ok(())
     }

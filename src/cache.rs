@@ -7,7 +7,7 @@ use std::{
 };
 
 use rkyv::{Archive, Deserialize, Serialize, deserialize, rancor};
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::config::AppConfig;
@@ -103,7 +103,7 @@ fn update_cache(cache: &mut FileCacheDB, mods_dir: &Path) -> io::Result<bool> {
 
                 // Create new cache entry
                 let cache_entry = CacheEntry::new(&file_name, mtime, size, hash);
-                info!(?cache_entry, "new entry created");
+                debug!(?cache_entry, "new entry created");
                 cache.entries.insert(key, cache_entry);
                 updated = true;
             }
