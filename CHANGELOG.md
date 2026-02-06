@@ -8,10 +8,12 @@ Changes from `v3.x` to `v4`.
 * The `LICENSE` of this project changed to `GPLv3` from `MIT`
 * The `install` command now accepts multiple URLs at once. No need to install mods one by one
 * The `update` command now automatically updates all mods. No need to add `--install` option
-* Option tweeks: `-v, --verbose` and `-d, --directory` now global, you can use it before or after subcommands
+* Option tweaks: `-v, --verbose` and `-d, --directory` now global, you can use it before or after subcommands
 * Short form of `--mirror-priority` now changed to `-p` instead of `-m`
 * New option `-m, --use-api-mirror` is introduced. Now we can use mirror for prior database fetching
 * File hash caching is implemented. It will saved to `~/.local/state/hultra/checksum.cache` once it hashed
+* New option `-q, --quiet` and `--log-file PATH` is introduced. Now the log file does not created by default
+* Now every logs will be shown in the terminal instead of the log file
 
 ## Changed
 

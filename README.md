@@ -133,7 +133,7 @@ hultra --mods-dir ~/game/exokgames/celeste/Mods/ install "SpeedrunTool"
 ```
 > The directory should have permissions of at least 0700.
 
-## Downlaod Options
+## Download Options
 
 Options can be used for commands: `install` and `update`.
 
