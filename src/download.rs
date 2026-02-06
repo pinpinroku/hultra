@@ -10,12 +10,12 @@ use reqwest::Client;
 use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
 use tracing::{debug, error, info, instrument, warn};
-use url::Url;
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{cli::DownloadOption, config::AppConfig, mirrorlist, registry::RemoteMod};
 
 pub trait Database {
+    /// Target file name.
     const ENDPOINT: &'static str;
 }
 
@@ -45,8 +45,6 @@ pub enum DownloadError {
     Io(#[from] std::io::Error),
     #[error("failed to parse YAML: {0}")]
     DeserializeYaml(#[from] serde_yaml_ng::Error),
-    #[error("invalid endpoint URL: {0}")]
-    ParseUrl(#[from] url::ParseError),
     #[error(
         "failed to verify checksum for {file_path:?}: computed {computed}, expected {expected:?}"
     )]
@@ -83,10 +81,14 @@ impl Downloader {
         &self,
         base: DbBaseUrl,
     ) -> Result<T, DownloadError> {
-        let db_url = Url::parse(base.as_str())?.join(T::ENDPOINT)?;
+        let full_url = format!(
+            "{}/{}",
+            base.as_str().trim_end_matches('/'),
+            T::ENDPOINT.trim_start_matches('/')
+        );
         let bytes = self
             .client
-            .get(db_url)
+            .get(full_url)
             .send()
             .await
             .inspect_err(|err| error!(?err, "failed to receive response"))?
