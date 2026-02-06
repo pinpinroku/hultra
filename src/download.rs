@@ -5,7 +5,7 @@ use std::{
 };
 
 use futures_util::StreamExt;
-use indicatif::{MultiProgress, MultiProgressAlignment, ProgressBar, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
@@ -109,22 +109,20 @@ impl Downloader {
         option: &DownloadOption,
     ) {
         if mods.is_empty() {
-            info!("no mods to download");
+            debug!("no mods to download");
             return;
         }
 
-        info!("starting to download mods");
+        info!("downloading mods");
 
         let mp = MultiProgress::new();
-        mp.set_alignment(MultiProgressAlignment::Bottom);
 
         let handles: Vec<_> = mods
             .iter()
             .map(|(name, remote_mod)| {
                 let client = self.client.clone();
                 let semaphore = self.semaphore.clone();
-                let size = remote_mod.file_size;
-                let pb = mp.add(create_download_progress_bar(name, size));
+                let pb = mp.add(create_download_progress_bar(name));
 
                 let mod_name = name.to_owned();
                 let mod_info = remote_mod.clone();
@@ -149,7 +147,7 @@ impl Downloader {
             }
         }
 
-        info!("successfully downloaded all mods")
+        info!("downloading completed")
     }
 
     /// Retry downloading a file from multiple mirrors until success or all mirrors are exhausted.
@@ -269,8 +267,8 @@ impl Downloader {
 }
 
 /// Create a progress bar for downloading a file.
-fn create_download_progress_bar(mod_name: &str, size: u64) -> ProgressBar {
-    let pb = ProgressBar::new(size);
+fn create_download_progress_bar(mod_name: &str) -> ProgressBar {
+    let pb = ProgressBar::hidden();
     pb.set_style(
         ProgressStyle::with_template(
             "{wide_msg} {total_bytes:>10.1.cyan/blue} {bytes_per_sec:>11.2} {elapsed_precise:>8} [{bar:>40}] {percent:>3}%"

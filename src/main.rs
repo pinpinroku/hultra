@@ -76,7 +76,7 @@ async fn run() -> anyhow::Result<()> {
         }
 
         Command::Install { urls, option } => {
-            info!("starting install mods");
+            info!("installing mods");
             debug!("\n{:#?}\n{:#?}", urls, option);
 
             // Parse mod page URLs to get mod IDs
@@ -121,10 +121,11 @@ async fn run() -> anyhow::Result<()> {
             let targets = registry::extract_target_mods(registry.mods, &missing_dep_names);
 
             // Download missing mods
-            downloader.download_files(targets, &config, &option).await
+            downloader.download_files(targets, &config, &option).await;
+            info!("installation completed");
         }
         Command::Update(option) => {
-            info!("starting update mods");
+            info!("updating mods");
             debug!("\n{:#?}", option);
 
             let mut local_mods = installed_mods;
@@ -163,7 +164,8 @@ async fn run() -> anyhow::Result<()> {
             }
 
             // Download updates
-            downloader.download_files(targets, &config, &option).await
+            downloader.download_files(targets, &config, &option).await;
+            info!("updating completed")
         }
     }
 

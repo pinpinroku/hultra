@@ -20,6 +20,7 @@ pub fn init_logger(log_file: Option<&Path>, verbose: bool, quiet: bool) {
     let stderr_layer = fmt::layer()
         .with_writer(std::io::stderr)
         .with_target(false)
+        .with_span_events(FmtSpan::NONE)
         .without_time()
         .with_filter(EnvFilter::new(console_level));
 

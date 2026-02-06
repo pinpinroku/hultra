@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -106,7 +106,7 @@ impl AppConfig {
             let line = line.inspect_err(|err| error!(?err, "failed to read line in blacklist"))?;
             let line = line.trim();
             if !line.starts_with('#') && !line.is_empty() {
-                info!("'{}' will be excluded from updates", line);
+                warn!("'{}' will be excluded from updates", line);
                 blacklist.insert(line.to_string());
             }
         }
