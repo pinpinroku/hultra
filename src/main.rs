@@ -105,7 +105,8 @@ async fn run() -> anyhow::Result<()> {
 
             // If all target mods are already installed, exit early
             if local_mod_names.is_superset(&mod_names) {
-                info!("{}", Success::AlreadyInstalled)
+                info!("{}", Success::AlreadyInstalled);
+                return Ok(());
             }
 
             // Traverses dependency graph to collect missing dependency names
@@ -153,7 +154,8 @@ async fn run() -> anyhow::Result<()> {
             let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
 
             if targets.is_empty() {
-                info!("{}", Success::UpToDate)
+                info!("{}", Success::UpToDate);
+                return Ok(());
             } else {
                 // send update info to stdout
                 println!("Available updates:\n");
