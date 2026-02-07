@@ -2,7 +2,7 @@ use std::{collections::HashSet, fmt};
 
 use anyhow::Context;
 use clap::Parser;
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use crate::{
     cli::{Cli, Command},
@@ -47,28 +47,35 @@ impl fmt::Display for Success {
     }
 }
 
-async fn run() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = Cli::parse();
 
-    log::init_logger(args.log_file.as_deref(), args.verbose, args.quiet);
+    log::init_logger(args.log_file.as_deref()).with_context(|| {
+        format!(
+            "Failed to initialize loggin system. Cannot create log file at {:?}",
+            args.log_file.as_deref()
+        )
+    })?;
 
-    debug!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
+    info!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
     debug!("\n{:#?}", args);
 
     // Init app config
     let config = AppConfig::new(args.directory.as_deref())?;
-    debug!("\n{:#?}", config);
 
     // Load already installed mods
+    info!("loading installed mods");
     let installed_mods = LocalMod::load_local_mods(&config).with_context(|| {
         format!(
-            "failed to read mods directory: {}",
+            "Failed to read mods directory: {}",
             config.mods_dir().display()
         )
     })?;
 
     match args.commands {
         Command::List => {
+            info!("listing installed mods");
             // send a list of installed mods to stdout
             for installed in installed_mods {
                 println!("{}", installed)
@@ -86,12 +93,14 @@ async fn run() -> anyhow::Result<()> {
                 .collect();
 
             // Fetch metadata
+            info!("fetching database");
             let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
             let (registry, graph) = tokio::try_join!(
                 downloader.fetch_database::<ModRegistry>(option.url_set()),
                 downloader.fetch_database::<DependencyGraph>(option.url_set())
-            )?;
+            )
+            .context("Failed to fetch database")?;
             spinner.finish_and_clear();
 
             // Collect mod names found by ID in registry
@@ -105,11 +114,12 @@ async fn run() -> anyhow::Result<()> {
 
             // If all target mods are already installed, exit early
             if local_mod_names.is_superset(&mod_names) {
-                info!("{}", Success::AlreadyInstalled);
+                println!("{}", Success::AlreadyInstalled);
                 return Ok(());
             }
 
             // Traverses dependency graph to collect missing dependency names
+            info!("resolving dependencies");
             let deps = graph.bfs_traversal(mod_names);
 
             // Determine which dependencies are missing locally
@@ -122,39 +132,44 @@ async fn run() -> anyhow::Result<()> {
             let targets = registry::extract_target_mods(registry.mods, &missing_dep_names);
 
             // Download missing mods
+            info!("downloading mods");
             downloader.download_files(targets, &config, &option).await;
             info!("installation completed");
         }
         Command::Update(option) => {
             info!("updating mods");
-            debug!("\n{:#?}", option);
 
             let mut local_mods = installed_mods;
 
+            info!("reading updater blacklist file");
             let blacklist = config
                 .read_updater_blacklist()
-                .context("failed to read updater blacklist")?;
+                .context("Failed to read updater blacklist")?;
             local_mods.retain(|local_mod| !blacklist.contains(local_mod.get_file_name().as_ref()));
 
             if local_mods.is_empty() {
-                info!("{}", Success::AllModsBlacklisted)
+                println!("{}", Success::AllModsBlacklisted)
             }
 
-            let cache_db = cache::sync(&config).context("failed to sync file cache")?;
+            info!("syncing file cache");
+            let cache_db = cache::sync(&config).context("Failed to sync file cache")?;
 
             // fetch metadata
+            info!("fetching database");
             let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
             let registry = downloader
                 .fetch_database::<ModRegistry>(option.url_set())
-                .await?;
+                .await
+                .context("Failed to fetching database")?;
             spinner.finish_and_clear();
 
             // check updates
+            info!("checking upates");
             let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
 
             if targets.is_empty() {
-                info!("{}", Success::UpToDate);
+                println!("{}", Success::UpToDate);
                 return Ok(());
             } else {
                 // send update info to stdout
@@ -166,17 +181,11 @@ async fn run() -> anyhow::Result<()> {
             }
 
             // Download updates
+            info!("downloading mods");
             downloader.download_files(targets, &config, &option).await;
             info!("updating completed")
         }
     }
 
     Ok(())
-}
-
-#[tokio::main]
-async fn main() {
-    if let Err(err) = run().await {
-        error!("{:?}", err)
-    }
 }

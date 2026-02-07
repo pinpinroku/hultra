@@ -2,7 +2,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::Deserialize;
-use tracing::debug;
+use tracing::{debug, instrument, warn};
 
 use crate::download::Database;
 
@@ -34,8 +34,8 @@ impl DependencyGraph {
     /// A `HashSet` containing all required mods, including:
     /// - The starting mods themselves
     /// - All direct and transitive dependencies
+    #[instrument(skip(self))]
     pub fn bfs_traversal(&self, start_mods: HashSet<&str>) -> HashSet<String> {
-        debug!("starting to traverse dependency graph");
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
 
@@ -55,7 +55,7 @@ impl DependencyGraph {
                     }
                 }
             } else {
-                tracing::warn!(?current, "not found in dep graph");
+                warn!(?current, "not found in dep graph");
             }
         }
 

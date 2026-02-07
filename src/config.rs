@@ -63,8 +63,6 @@ impl AppConfig {
 
     /// Returns a list of archive path by scanning mods directory.
     pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
-        debug!("scan mods directory for archives");
-
         let found_paths: Vec<PathBuf> = fs::read_dir(&self.mods_dir)
             .inspect_err(|err| error!(?err, "failed to read mods directory"))?
             .filter_map(|res| {
@@ -84,8 +82,6 @@ impl AppConfig {
 
     /// Returns paths of blacklisted mod by reading `updaterblacklist.txt`.
     pub fn read_updater_blacklist(&self) -> io::Result<HashSet<String>> {
-        debug!("reading updater blacklist");
-
         let path = self.mods_dir.join(Self::UPDATER_BLACKLIST_FILE);
         let mut blacklist = HashSet::new();
 

@@ -61,16 +61,8 @@ pub struct Cli {
     #[arg(short = 'd', long = "directory", value_name = "DIR", global = true)]
     pub directory: Option<PathBuf>,
 
-    /// Set log level to DEBUG.
-    #[arg(short, long, global = true)]
-    pub verbose: bool,
-
-    /// Set log level to ERROR.
-    #[arg(short, long, global = true)]
-    pub quiet: bool,
-
     /// Log to the file.
-    #[arg(long, global = true)]
+    #[arg(long, value_name = "PATH", global = true)]
     pub log_file: Option<PathBuf>,
 }
 

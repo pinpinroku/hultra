@@ -9,7 +9,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{cli::DownloadOption, config::AppConfig, mirrorlist, registry::RemoteMod};
@@ -103,7 +103,7 @@ impl Downloader {
     }
 
     /// Download multiple files concurrently with a limit on the number of simultaneous downloads.
-    #[instrument(skip_all)]
+    #[instrument(skip(self, mods))]
     pub async fn download_files(
         &self,
         mods: HashMap<String, RemoteMod>,
@@ -114,8 +114,6 @@ impl Downloader {
             debug!("no mods to download");
             return;
         }
-
-        info!("downloading mods");
 
         let mp = MultiProgress::new();
 
@@ -148,8 +146,6 @@ impl Downloader {
                 error!(?err)
             }
         }
-
-        info!("downloading completed")
     }
 
     /// Retry downloading a file from multiple mirrors until success or all mirrors are exhausted.
@@ -217,7 +213,6 @@ impl Downloader {
         file_path: &Path,
         pb: &ProgressBar,
     ) -> Result<(), DownloadError> {
-        debug!("sending GET request");
         let response = client
             .get(url)
             .send()
@@ -236,7 +231,6 @@ impl Downloader {
         let mut hasher = Xxh64::new(0);
         let mut stream = response.bytes_stream();
 
-        debug!("streaming response body");
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.inspect_err(|err| error!(?err))?;
             hasher.update(&chunk);

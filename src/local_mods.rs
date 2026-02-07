@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde::Deserialize;
-use tracing::instrument;
+use tracing::{debug, error, instrument};
 
 use crate::config::AppConfig;
 
@@ -44,20 +44,17 @@ impl fmt::Display for LocalMod {
 impl LocalMod {
     /// Returns a value of this type from the given file path by extracting and parsing the manifest.
     fn from_path(mod_path: &Path) -> Option<Self> {
-        let Ok(manifest_bytes) = zip_finder::extract_file_from_zip(
-            mod_path,
-            b"everest.yaml",
-            Some(b"everest.yml"),
-        )
-        .inspect_err(
-            |err| tracing::error!(?err, file_name = ?mod_path.file_name(), "manifest is missing"),
-        ) else {
+        let Ok(manifest_bytes) =
+            zip_finder::extract_file_from_zip(mod_path, b"everest.yaml", Some(b"everest.yml"))
+                .inspect_err(
+                    |err| error!(?err, file_name = ?mod_path.file_name(), "manifest is missing"),
+                )
+        else {
             return None;
         };
 
         let Ok(mut manifest) = Manifest::from_slice(&manifest_bytes)
-            .inspect(|manifest| tracing::debug!(?manifest, file_name = ?mod_path.file_name()))
-            .inspect_err(|err| tracing::error!(?err, file_name = ?mod_path.file_name()))
+            .inspect_err(|err| error!(?err, file_name = ?mod_path.file_name()))
         else {
             return None;
         };
@@ -92,7 +89,7 @@ impl LocalMod {
     }
 
     /// Creates values of this type for each path of given paths in parallel.
-    #[instrument(skip_all)]
+    #[instrument]
     pub fn load_local_mods(config: &AppConfig) -> io::Result<Vec<Self>> {
         use rayon::prelude::*;
 
@@ -103,7 +100,7 @@ impl LocalMod {
             .filter_map(|archive_path| Self::from_path(archive_path))
             .collect();
 
-        tracing::debug!(
+        debug!(
             detected_archives = archive_paths.len(),
             found_mods = local_mods.len()
         );
