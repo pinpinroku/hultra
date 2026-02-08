@@ -13,7 +13,8 @@ pub fn init_logger(log_file: Option<&Path>) -> Result<(), io::Error> {
 
     let console_layer = fmt::layer()
         .with_writer(std::io::stderr)
-        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+        .with_target(false)
+        .without_time()
         .pretty()
         .with_filter(env_filter);
 
