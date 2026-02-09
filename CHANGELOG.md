@@ -13,7 +13,7 @@ Changes from `v3.x` to `v4`.
 * New option `-m, --use-api-mirror` is introduced. Now we can use mirror for prior database fetching
 * File hash caching is implemented. It will be saved to `~/.local/state/hultra/checksum.cache` once it hashed
 * New option `--log-file PATH` is introduced. The log file is not created by default anymore
-* `-v, --verbose` flag is gone. When you specifiy the path with `--log-file`, it will log in DEBUG mode
+* `-v, --verbose` flag is gone. When you specify the path with `--log-file`, it will be logged in DEBUG mode
 * The log strategy is changed. Any logs will not be logged by default. If you want to see the verbose log, you should choose one of these ways; 1: set RUST_LOG environment variable in the terminal, 2: use `--log-file PATH` flag
 
 ## Changed

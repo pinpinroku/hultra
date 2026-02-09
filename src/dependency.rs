@@ -9,7 +9,7 @@ use crate::download::Database;
 /// Each entry of the `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
 pub struct DependencyNode {
-    /// A list of dependencies.
+    /// List of dependencies.
     #[serde(rename = "Dependencies")]
     dependencies: Vec<Dependency>,
 }

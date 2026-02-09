@@ -95,7 +95,7 @@ fn update_cache(cache: &mut FileCacheDB, mods_dir: &Path) -> io::Result<bool> {
             if should_rehash(&cache.entries, &key, mtime, size) {
                 let hash = hash_file(&path)?;
 
-                // NOTE we only need file name since mods directory is fixed
+                // NOTE Extracting only filename; mods directory is constant
                 let file_name = path
                     .file_name()
                     .map(|name| name.to_string_lossy())
@@ -154,7 +154,7 @@ fn save_cache_db(cache: &FileCacheDB, cache_path: &Path) -> Result<(), CacheErro
 fn hash_file(file_path: &Path) -> io::Result<u64> {
     let mut reader = File::open(file_path)?;
 
-    // NOTE use boxed slice to avoid stack overflow
+    // NOTE Use Box<[T]> to avoid stack overflow
     let mut buffer = vec![0u8; 64 * 1024].into_boxed_slice();
     let mut hasher = Xxh64::new(0);
 

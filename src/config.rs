@@ -11,7 +11,6 @@ use tracing::{debug, error, warn};
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
 const STEAM_MODS_DIRECTORY: &str = ".local/share/Steam/steamapps/common/Celeste/Mods/";
-// NOTE maybe add default path of epic games and itch.io in the future
 
 #[derive(thiserror::Error, Debug)]
 pub enum AppConfigError {
@@ -19,13 +18,13 @@ pub enum AppConfigError {
     DetermineHomeDirectory,
 }
 
-/// Application config.
+/// Application configuration.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
-    /// A mods directory where all of mod files stored.
+    /// Directory containing the installed mods.
     mods_dir: PathBuf,
 
-    /// A path to the cache file which caches file hashes.
+    /// Path to the file hash cache.
     cache_db_path: PathBuf,
 }
 
@@ -61,7 +60,7 @@ impl AppConfig {
         &self.cache_db_path
     }
 
-    /// Returns a list of archive path by scanning mods directory.
+    /// Scans mods directory and returns list of archive paths.
     pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
         let found_paths: Vec<PathBuf> = fs::read_dir(&self.mods_dir)
             .inspect_err(|err| error!(?err, "failed to read mods directory"))?
@@ -80,14 +79,14 @@ impl AppConfig {
 
     const UPDATER_BLACKLIST_FILE: &str = "updaterblacklist.txt";
 
-    /// Returns paths of blacklisted mod by reading `updaterblacklist.txt`.
+    /// Reads `updaterblacklist.txt` and returns blacklisted mod paths.
     pub fn read_updater_blacklist(&self) -> io::Result<HashSet<String>> {
         let path = self.mods_dir.join(Self::UPDATER_BLACKLIST_FILE);
         let mut blacklist = HashSet::new();
 
         let mut file = match File::open(&path) {
             Ok(value) => value,
-            // NOTE the file might be missing but it's ok, just returns empty list
+            // NOTE It's safe to ignore NotFound here, as this file is optional.
             Err(err) if err.kind().eq(&io::ErrorKind::NotFound) => return Ok(blacklist),
             Err(err) => {
                 error!(?err, "failed to open blacklist file");
@@ -95,7 +94,7 @@ impl AppConfig {
             }
         };
 
-        // NOTE default 8KiB buffer is too large to read simple text file with few lines
+        // NOTE The default 8KiB buffer is overkill for small text files.
         let reader = BufReader::with_capacity(1024, &mut file);
 
         for line in reader.lines() {

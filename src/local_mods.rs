@@ -14,9 +14,9 @@ use crate::config::AppConfig;
 
 #[derive(Debug)]
 pub struct LocalMod {
-    /// A full path of the mod installed.
+    /// Full path of the mod.
     path: PathBuf,
-    /// A metadata of the mod.
+    /// Metadata of the mod.
     manifest: Manifest,
 }
 

@@ -1,17 +1,15 @@
-//! Mirror URL handling for GameBanana mod downloads.
-
 use tracing::instrument;
 
 use crate::cli::Mirror;
 
 const EXPECTED_PREFIXES: [&str; 4] = [
     "http://gamebanana.com/dl/",
-    "https://gamebanana.com/dl/", // NOTE This is a valid prefix of manual download link in the GameBanana page.
+    "https://gamebanana.com/dl/",
     "http://gamebanana.com/mmdl/",
-    "https://gamebanana.com/mmdl/", // NOTE Currently, this is the only valid prefix as a download link in the remote registry.
+    "https://gamebanana.com/mmdl/",
 ];
 
-/// Retrieves a list of mirror URLs for a given GameBanana URL, based on a slice of mirror priority.
+/// Retrieves list of mirror URLs for given GameBanana URL, based on mirror priorities.
 #[instrument]
 pub async fn generate_mirrors(download_url: &str, mirror_priority: &[Mirror]) -> Vec<String> {
     let Some(gbid) = extract_gamebanana_id(download_url).await else {
@@ -24,7 +22,7 @@ pub async fn generate_mirrors(download_url: &str, mirror_priority: &[Mirror]) ->
         .collect()
 }
 
-/// Extracts a GameBanana ID from a given URL.
+/// Extracts GameBanana ID from given URL.
 async fn extract_gamebanana_id(url: &str) -> Option<u32> {
     for prefix in EXPECTED_PREFIXES {
         if let Some(id_str) = url.strip_prefix(prefix)

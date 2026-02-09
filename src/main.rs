@@ -53,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
 
     log::init_logger(args.log_file.as_deref()).with_context(|| {
         format!(
-            "Failed to initialize loggin system. Cannot create log file at {:?}",
+            "Failed to initialize logging system. Cannot create log file at {:?}",
             args.log_file.as_deref()
         )
     })?;
@@ -165,7 +165,7 @@ async fn main() -> anyhow::Result<()> {
             spinner.finish_and_clear();
 
             // check updates
-            info!("checking upates");
+            info!("checking updates");
             let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
 
             if targets.is_empty() {

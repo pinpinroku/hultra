@@ -1,11 +1,10 @@
-//! Command line interface for the mod management tool.
 use std::{ops::Deref, path::PathBuf, str::FromStr};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::download::DbBaseUrl;
 
-/// Enum representing supported mirrors.
+/// Supported mirrors.
 #[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
 #[value(rename_all = "lower")]
 pub enum Mirror {
@@ -24,25 +23,21 @@ impl Mirror {
     pub fn url_for_id(&self, gbid: u32) -> String {
         match self {
             Mirror::Gb => {
-                // The original GameBanana download URL format.
                 format!("https://gamebanana.com/mmdl/{}", gbid)
             }
             Mirror::Jade => {
-                // The Jade mirror URL template.
                 format!(
                     "https://celestemodupdater.0x0a.de/banana-mirror/{}.zip",
                     gbid
                 )
             }
             Mirror::Wegfan => {
-                // The Wegfan mirror URL template.
                 format!(
                     "https://celeste.weg.fan/api/v2/download/gamebanana-files/{}",
                     gbid
                 )
             }
             Mirror::Otobot => {
-                // The Otobot mirror URL template.
                 format!("https://banana-mirror-mods.celestemods.com/{}.zip", gbid)
             }
         }
@@ -61,7 +56,7 @@ pub struct Cli {
     #[arg(short = 'd', long = "directory", value_name = "DIR", global = true)]
     pub directory: Option<PathBuf>,
 
-    /// Log to the file.
+    /// Writes logs to the specified file.
     #[arg(long, value_name = "PATH", global = true)]
     pub log_file: Option<PathBuf>,
 }
@@ -72,42 +67,42 @@ pub enum Command {
     /// List installed mods.
     List,
 
-    /// Install mods by the URL of the GameBanana page.
+    /// Installs mods from GameBanana URLs.
     Install {
         /// URL(s) of mod page on GameBanana.
         #[arg(required = true, num_args = 1..20)]
         urls: Vec<GamebananaUrl>,
 
-        /// An option can be used for downloading.
+        /// Options specific to downloading.
         #[command(flatten)]
         option: DownloadOption,
     },
 
-    /// Update installed mods.
+    /// Updates mods.
     Update(DownloadOption),
 }
 
 #[derive(Debug, Clone, Args)]
 pub struct DownloadOption {
-    /// Priority of the mirror list separated by commas.
+    /// Comma-separated list of mirror priorities.
     #[arg(
         value_enum,
         short = 'p',
         long = "mirror-priority",
         value_name = "MIRROR",
         value_delimiter = ',',
-        long_help = "Priority of the mirror list separated by commas.
+        long_help = "Comma-separated list of mirror priorities.
         This option allows you to specify the order in which mirrors should be tried when downloading mods.
         You can specify up to 4 mirrors, but providing fewer will restrict download attempts to only those mirrors.",
         default_value = "otobot,gb,jade,wegfan"
     )]
     pub mirror_priority: Vec<Mirror>,
 
-    /// Use a GitHub mirror for database retrieval.
+    /// Enables GitHub mirror for database retrieval.
     #[arg(short = 'm', long)]
     pub use_api_mirror: bool,
 
-    /// The limit for concurrent downloads (1 to 6).
+    /// Maximum number of concurrent downloads [range: 1-6]
     #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
     pub jobs: u8,
 }

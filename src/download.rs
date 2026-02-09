@@ -19,7 +19,7 @@ pub trait Database {
     const ENDPOINT: &'static str;
 }
 
-/// A base URL of API.
+/// Base URL of API.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum DbBaseUrl {
     #[default]
@@ -225,7 +225,6 @@ impl Downloader {
         pb.set_length(total_size);
         pb.reset();
 
-        // NOTE `tmpfs` vs `in-memory buffer`: It doesn't matter for modern linux system
         let mut buffer = Vec::with_capacity(total_size as usize);
 
         let mut hasher = Xxh64::new(0);
@@ -249,7 +248,6 @@ impl Downloader {
         }
         debug!(xxhash64 = %computed_hash, "hash check passed");
 
-        // NOTE BufWriter has no significant performance improvement here
         let mut file = fs::File::create(file_path)
             .await
             .inspect_err(|err| error!(?err))?;
