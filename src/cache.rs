@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Serialize, deserialize, rancor};
 use tracing::{debug, instrument};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::config::AppConfig;
+use crate::{config::AppConfig, log::anonymize};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CacheError {
@@ -57,7 +57,7 @@ impl CacheEntry {
 }
 
 /// Gets up-to-date file cache.
-#[instrument(skip_all)]
+#[instrument(skip(config), fields(path = %anonymize(config.cache_db_path())))]
 pub fn sync(config: &AppConfig) -> Result<BTreeMap<u64, CacheEntry>, CacheError> {
     // Load existing cache database
     let mut cache = load_cache_db(config.cache_db_path()).unwrap_or_default();

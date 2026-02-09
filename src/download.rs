@@ -12,7 +12,9 @@ use tokio::{fs, io::AsyncWriteExt, sync::Semaphore, time::Duration};
 use tracing::{debug, error, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{cli::DownloadOption, config::AppConfig, mirrorlist, registry::RemoteMod};
+use crate::{
+    cli::DownloadOption, config::AppConfig, log::anonymize, mirrorlist, registry::RemoteMod,
+};
 
 pub trait Database {
     /// Target file name.
@@ -103,7 +105,7 @@ impl Downloader {
     }
 
     /// Download multiple files concurrently with a limit on the number of simultaneous downloads.
-    #[instrument(skip(self, mods))]
+    #[instrument(skip(self, mods, config))]
     pub async fn download_files(
         &self,
         mods: HashMap<String, RemoteMod>,
@@ -254,7 +256,7 @@ impl Downloader {
         file.write_all(&buffer).await?;
         file.flush().await?;
 
-        debug!(path = ?file_path.display(), "file saved to disk");
+        debug!(path = %anonymize(file_path), "saved to disk");
 
         Ok(())
     }
