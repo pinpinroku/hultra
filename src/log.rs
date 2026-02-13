@@ -1,4 +1,8 @@
-use std::{fs::File, io, path::{Component, Path}};
+use std::{
+    fs::File,
+    io,
+    path::{Component, Path},
+};
 
 use tracing_subscriber::{
     EnvFilter, Layer,
@@ -44,9 +48,10 @@ pub fn init_logger(log_file: Option<&Path>) -> Result<(), io::Error> {
 pub fn anonymize(path: &Path) -> String {
     // 1. trying to detect home dir from env var
     if let Some(home) = std::env::home_dir()
-        && let Ok(rel) = path.strip_prefix(&home) {
-            return format!("~/{}", rel.display());
-        }
+        && let Ok(rel) = path.strip_prefix(&home)
+    {
+        return format!("~/{}", rel.display());
+    }
 
     // 2. trying to guess it from path structure
     let mut comps = path.components();
@@ -55,7 +60,7 @@ pub fn anonymize(path: &Path) -> String {
     let user = comps.next();
 
     match (root, base, user) {
-        (Some(Component::RootDir), Some(b), Some(_)) 
+        (Some(Component::RootDir), Some(b), Some(_))
             // NOTE prevent /etc/systemd/system becomes ~/system
             if b.as_os_str() == "home" || b.as_os_str() == "Users" => 
         {

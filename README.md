@@ -49,7 +49,7 @@ A commandline installer and updater for Celeste mods.
 
 Just download the binary from the [release](https://github.com/pinpinroku/hultra/releases) page.
 
-Once downloaded, give it execution permissions by running `chmod u+x hultra`. Then, move it to `~/.local/bin` (or another directory of your choice). Finally, add that directory to your PATH if it isn’t already included.
+Once downloaded, give it execution permissions by running `chmod u+x hultra`. Then, move it to `~/.local/bin` (or another directory of your choice). Finally, add that directory to your PATH if it isn't already included.
 
 > The pre-build binary might not work for some users, then try another methods described below.
 

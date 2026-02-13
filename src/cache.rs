@@ -75,7 +75,7 @@ fn update_cache(cache: &mut FileCacheDB, mods_dir: &Path) -> io::Result<bool> {
     let mut updated = false;
 
     for entry in (mods_dir.read_dir()?).flatten() {
-        // Skip anything that isn’t a regular file *or* isn’t a `.zip`
+        // Skip anything that isn't a regular file *or* isn't a `.zip`
         if !entry.path().is_file()
             || !entry
                 .path()
