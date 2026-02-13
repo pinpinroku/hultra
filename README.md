@@ -3,7 +3,7 @@
 A commandline installer and updater for Celeste mods.
 
 **This is major version update (v4.0.0) from everest-mod-cli v3.2.2**
-- Introduces a lot of breaking changes 
+- Introduces a lot of breaking changes
 - Increases code readability, maintability, and scalaiblity
 - Huge performance improvements
 > See [CHANGELOG.md](https://github.com/pinpinroku/hultra/CHANGELOG.md) for more information
@@ -33,7 +33,7 @@ A commandline installer and updater for Celeste mods.
 - **Comprehensive Mod Listing**: View all installed mods along with their names and versions at a glance.
 - **Blazingly Fast Update**: Update your installed mods more faster than in-game update.
 - **Install Mods by URL**: Just type the URL of the mod page to install the mod. All missing dependencies are resolved automatically.
-- **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience. 
+- **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience.
 
 ---
 

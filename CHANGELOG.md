@@ -21,7 +21,7 @@ Changes from `v3.x` to `v4`.
 * (internal): Upgrade `reqwest` to v0.13.1 which introduces breaking changes to TLS backend. Now we can use rustls by default without modifying it manually
 * Remove `anyhow` from every modules, restrict its usage in main and test cases
 * Add custom error types for every modules using `thiserror` instead of simple errors using `anyhow` for more robust error handling
-* Extern crate `mirror-list` now integrates in main source directly: `./src/mirrorlist.rs` 
+* Extern crate `mirror-list` now integrates in main source directly: `./src/mirrorlist.rs`
 * (rename): Extern crate `zip-search` now renamed to `zip-finder` for clarity
 
 ## Fixed

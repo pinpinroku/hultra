@@ -62,7 +62,7 @@ pub fn anonymize(path: &Path) -> String {
     match (root, base, user) {
         (Some(Component::RootDir), Some(b), Some(_))
             // NOTE prevent /etc/systemd/system becomes ~/system
-            if b.as_os_str() == "home" || b.as_os_str() == "Users" => 
+            if b.as_os_str() == "home" || b.as_os_str() == "Users" =>
         {
             let rest = comps.as_path();
             if rest.as_os_str().is_empty() {
