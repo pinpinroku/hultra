@@ -1,223 +1,165 @@
-use std::{num::ParseIntError, path::PathBuf};
+use std::{ops::Deref, path::PathBuf, str::FromStr};
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 
-/// The main CLI structure for the Everest Mod CLI application
-#[derive(Debug, Parser)]
-#[command(version, about = "Mod management tool for Celeste", long_about = None)]
+use crate::download::DbBaseUrl;
+
+/// Supported mirrors.
+#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum Mirror {
+    /// Default GameBanana Server (United States).
+    Gb,
+    /// Germany.
+    Jade,
+    /// China.
+    Wegfan,
+    /// North America.
+    Otobot,
+}
+
+impl Mirror {
+    /// Generates the full mirror URL for a given GameBanana ID.
+    pub fn url_for_id(&self, gbid: u32) -> String {
+        match self {
+            Mirror::Gb => {
+                format!("https://gamebanana.com/mmdl/{}", gbid)
+            }
+            Mirror::Jade => {
+                format!(
+                    "https://celestemodupdater.0x0a.de/banana-mirror/{}.zip",
+                    gbid
+                )
+            }
+            Mirror::Wegfan => {
+                format!(
+                    "https://celeste.weg.fan/api/v2/download/gamebanana-files/{}",
+                    gbid
+                )
+            }
+            Mirror::Otobot => {
+                format!("https://banana-mirror-mods.celestemods.com/{}.zip", gbid)
+            }
+        }
+    }
+}
+
+/// Command line interface.
+#[derive(Debug, Clone, Parser)]
+#[command(version, about = "A simple cli tool to update/install mods for Celeste.", long_about = None)]
 pub struct Cli {
-    /// Directory where mods are stored. This option applies to all commands
-    #[arg(short = 'd', long = "mods-dir", value_name = "DIR")]
-    pub mods_directory: Option<PathBuf>,
+    /// Subcommands of the CLI.
+    #[command(subcommand)]
+    pub commands: Command,
 
-    /// Priority of the mirror list separated by commas
+    /// Directory where mods are installed.
+    #[arg(short = 'd', long = "directory", value_name = "DIR", global = true)]
+    pub directory: Option<PathBuf>,
+
+    /// Writes logs to the specified file.
+    #[arg(long, value_name = "PATH", global = true)]
+    pub log_file: Option<PathBuf>,
+}
+
+/// Subcommands of the CLI.
+#[derive(Debug, Clone, Subcommand)]
+pub enum Command {
+    /// List installed mods.
+    List,
+
+    /// Installs mods from GameBanana URLs.
+    Install {
+        /// URL(s) of mod page on GameBanana.
+        #[arg(required = true, num_args = 1..20)]
+        urls: Vec<GamebananaUrl>,
+
+        /// Options specific to downloading.
+        #[command(flatten)]
+        option: DownloadOption,
+    },
+
+    /// Updates mods.
+    Update(DownloadOption),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DownloadOption {
+    /// Comma-separated list of mirror priorities.
     #[arg(
-        short = 'm',
+        value_enum,
+        short = 'p',
         long = "mirror-priority",
         value_name = "MIRROR",
-        long_help = "Priority of the mirror list separated by commas (e.g., \"wegfan,jade,gb,otobot\").
-        This option only applies to the `install` and the `update` commands,
-
-        * gb     => 'Default GameBanana Server (United States)',
-        * jade   => 'Germany',
-        * wegfan => 'China',
-        * otobot => 'North America',
-
-        If the download from the current server fails, the application will
-        automatically fall back to the next server in the priority list to
-        retry the download. You can also restrict the fallback servers by
-        providing a comma-separated list (e.g., \"otobot,jade\"), which will
-        limit the retries to only those specified servers.",
+        value_delimiter = ',',
+        long_help = "Comma-separated list of mirror priorities.
+        This option allows you to specify the order in which mirrors should be tried when downloading mods.
+        You can specify up to 4 mirrors, but providing fewer will restrict download attempts to only those mirrors.",
         default_value = "otobot,gb,jade,wegfan"
     )]
-    pub mirror_preferences: String,
+    pub mirror_priority: Vec<Mirror>,
 
-    /// Verbose mode: Write verbose logs to the file
-    #[arg(short, long)]
-    pub verbose: bool,
+    /// Enables GitHub mirror for database retrieval.
+    #[arg(short = 'm', long)]
+    pub use_api_mirror: bool,
 
-    /// The subcommand to execute
-    #[command(subcommand)]
-    pub command: Commands,
+    /// Maximum number of concurrent downloads [range: 1-6]
+    #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
+    pub jobs: u8,
 }
 
-/// The set of available subcommands for the Everest Mod CLI
-#[derive(Debug, Subcommand)]
-pub enum Commands {
-    /// Install a mod using the URL
-    Install(InstallArgs),
-    /// List installed mods
-    List,
-    /// Show detailed information about an installed mod
-    Show(ShowArgs),
-    /// Check for updates
-    Update(UpdateArgs),
-}
+impl DownloadOption {
+    pub fn url_set(&self) -> DbBaseUrl {
+        match self.use_api_mirror {
+            true => DbBaseUrl::Mirror,
+            false => DbBaseUrl::Primary,
+        }
+    }
 
-/// Arguments for the `install` subcommand
-#[derive(Debug, Args)]
-pub struct InstallArgs {
-    /// The URL of the page where the mod is featured on the GameBanana
-    pub mod_page_url: String,
-}
-
-/// Arguments for the `show` subcommand
-#[derive(Debug, Args)]
-pub struct ShowArgs {
-    /// The name of the mod to show details for
-    pub name: String,
-}
-
-/// Arguments for the `update` subcommand
-#[derive(Debug, Args)]
-pub struct UpdateArgs {
-    /// Install available updates
-    #[arg(long, action)]
-    pub install: bool,
-}
-
-/// A valid prefix for the mod page URL
-const VALID_MOD_PAGE_URL_PREFIX: &str = "https://gamebanana.com/mods/";
-
-/// An error can be occured when trying to extract an ID from an URL
-#[derive(thiserror::Error, Debug, PartialEq, Eq)]
-pub enum IdExtractionError {
-    #[error("'{url}' does not have valid prefix (expected: '{VALID_MOD_PAGE_URL_PREFIX}')")]
-    InvalidPrefix { url: String },
-    #[error("no valid ID segment in given URL")]
-    NoIdSegment,
-}
-
-/// Extracts an ID segment from given URL string.
-pub fn extract_id(url: &str) -> Result<&str, IdExtractionError> {
-    let id_str = url.strip_prefix(VALID_MOD_PAGE_URL_PREFIX);
-    match id_str {
-        Some(id) if !id.is_empty() => Ok(id),
-        Some(_) => Err(IdExtractionError::NoIdSegment),
-        None => Err(IdExtractionError::InvalidPrefix {
-            url: url.to_string(),
-        }),
+    pub fn mirror_priority(&self) -> &Vec<Mirror> {
+        &self.mirror_priority
     }
 }
 
-/// Parses given string into an integer.
-pub fn parse_id(id_str: &str) -> Result<u32, ParseIntError> {
-    id_str
-        .parse::<u32>()
-        .inspect(|id| tracing::info!("parsed id: {}", id))
-        .inspect_err(|err| tracing::error!("failed to parse '{}' cause: {}", id_str, err))
+#[derive(thiserror::Error, Debug)]
+pub enum ArgumentError {
+    #[error(
+        "last path segment of URL must be a positive integer up to {}",
+        u32::MAX
+    )]
+    ParseLastSegAsInt(#[from] std::num::ParseIntError),
+    #[error("it must be starts with 'https://gamebanana.com/mods/'")]
+    InvalidUrl,
 }
 
-#[cfg(test)]
-mod tests_id_extraction {
-    use super::*;
+#[derive(Debug, Clone)]
+pub struct GamebananaUrl(String);
 
-    #[test]
-    fn test_extract_id_valid_numeric() {
-        let url = "https://gamebanana.com/mods/123456";
-        assert_eq!(extract_id(url).unwrap(), "123456");
+impl FromStr for GamebananaUrl {
+    type Err = ArgumentError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        s.strip_prefix("https://gamebanana.com/mods/")
+            .ok_or(ArgumentError::InvalidUrl)?
+            .parse::<u32>()?;
+        Ok(GamebananaUrl(s.to_string()))
     }
+}
 
-    #[test]
-    fn test_extract_id_valid_with_trailing_path() {
-        let url = "https://gamebanana.com/mods/123456/download";
-        assert_eq!(extract_id(url).unwrap(), "123456/download");
+impl Deref for GamebananaUrl {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
+}
 
-    #[test]
-    fn test_extract_id_valid_with_query_params() {
-        let url = "https://gamebanana.com/mods/123456?tab=comments";
-        assert_eq!(extract_id(url).unwrap(), "123456?tab=comments");
-    }
-
-    #[test]
-    fn test_extract_id_valid_alphanumeric() {
-        let url = "https://gamebanana.com/mods/abc123def";
-        assert_eq!(extract_id(url).unwrap(), "abc123def");
-    }
-
-    #[test]
-    fn test_extract_id_empty_id_segment() {
-        let url = "https://gamebanana.com/mods/";
-        let result = extract_id(url);
-        assert_eq!(result, Err(IdExtractionError::NoIdSegment));
-    }
-
-    #[test]
-    fn test_extract_id_invalid_prefix_different_domain() {
-        let url = "https://example.com/mods/123456";
-        let result = extract_id(url);
-        assert_eq!(
-            result,
-            Err(IdExtractionError::InvalidPrefix {
-                url: url.to_string()
-            })
-        );
-    }
-
-    #[test]
-    fn test_extract_id_invalid_prefix_different_path() {
-        let url = "https://gamebanana.com/mmdl/123456";
-        let result = extract_id(url);
-        assert_eq!(
-            result,
-            Err(IdExtractionError::InvalidPrefix {
-                url: url.to_string()
-            })
-        );
-    }
-
-    #[test]
-    fn test_extract_id_invalid_prefix_missing_trailing_slash() {
-        let url = "https://gamebanana.com/mods123456";
-        let result = extract_id(url);
-        assert_eq!(
-            result,
-            Err(IdExtractionError::InvalidPrefix {
-                url: url.to_string()
-            })
-        );
-    }
-
-    #[test]
-    fn test_extract_id_invalid_prefix_http_instead_of_https() {
-        let url = "http://gamebanana.com/mods/123456";
-        let result = extract_id(url);
-        assert_eq!(
-            result,
-            Err(IdExtractionError::InvalidPrefix {
-                url: url.to_string()
-            })
-        );
-    }
-
-    #[test]
-    fn test_extract_id_invalid_prefix_with_subdomain() {
-        let url = "https://www.gamebanana.com/mods/123456";
-        let result = extract_id(url);
-        assert_eq!(
-            result,
-            Err(IdExtractionError::InvalidPrefix {
-                url: url.to_string()
-            })
-        );
-    }
-
-    #[test]
-    fn test_extract_id_empty_string() {
-        let url = "";
-        let result = extract_id(url);
-        assert_eq!(
-            result,
-            Err(IdExtractionError::InvalidPrefix {
-                url: url.to_string()
-            })
-        );
-    }
-
-    #[test]
-    fn test_extract_id_valid_with_fragment() {
-        let url = "https://gamebanana.com/mods/123456#description";
-        assert_eq!(extract_id(url).unwrap(), "123456#description");
+impl GamebananaUrl {
+    pub fn extract_id(&self) -> Result<u32, ArgumentError> {
+        let id_part = self
+            .0
+            .strip_prefix("https://gamebanana.com/mods/")
+            .ok_or(ArgumentError::InvalidUrl)?;
+        let id = id_part.parse()?;
+        Ok(id)
     }
 }

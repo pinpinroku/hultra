@@ -1,0 +1,11 @@
+[package]
+name = "zip-finder"
+version = "1.0.0"
+edition = "2024"
+readme = "README.md"
+license = "GPLv3"
+rust-version = "1.92"
+
+[dependencies]
+flate2 = "1.1.5"
+thiserror = "2.0.17"

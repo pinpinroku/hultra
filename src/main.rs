@@ -1,273 +1,191 @@
-use std::{
-    collections::HashSet,
-    env,
-    fs::{self, File},
-    sync::Arc,
-};
+use std::{collections::HashSet, fmt};
 
-use anyhow::{Context, Result};
+use anyhow::Context;
 use clap::Parser;
-
-mod cli;
-mod config;
-mod constant;
-mod dependency;
-mod download;
-mod fetch;
-mod fileutil;
-mod local_mod;
-mod manifest;
-mod mod_registry;
-mod zip;
+use tracing::{debug, info};
 
 use crate::{
-    cli::{Cli, Commands},
-    config::Config,
-    dependency::ModDependencyQuery,
-    local_mod::LocalMod,
-    mod_registry::{ModRegistryQuery, RemoteModRegistry},
+    cli::{Cli, Command},
+    config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
+    dependency::DependencyGraph,
+    download::Downloader,
+    local_mods::LocalMod,
+    registry::ModRegistry,
 };
 
-/// Initialize logger
-fn setup_logger(verbose: bool) -> Result<()> {
-    let log_dir = env::home_dir()
-        .context("Could not determine home directory")?
-        .join(".local/state/everest-mod-cli/");
-    fs::create_dir_all(&log_dir).context("Failed to create log directory")?;
+mod cache;
+mod cli;
+mod config;
+mod dependency;
+mod download;
+mod local_mods;
+mod log;
+mod mirrorlist;
+mod registry;
+mod update;
 
-    let log_file_path = log_dir.join("everest-mod-cli.log");
-    let log_file = File::create(&log_file_path).context("Failed to create log file")?;
-
-    // Determine the log level based on verbosity
-    let log_level = if verbose {
-        "everest_mod_cli=debug"
-    } else {
-        "everest_mod_cli=info"
-    };
-
-    // construct a subscriber that prints formatted traces to stdout
-    let subscriber = tracing_subscriber::fmt()
-        .compact()
-        .with_env_filter(log_level)
-        .with_file(true)
-        .with_line_number(true)
-        .with_thread_ids(true)
-        .with_target(false)
-        .with_writer(log_file)
-        .with_ansi(false)
-        .finish();
-
-    // Start configuring a `fmt` subscriber
-    tracing::subscriber::set_global_default(subscriber)?;
-
-    Ok(())
+/// Represents success case
+#[derive(Debug)]
+enum Success {
+    UpToDate,
+    AllModsBlacklisted,
+    AlreadyInstalled,
 }
 
-async fn run() -> Result<()> {
-    let cli = Cli::parse();
-
-    setup_logger(cli.verbose)?;
-
-    tracing::info!("Application starts");
-
-    tracing::debug!("Passed CLI arguments: {:#?}", &cli);
-    tracing::debug!("Command passed: {:?}", &cli.command);
-
-    let config = Config::new(&cli)?;
-
-    // Determine the mods directory.
-    let mods_directory = config.directory();
-    tracing::info!(
-        "Using mods directory: '{}'",
-        fileutil::replace_home_dir_with_tilde(mods_directory)
-    );
-    tracing::info!("Mirror preference: {}", config.mirror_preferences());
-
-    // Gathering mod paths
-    let archive_paths = config.find_installed_mod_archives()?;
-
-    let mut local_mods = LocalMod::load_local_mods(&archive_paths);
-
-    match &cli.command {
-        // Show mod name and file name of installed mods.
-        Commands::List => {
-            if archive_paths.is_empty() {
-                println!("No mods are currently installed.");
-                return Ok(());
+/// Display message for success operation
+impl fmt::Display for Success {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Success::UpToDate => write!(f, "All mods are up-to-date!"),
+            Success::AllModsBlacklisted => {
+                write!(f, "All of mods are blacklisted, skipping updates.")
             }
-
-            // Sort mods by name before displaying.
-            tracing::info!("Sorting the installed mods by name.");
-            local_mods.sort_by(|a, b| a.manifest.name.cmp(&b.manifest.name));
-
-            tracing::info!("Listing installed mods.");
-            local_mods.iter().for_each(|local_mod| {
-                if let Some(os_str) = local_mod.location.file_name() {
-                    println!(
-                        "- {} ({})",
-                        local_mod.manifest.name,
-                        os_str.to_string_lossy()
-                    );
-                }
-            });
-
-            println!();
-            println!("✅ {} mods found.", &local_mods.len());
-            if archive_paths.len() != local_mods.len() {
-                println!(
-                    "⚠️  {} mod archive(s) could not be read. Check the log file for details.",
-                    archive_paths.len() - local_mods.len()
-                );
-            }
-        }
-
-        // Show details of a specific mod if it is installed.
-        Commands::Show(args) => {
-            tracing::info!("Checking installed mod information...");
-            if let Some(local_mod) = local_mods.iter().find(|m| m.manifest.name == args.name) {
-                println!(
-                    "📂 {}",
-                    fileutil::replace_home_dir_with_tilde(&local_mod.location)
-                );
-                println!("- Name: {}", local_mod.manifest.name);
-                println!("  Version: {}", local_mod.manifest.version);
-                if let Some(deps) = &local_mod.manifest.dependencies {
-                    println!("  Dependencies:");
-                    for dep in deps {
-                        println!("    - Name: {}", dep.name);
-                        if let Some(version) = &dep.version {
-                            println!("      Version: {version}");
-                        }
-                    }
-                }
-                if let Some(opt_deps) = &local_mod.manifest.optional_dependencies {
-                    println!("  Optional Dependencies:");
-                    for dep in opt_deps {
-                        println!("    - Name: {}", dep.name);
-                        if let Some(version) = &dep.version {
-                            println!("      Version: {version}");
-                        }
-                    }
-                }
-            } else {
-                println!("The mod '{}' is not currently installed.", args.name);
-            }
-        }
-
-        Commands::Install(_) | Commands::Update(_) => {
-            let semaphore = Arc::new(tokio::sync::Semaphore::new(6));
-            let client = reqwest::ClientBuilder::new()
-                .use_rustls_tls()
-                .https_only(true)
-                .gzip(true)
-                .build()
-                .unwrap_or_default();
-
-            match &cli.command {
-                // Install a mod by fetching its information from the mod registry.
-                Commands::Install(args) => {
-                    let id_str = cli::extract_id(&args.mod_page_url)?;
-                    let mod_id = cli::parse_id(id_str)?;
-
-                    // Fetching online database
-                    let (mod_registry, dependency_graph) =
-                        fetch::fetch_online_database(&client).await?;
-
-                    // Gets the mod name by using the ID from the Remote Mod Registry.
-                    let mod_names = mod_registry.get_mod_name_by_id(mod_id);
-                    if mod_names.is_empty() {
-                        println!("Could not find the mod matches [{mod_id}].");
-                        return Ok(());
-                    };
-                    tracing::info!("Mod names found for ID [{mod_id}]: {:#?}", &mod_names);
-
-                    tracing::info!("Collecting installed mods names.");
-                    let mut installed_mod_names: HashSet<String> = local_mods
-                        .into_iter()
-                        .map(|installed| installed.manifest.name)
-                        .collect();
-
-                    tracing::info!("Starting installation process.");
-                    for mod_name in mod_names {
-                        if installed_mod_names.contains(mod_name) {
-                            println!("You already have [{mod_name}] installed.");
-                            continue;
-                        }
-
-                        let downloadable_mods = dependency_graph.check_dependencies(
-                            mod_name,
-                            &mod_registry,
-                            &installed_mod_names,
-                        );
-
-                        if downloadable_mods.is_empty() {
-                            println!("All dependencies for mod [{mod_name}] are already installed");
-                            continue;
-                        }
-
-                        println!("Downloading mod [{mod_name}] and its dependencies...");
-                        download::download_mods_concurrently(
-                            &client,
-                            &downloadable_mods,
-                            config.clone(),
-                            &semaphore,
-                        )
-                        .await?;
-
-                        // Prevent duplicate downloads
-                        for (mod_name, _) in downloadable_mods {
-                            installed_mod_names.insert(mod_name);
-                        }
-                    }
-                }
-                Commands::Update(args) => {
-                    // Filter installed mods according to the `updaterblacklist.txt`
-                    if let Some(updater_blacklist) = config.read_updater_blacklist()? {
-                        local_mods
-                            .retain(|local_mod| !updater_blacklist.contains(&local_mod.location));
-                    }
-
-                    // Update installed mods by checking for available updates in the mod registry.
-                    let spinner = download::pb_style::create_spinner();
-                    let mod_registry = RemoteModRegistry::fetch(&client).await?;
-                    spinner.finish_and_clear();
-                    drop(spinner);
-
-                    let registry = Arc::new(mod_registry);
-
-                    let available_updates = registry.check_updates(&local_mods);
-
-                    if available_updates.is_empty() {
-                        println!("All mods are up to date!");
-                    } else if args.install {
-                        println!();
-                        println!("Installing updates...");
-                        download::download_mods_concurrently(
-                            &client,
-                            &available_updates,
-                            config,
-                            &semaphore,
-                        )
-                        .await?;
-                    } else {
-                        println!();
-                        println!("Run with --install to install these updates");
-                    }
-                }
-                _ => unreachable!(),
+            Success::AlreadyInstalled => {
+                write!(f, "All mods are already installed, exiting program.")
             }
         }
     }
-
-    Ok(())
 }
 
 #[tokio::main]
-async fn main() {
-    if let Err(err) = run().await {
-        tracing::error!("{:#?}", err);
-        eprintln!("Failed to run the command: cause {}", err);
-    } else {
-        tracing::info!("Command completed successfully.");
+async fn main() -> anyhow::Result<()> {
+    let args = Cli::parse();
+
+    log::init_logger(args.log_file.as_deref()).with_context(|| {
+        format!(
+            "Failed to initialize logging system. Cannot create log file at {:?}",
+            args.log_file.as_deref()
+        )
+    })?;
+
+    info!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
+    debug!("\n{:#?}", args);
+
+    // Init app config
+    let config = AppConfig::new(args.directory.as_deref())?;
+
+    // Load already installed mods
+    info!("loading installed mods");
+    let installed_mods = LocalMod::load_local_mods(&config).with_context(|| {
+        format!(
+            "Failed to read mods directory: {}",
+            config.mods_dir().display()
+        )
+    })?;
+
+    match args.commands {
+        Command::List => {
+            info!("listing installed mods");
+            // send a list of installed mods to stdout
+            for installed in installed_mods {
+                println!("{}", installed)
+            }
+        }
+
+        Command::Install { urls, option } => {
+            info!("installing mods");
+            debug!("\n{:#?}\n{:#?}", urls, option);
+
+            // Parse mod page URLs to get mod IDs
+            let ids: Vec<u32> = urls
+                .iter()
+                .filter_map(|url| url.extract_id().ok())
+                .collect();
+
+            // Fetch metadata
+            info!("fetching database");
+            let downloader = Downloader::new(60, option.jobs as usize);
+            let spinner = download::create_spinner();
+            let (registry, graph) = tokio::try_join!(
+                downloader.fetch_database::<ModRegistry>(option.url_set()),
+                downloader.fetch_database::<DependencyGraph>(option.url_set())
+            )
+            .context("Failed to fetch database")?;
+            spinner.finish_and_clear();
+
+            // Collect mod names found by ID in registry
+            let mod_names = registry.get_names_by_ids(&ids);
+
+            // Collect names of already installed mods
+            let local_mod_names: HashSet<&str> = installed_mods
+                .iter()
+                .map(|local_mod| local_mod.name())
+                .collect();
+
+            // If all target mods are already installed, exit early
+            if local_mod_names.is_superset(&mod_names) {
+                println!("{}", Success::AlreadyInstalled);
+                return Ok(());
+            }
+
+            // Traverses dependency graph to collect missing dependency names
+            info!("resolving dependencies");
+            let deps = graph.bfs_traversal(mod_names);
+
+            // Determine which dependencies are missing locally
+            let missing_dep_names: HashSet<_> = deps
+                .into_iter()
+                .filter(|name| !local_mod_names.contains(name.as_str()))
+                .collect();
+
+            // Prepare download mods
+            let targets = registry::extract_target_mods(registry.mods, &missing_dep_names);
+
+            // Download missing mods
+            info!("downloading mods");
+            downloader.download_files(targets, &config, &option).await;
+            info!("installation completed");
+        }
+        Command::Update(option) => {
+            info!("updating mods");
+
+            let mut local_mods = installed_mods;
+
+            info!("reading updater blacklist file");
+            let blacklist = config
+                .read_updater_blacklist()
+                .context("Failed to read updater blacklist")?;
+            local_mods.retain(|local_mod| !blacklist.contains(local_mod.get_file_name().as_ref()));
+
+            if local_mods.is_empty() {
+                println!("{}", Success::AllModsBlacklisted)
+            }
+
+            info!("syncing file cache");
+            let cache_db = cache::sync(&config).context("Failed to sync file cache")?;
+
+            // fetch metadata
+            info!("fetching database");
+            let downloader = Downloader::new(60, option.jobs as usize);
+            let spinner = download::create_spinner();
+            let registry = downloader
+                .fetch_database::<ModRegistry>(option.url_set())
+                .await
+                .context("Failed to fetching database")?;
+            spinner.finish_and_clear();
+
+            // check updates
+            info!("checking updates");
+            let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
+
+            if targets.is_empty() {
+                println!("{}", Success::UpToDate);
+                return Ok(());
+            } else {
+                // send update info to stdout
+                println!("Available updates:\n");
+                for update_info in update_info_list {
+                    println!("{}", update_info);
+                }
+                println!();
+            }
+
+            // Download updates
+            info!("downloading mods");
+            downloader.download_files(targets, &config, &option).await;
+            info!("updating completed")
+        }
     }
+
+    Ok(())
 }
