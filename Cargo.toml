@@ -11,12 +11,12 @@ repository = "https://github.com/pinpinroku/hultra"
 
 [dependencies]
 anyhow = "1.0.100"
-clap = { version = "4.5.54", features = ["derive"] }
+clap = { version = "4.5.58", features = ["derive"] }
 futures-util = "0.3.31" # for `StreamExt` trait
-indicatif = "0.18.0"
+indicatif = "0.18.4"
 rayon = "1.11.0"
 reqwest = { version = "0.13.1", features = ["stream", "gzip"] }
-rkyv = "0.8.13"
+rkyv = "0.8.15"
 serde = { version = "1.0.225", features = ["derive"] }
 serde_yaml_ng = "0.10.0"
 thiserror = "2.0.16"
@@ -27,8 +27,8 @@ xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 zip-finder = { version = "1.0.0", path = "./zip-finder" }
 
 [dev-dependencies]
-tempfile = "3.24.0"
-zip = { version = "7.2.0", features = ["deflate"] }
+tempfile = "3.25.0"
+zip = { version = "8.0.0", features = ["deflate"] }
 
 [workspace]
 resolver = "3"
