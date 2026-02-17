@@ -20,7 +20,7 @@ rkyv = "0.8.15"
 serde = { version = "1.0.225", features = ["derive"] }
 serde_yaml_ng = "0.10.0"
 thiserror = "2.0.16"
-tokio = { version = "1.49.0", features = ["full"] }
+tokio = { version = "1.49.0", features = ["rt", "rt-multi-thread", "fs", "io-util", "sync", "time", "macros"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
