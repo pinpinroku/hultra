@@ -66,11 +66,11 @@ If you're unfamiliar with Gitmoji or prefer using plain text commit messages, th
 
 ## Code Guidelines
 
-- **Style**: `Cargo fmt`
-- **Linting**: `Cargo clippy`
+- **Style**: `cargo fmt -- --check`
+- **Linting**: `cargo clippy --all-targets --all-features -- -D warnings`
 - **Testing**: Ensure your changes are accompanied by tests and that all tests pass:
-  ```bash
-  cargo test
+  ```sh
+  cargo test --all-features --all-targets
   ```
 - **Documentation**: Document your code where necessary (function-level comments).
 
@@ -92,4 +92,4 @@ If you're unfamiliar with Gitmoji or prefer using plain text commit messages, th
 
 ---
 
-Thank you for contributing to Everest Mod CLI! Together, we can make it even better.
+Thank you for contributing to hultra! Together, we can make it even better.
