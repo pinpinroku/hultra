@@ -27,7 +27,7 @@ xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
 zip-finder = { version = "1.0.0", path = "./zip-finder" }
 
 [dev-dependencies]
-tempfile = "3.25.0"
+tempfile = "3.26.0"
 zip = { version = "8.1.0", features = ["deflate"] }
 
 [workspace]
