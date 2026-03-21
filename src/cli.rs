@@ -80,6 +80,23 @@ pub enum Command {
 
     /// Updates mods.
     Update(DownloadOption),
+
+    /// Sub command for the Everest itself.
+    #[command(subcommand)]
+    Everest(EverestSubCommand),
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum EverestSubCommand {
+    /// Update Everest.
+    Update,
+    // NOTE: might not impelement this
+    /// Install Everest.
+    Install,
+    /// Checks updates for Everest.
+    Check,
+    /// Prints current version along with brach.
+    Version,
 }
 
 #[derive(Debug, Clone, Args)]

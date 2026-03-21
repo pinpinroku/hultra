@@ -18,6 +18,7 @@ mod cli;
 mod config;
 mod dependency;
 mod download;
+mod everest;
 mod local_mods;
 mod log;
 mod mirrorlist;
@@ -185,6 +186,14 @@ async fn main() -> anyhow::Result<()> {
             downloader.download_files(targets, &config, &option).await;
             info!("updating completed")
         }
+        Command::Everest(subcommand) => match subcommand {
+            cli::EverestSubCommand::Update => {
+                todo!("implement Everest update logic")
+            }
+            cli::EverestSubCommand::Install => todo!(),
+            cli::EverestSubCommand::Check => todo!(),
+            cli::EverestSubCommand::Version => todo!(),
+        },
     }
 
     Ok(())
