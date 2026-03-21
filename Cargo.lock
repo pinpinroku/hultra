@@ -756,6 +756,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
  "xxhash-rust",
  "zip",
  "zip-finder",

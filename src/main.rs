@@ -95,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
 
             // Fetch metadata
             info!("fetching database");
+            // TODO: Introduce `timeout` option for CLI, or use default value inside the Downloader
             let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
             let (registry, graph) = tokio::try_join!(
