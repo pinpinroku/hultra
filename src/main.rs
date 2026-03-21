@@ -5,10 +5,11 @@ use clap::Parser;
 use tracing::{debug, info};
 
 use crate::{
-    cli::{Cli, Command},
+    cli::{Cli, Command, EverestSubCommand},
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
     download::Downloader,
+    everest::{client::EverestClient, list_available_builds},
     local_mods::LocalMod,
     registry::ModRegistry,
 };
@@ -188,12 +189,18 @@ async fn main() -> anyhow::Result<()> {
             info!("updating completed")
         }
         Command::Everest(subcommand) => match subcommand {
-            cli::EverestSubCommand::Update => {
+            EverestSubCommand::Update => {
                 todo!("implement Everest update logic")
             }
-            cli::EverestSubCommand::Install => todo!(),
-            cli::EverestSubCommand::Check => todo!(),
-            cli::EverestSubCommand::Version => todo!(),
+            EverestSubCommand::Install => todo!(),
+            EverestSubCommand::Check => todo!(),
+            EverestSubCommand::Version => todo!(),
+            EverestSubCommand::List => {
+                let client = EverestClient::new()?;
+                let url = client.get_url(true).await?;
+                let builds = client.fetch_update_list(url).await?;
+                list_available_builds(builds)
+            }
         },
     }
 

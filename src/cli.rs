@@ -97,6 +97,8 @@ pub enum EverestSubCommand {
     Check,
     /// Prints current version along with brach.
     Version,
+    /// Lists all available builds.
+    List,
 }
 
 #[derive(Debug, Clone, Args)]

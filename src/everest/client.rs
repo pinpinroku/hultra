@@ -5,35 +5,10 @@ use reqwest::{
     Client,
     header::{ACCEPT, ACCEPT_ENCODING, HeaderValue},
 };
-use serde::Deserialize;
 use tracing::{info, instrument};
 use url::Url;
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EverestBuild {
-    pub date: String,
-    /// Four digits number of version. This value does not follows semantic versiong.
-    pub version: u32,
-    pub author: String,
-    pub description: String,
-    pub branch: Branch,
-    pub commit: String,
-    pub is_native: Option<bool>,
-
-    /// Download link for `main.zip`
-    pub main_download: String,
-    pub main_file_size: u64,
-}
-
-/// Build branch variant.
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Branch {
-    Stable,
-    Dev,
-    Beta,
-}
+use super::EverestBuild;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -45,7 +20,6 @@ pub enum Error {
 
 /// Download client for Everest update.
 pub struct EverestClient {
-    // url: Url,
     client: Client,
 }
 
@@ -109,11 +83,8 @@ impl EverestClient {
     // 2. Downloads file for specific version.
     #[instrument(skip(self), err(Debug))]
     pub async fn download_everest(&self, version: &str) -> Result<Vec<u8>, Error> {
-        // NOTE: ダウンロードしたディレクトリの中にバージョン情報を格納したファイルを配置する: `update-build.txt`
-        // NOTE: GUI の `EverestUpdater.cs` と CLI の `MiniInstaller/` の両方の処理を考慮しなければならない
+        // TODO: Generates `update-build.txt` in the destination directory
+        // NOTE: Consider both `./Celsete.Mod.mm/Mod/Everest/Everest.Updater.cs` for GUI and `./MiniInstaller/` for CLI to implement this logic
         todo!()
     }
-
-    // TODO: `JSON` の中身を表示するだけの簡易的なデバッグ関数を実装 `List SubCommand`
-    // TODO: `branch` で filter して、最新の `version` を特定
 }
