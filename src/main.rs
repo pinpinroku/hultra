@@ -1,7 +1,8 @@
-use std::{collections::HashSet, fmt};
+use std::{collections::HashSet, env, fmt};
 
 use anyhow::Context;
 use clap::Parser;
+use tempfile::NamedTempFile;
 use tracing::{debug, info};
 
 use crate::{
@@ -9,7 +10,7 @@ use crate::{
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
     download::Downloader,
-    everest::{client::EverestClient, list_available_builds},
+    everest::{client::EverestClient, extract_zip_archive, get_latest_builds, print_builds},
     local_mods::LocalMod,
     registry::ModRegistry,
 };
@@ -188,20 +189,38 @@ async fn main() -> anyhow::Result<()> {
             downloader.download_files(targets, &config, &option).await;
             info!("updating completed")
         }
-        Command::Everest(subcommand) => match subcommand {
-            EverestSubCommand::Update => {
-                todo!("implement Everest update logic")
+        Command::Everest(subcommand) => {
+            let Some(home) = env::home_dir() else {
+                anyhow::bail!("failed to determine home directory");
+            };
+            let game_path = home.join("local/share/Steam/steampapps/common/Celeste");
+
+            let client = EverestClient::new()?;
+            // TODO: Introduce `use_mirror` option for Everest command
+            let url = client.get_url(true).await?;
+
+            match subcommand {
+                EverestSubCommand::Update => {
+                    todo!("update Everest")
+                }
+                EverestSubCommand::Install => {
+                    let temp_zip = NamedTempFile::new()?;
+                    let _size = client
+                        .download_everest(url.as_str(), temp_zip.path())
+                        .await?;
+                    // TODO: assert downloaded size
+                    extract_zip_archive(temp_zip.path(), &game_path)?;
+                    todo!("chmod u+x MiniInstaller-linux, then run the installer");
+                }
+                EverestSubCommand::Version => todo!("show currently installed Everest version"),
+                EverestSubCommand::List { all, limit } => {
+                    let builds = client.fetch_update_list(url).await?;
+                    let display_n = if all { builds.len() } else { limit };
+                    let groups = get_latest_builds(builds, display_n);
+                    print_builds(groups)
+                }
             }
-            EverestSubCommand::Install => todo!(),
-            EverestSubCommand::Check => todo!(),
-            EverestSubCommand::Version => todo!(),
-            EverestSubCommand::List => {
-                let client = EverestClient::new()?;
-                let url = client.get_url(true).await?;
-                let builds = client.fetch_update_list(url).await?;
-                list_available_builds(builds)
-            }
-        },
+        }
     }
 
     Ok(())

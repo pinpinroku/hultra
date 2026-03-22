@@ -90,15 +90,18 @@ pub enum Command {
 pub enum EverestSubCommand {
     /// Update Everest.
     Update,
-    // NOTE: might not impelement this
     /// Install Everest.
     Install,
-    /// Checks updates for Everest.
-    Check,
-    /// Prints current version along with brach.
+    /// Print current version along with branch.
     Version,
-    /// Lists all available builds.
-    List,
+    /// List all available builds.
+    List {
+        #[arg(short, long)]
+        all: bool,
+
+        #[arg(short, long, default_value_t = 3)]
+        limit: usize,
+    },
 }
 
 #[derive(Debug, Clone, Args)]

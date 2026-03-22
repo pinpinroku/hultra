@@ -1,9 +1,13 @@
-#![allow(dead_code, unused_variables)]
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
+use futures_util::StreamExt;
 use reqwest::{
     Client,
     header::{ACCEPT, ACCEPT_ENCODING, HeaderValue},
+};
+use tokio::{
+    fs::File,
+    io::{AsyncWriteExt, BufWriter},
 };
 use tracing::{info, instrument};
 use url::Url;
@@ -14,6 +18,8 @@ use super::EverestBuild;
 pub enum Error {
     #[error(transparent)]
     Network(#[from] reqwest::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     #[error(transparent)]
     UrlParse(#[from] url::ParseError),
 }
@@ -80,11 +86,32 @@ impl EverestClient {
         Ok(builds)
     }
 
-    // 2. Downloads file for specific version.
+    // in-game updaterを利用してアップデートした場合は、`everest-update`のディレクトリが作成され、その中にupdate-build.txtが作成される
+    // そうじゃなく、直接MiniInstallerを実行した場合は、そのディレクトリが存在しない。その場合はEverest_MiniInstallerという一時サブディレクトリが自動的に作成される
+    // 2. Downloads file and save it to given destination. Returns actual downloaded size in bytes.
     #[instrument(skip(self), err(Debug))]
-    pub async fn download_everest(&self, version: &str) -> Result<Vec<u8>, Error> {
-        // TODO: Generates `update-build.txt` in the destination directory
-        // NOTE: Consider both `./Celsete.Mod.mm/Mod/Everest/Everest.Updater.cs` for GUI and `./MiniInstaller/` for CLI to implement this logic
-        todo!()
+    pub async fn download_everest(&self, url: &str, dest: &Path) -> Result<u64, Error> {
+        let response = self
+            .client
+            .get(url)
+            .header(ACCEPT, "application/octet-stream")
+            .send()
+            .await?;
+
+        let file = File::create(dest).await?;
+        let mut writer = BufWriter::new(file);
+        let mut stream = response.bytes_stream();
+
+        let mut downloaded = 0;
+
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk?;
+            writer.write_all(&chunk).await?;
+            downloaded += chunk.len() as u64;
+        }
+
+        writer.flush().await?;
+
+        Ok(downloaded)
     }
 }

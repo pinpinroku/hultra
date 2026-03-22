@@ -1,16 +1,22 @@
 pub mod client;
 
-use std::fmt;
+use std::{
+    collections::BTreeMap,
+    fmt,
+    fs::{self, File},
+    io,
+    path::Path,
+};
 
-use console::style;
 use serde::{Deserialize, Serialize};
+use zip::ZipArchive;
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EverestBuild {
     date: String,
     /// Four digits number of version. This value does not follows semantic versiong.
-    version: u32,
+    pub version: u32,
     /// Commit hash.
     commit: String,
 
@@ -38,39 +44,7 @@ impl EverestBuild {
     }
 }
 
-impl fmt::Display for EverestBuild {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let line = format!(
-            "{} ({}) at {}",
-            self.version,
-            self.branch,
-            self.formatted_date()
-        );
-        match &self.branch {
-            Branch::Dev {
-                author,
-                description,
-            } => {
-                writeln!(
-                    f,
-                    "{} at {} by {}",
-                    style(&self.version).bold(),
-                    style(self.formatted_date()).dim(),
-                    style(author).dim()
-                )?;
-                writeln!(f, "  {}", style(description).bright())
-            }
-            Branch::Stable => {
-                writeln!(f, "{}", style(line).on_green().black())
-            }
-            Branch::Beta => {
-                writeln!(f, "{}", style(line).on_yellow().black())
-            }
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Ord, PartialOrd)]
 #[serde(rename_all = "lowercase", tag = "branch")]
 pub enum Branch {
     Stable,
@@ -88,37 +62,90 @@ impl fmt::Display for Branch {
     }
 }
 
-/// Lists currently avaiable Everest builds.
-pub fn list_available_builds(builds: Vec<EverestBuild>) {
-    for build in builds {
-        println!("{}", build)
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum ExtractError {
+    #[error(transparent)]
+    Zip(#[from] zip::result::ZipError),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
-/// Gets latest Everest build for given branch.
-///
-/// ## Example
-/// ```ignore
-/// let builds = vec![EverestBuild::default()];
-/// let latest = get_latest_build(builds, Branch::Stable);
-///
-/// if let Some(build) = latest {
-///     println!("Latest version on {}: {}", branch, build.version);
-///     println!("{}", build);
-/// } else {
-///     println!("No builds found for branch: {}", branch);
-/// }
-/// ```
-pub async fn get_latest_build(builds: Vec<EverestBuild>, branch: Branch) -> Option<EverestBuild> {
-    builds
-        .into_iter()
-        .filter(|build| {
-            matches!(
-                (&build.branch, &branch),
-                (Branch::Stable, Branch::Stable)
-                    | (Branch::Beta, Branch::Beta)
-                    | (Branch::Dev { .. }, Branch::Dev { .. })
-            )
-        })
-        .max_by_key(|build| build.version)
+/// Extracts ZIP archive to the specified directory.
+pub fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), ExtractError> {
+    let file = File::open(temp_zip)?;
+    let mut archive = ZipArchive::new(file)?;
+
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)?;
+        let outpath = dest_dir.join(file.name());
+
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath)?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                fs::create_dir_all(p)?;
+            }
+            let mut outfile = File::create(&outpath)?;
+            io::copy(&mut file, &mut outfile)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn get_latest_builds(
+    builds: Vec<EverestBuild>,
+    n: usize,
+) -> BTreeMap<String, Vec<EverestBuild>> {
+    let mut groups: BTreeMap<String, Vec<EverestBuild>> = BTreeMap::new();
+
+    for build in builds {
+        groups
+            .entry(build.branch.to_string())
+            .or_default()
+            .push(build);
+    }
+
+    for builds_in_branch in groups.values_mut() {
+        builds_in_branch.sort_by_key(|b| std::cmp::Reverse(b.version));
+        builds_in_branch.truncate(n);
+    }
+
+    groups
+}
+
+pub fn print_builds(groups: BTreeMap<String, Vec<EverestBuild>>) {
+    println!(
+        "{:<10} {:<8} {:<10} {:<20} DETAILS",
+        "BRANCH", "VERSION", "COMMIT", "DATE"
+    );
+    println!("{}", "-".repeat(80));
+
+    for (branch_name, builds) in groups {
+        for (i, build) in builds.into_iter().enumerate() {
+            let branch_ptr = if i == 0 { &branch_name } else { "" };
+
+            let short_sha = if build.commit.len() > 7 {
+                &build.commit[..7]
+            } else {
+                &build.commit
+            };
+
+            let details = match &build.branch {
+                Branch::Dev {
+                    author,
+                    description,
+                } => {
+                    format!("[{}] {}", author, description)
+                }
+                _ => "-".to_string(),
+            };
+
+            let date = build.formatted_date();
+
+            println!(
+                "{:<10} {:<8} {:<10} {:<20} {}",
+                branch_ptr, build.version, short_sha, date, details
+            );
+        }
+    }
 }
