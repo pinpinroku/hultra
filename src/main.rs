@@ -197,16 +197,20 @@ async fn main() -> anyhow::Result<()> {
 
             let client = EverestClient::new()?;
             // TODO: Introduce `use_mirror` option for Everest command
-            let url = client.get_url(true).await?;
+            let endpoint = client.get_url(true).await?;
+            let builds = client.fetch_update_list(endpoint).await?;
 
             match subcommand {
                 EverestSubCommand::Update => {
                     todo!("update Everest")
                 }
-                EverestSubCommand::Install => {
+                EverestSubCommand::Install { version } => {
                     let temp_zip = NamedTempFile::new()?;
+                    let Some(build) = builds.iter().find(|build| build.version == version) else {
+                        anyhow::bail!("Specified version is not available.")
+                    };
                     let _size = client
-                        .download_everest(url.as_str(), temp_zip.path())
+                        .download_everest(&build.main_download, temp_zip.path())
                         .await?;
                     // TODO: assert downloaded size
                     extract_zip_archive(temp_zip.path(), &game_path)?;
@@ -214,7 +218,6 @@ async fn main() -> anyhow::Result<()> {
                 }
                 EverestSubCommand::Version => todo!("show currently installed Everest version"),
                 EverestSubCommand::List { all, limit } => {
-                    let builds = client.fetch_update_list(url).await?;
                     let display_n = if all { builds.len() } else { limit };
                     let groups = get_latest_builds(builds, display_n);
                     print_builds(groups)

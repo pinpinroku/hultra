@@ -91,7 +91,10 @@ pub enum EverestSubCommand {
     /// Update Everest.
     Update,
     /// Install Everest.
-    Install,
+    Install {
+        #[arg(short, long)]
+        version: u32,
+    },
     /// Print current version along with branch.
     Version,
     /// List all available builds.

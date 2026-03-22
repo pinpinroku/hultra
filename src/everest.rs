@@ -29,7 +29,7 @@ pub struct EverestBuild {
     is_native: Option<bool>,
 
     /// Download link for `main.zip`
-    main_download: String,
+    pub main_download: String,
     /// Download size of `main.zip`
     main_file_size: u64,
 }
