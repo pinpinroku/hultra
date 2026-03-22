@@ -86,8 +86,6 @@ impl EverestClient {
         Ok(builds)
     }
 
-    // in-game updaterを利用してアップデートした場合は、`everest-update`のディレクトリが作成され、その中にupdate-build.txtが作成される
-    // そうじゃなく、直接MiniInstallerを実行した場合は、そのディレクトリが存在しない。その場合はEverest_MiniInstallerという一時サブディレクトリが自動的に作成される
     // 2. Downloads file and save it to given destination. Returns actual downloaded size in bytes.
     #[instrument(skip(self), err(Debug))]
     pub async fn download_everest(&self, url: &str, dest: &Path) -> Result<u64, Error> {

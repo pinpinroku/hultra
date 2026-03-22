@@ -1,4 +1,4 @@
-use std::{collections::HashSet, env, fmt};
+use std::{collections::HashSet, fmt};
 
 use anyhow::Context;
 use clap::Parser;
@@ -10,7 +10,10 @@ use crate::{
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
     download::Downloader,
-    everest::{client::EverestClient, extract_zip_archive, get_latest_builds, print_builds},
+    everest::{
+        client::EverestClient, extract_zip_archive, get_latest_builds, installer::MiniInstaller,
+        print_builds,
+    },
     local_mods::LocalMod,
     registry::ModRegistry,
 };
@@ -190,11 +193,6 @@ async fn main() -> anyhow::Result<()> {
             info!("updating completed")
         }
         Command::Everest(subcommand) => {
-            let Some(home) = env::home_dir() else {
-                anyhow::bail!("failed to determine home directory");
-            };
-            let game_path = home.join("local/share/Steam/steampapps/common/Celeste");
-
             let client = EverestClient::new()?;
             // TODO: Introduce `use_mirror` option for Everest command
             let endpoint = client.get_url(true).await?;
@@ -209,12 +207,14 @@ async fn main() -> anyhow::Result<()> {
                     let Some(build) = builds.iter().find(|build| build.version == version) else {
                         anyhow::bail!("Specified version is not available.")
                     };
-                    let _size = client
+                    let downloaded = client
                         .download_everest(&build.main_download, temp_zip.path())
                         .await?;
-                    // TODO: assert downloaded size
-                    extract_zip_archive(temp_zip.path(), &game_path)?;
-                    todo!("chmod u+x MiniInstaller-linux, then run the installer");
+                    debug_assert_eq!(downloaded, build.main_file_size);
+                    extract_zip_archive(temp_zip.path(), config.root_dir())?;
+                    let mini_installer = MiniInstaller::new(config.root_dir());
+                    mini_installer.grant_execute_permission()?;
+                    mini_installer.execute()?;
                 }
                 EverestSubCommand::Version => todo!("show currently installed Everest version"),
                 EverestSubCommand::List { all, limit } => {

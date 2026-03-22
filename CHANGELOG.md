@@ -1,5 +1,11 @@
 # CHANGELOG
 
+Changes for `v5.0.0`.
+
+## BREAKING CHANGES
+
+* `--directory` option now specify the game installation directory instead of Mods directory. Use `./Celeste/` instead of `./Celeste/Mods/` from this version.
+
 Changes from `v3.x` to `v4`.
 
 ## BREAKING CHANGES

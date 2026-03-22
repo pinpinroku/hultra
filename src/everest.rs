@@ -1,4 +1,5 @@
 pub mod client;
+pub mod installer;
 
 use std::{
     collections::BTreeMap,
@@ -31,7 +32,7 @@ pub struct EverestBuild {
     /// Download link for `main.zip`
     pub main_download: String,
     /// Download size of `main.zip`
-    main_file_size: u64,
+    pub main_file_size: u64,
 }
 
 impl EverestBuild {

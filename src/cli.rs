@@ -52,7 +52,7 @@ pub struct Cli {
     #[command(subcommand)]
     pub commands: Command,
 
-    /// Directory where mods are installed.
+    /// Use the custom directory where the Celeste is installed.
     #[arg(short = 'd', long = "directory", value_name = "DIR", global = true)]
     pub directory: Option<PathBuf>,
 
@@ -97,11 +97,13 @@ pub enum EverestSubCommand {
     },
     /// Print current version along with branch.
     Version,
-    /// List all available builds.
+    /// List available Everest versions.
     List {
+        /// Prints all versions.
         #[arg(short, long)]
         all: bool,
 
+        /// Prints latest versions up to specified number.
         #[arg(short, long, default_value_t = 3)]
         limit: usize,
     },
