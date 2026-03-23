@@ -5,12 +5,15 @@ use reqwest::{
     Client,
     header::{ACCEPT, ACCEPT_ENCODING, HeaderValue},
 };
+use tempfile::NamedTempFile;
 use tokio::{
     fs::File,
     io::{AsyncWriteExt, BufWriter},
 };
 use tracing::{info, instrument};
 use url::Url;
+
+use crate::{config::AppConfig, everest::installer};
 
 use super::EverestBuild;
 
@@ -22,6 +25,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     UrlParse(#[from] url::ParseError),
+    #[error(transparent)]
+    Extract(#[from] super::ExtractError),
 }
 
 /// Download client for Everest update.
@@ -41,6 +46,26 @@ impl EverestClient {
             .timeout(Duration::from_secs(5))
             .build()?;
         Ok(Self { client })
+    }
+
+    /// Downloads `main.zip` and runs `MiniInstaller-linux`.
+    pub async fn download_and_run_installer(
+        &self,
+        build: &EverestBuild,
+        config: &AppConfig,
+    ) -> Result<(), Error> {
+        let temp_zip = NamedTempFile::new()?;
+
+        let downloaded = self
+            .download_everest(&build.main_download, temp_zip.path())
+            .await?;
+        debug_assert_eq!(downloaded, build.main_file_size);
+
+        super::extract_zip_archive(temp_zip.path(), config.root_dir())?;
+
+        installer::run(config.root_dir())?;
+
+        Ok(())
     }
 
     /// Returns API endpoint.

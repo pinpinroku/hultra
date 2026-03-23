@@ -2,7 +2,6 @@ use std::{collections::HashSet, fmt};
 
 use anyhow::Context;
 use clap::Parser;
-use tempfile::NamedTempFile;
 use tracing::{debug, info};
 
 use crate::{
@@ -10,10 +9,7 @@ use crate::{
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
     download::Downloader,
-    everest::{
-        client::EverestClient, extract_zip_archive, get_latest_builds, installer::MiniInstaller,
-        print_builds,
-    },
+    everest::{client::EverestClient, version},
     local_mods::LocalMod,
     registry::ModRegistry,
 };
@@ -194,33 +190,37 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Everest(subcommand) => {
             let client = EverestClient::new()?;
-            // TODO: Introduce `use_mirror` option for Everest command
+            // TODO: make `use_api_mirror` option global to be able to use it in Everest commands
             let endpoint = client.get_url(true).await?;
             let builds = client.fetch_update_list(endpoint).await?;
 
+            let current_v = version::ensure_installed_version(config.root_dir())?;
+
             match subcommand {
                 EverestSubCommand::Update => {
-                    todo!("update Everest")
+                    let branch = version::get_installed_branch(&builds, &current_v)
+                        .context("Installed version not found on the database")?;
+                    let target_build = version::get_latest_build_on_branch(&builds, branch)
+                        .context("No builds found on the branch")?;
+                    client
+                        .download_and_run_installer(target_build, &config)
+                        .await?;
                 }
                 EverestSubCommand::Install { version } => {
-                    let temp_zip = NamedTempFile::new()?;
-                    let Some(build) = builds.iter().find(|build| build.version == version) else {
-                        anyhow::bail!("Specified version is not available.")
-                    };
-                    let downloaded = client
-                        .download_everest(&build.main_download, temp_zip.path())
+                    let target_build = builds
+                        .iter()
+                        .find(|b| b.version == version)
+                        .context("Specified version is not available")?;
+                    client
+                        .download_and_run_installer(target_build, &config)
                         .await?;
-                    debug_assert_eq!(downloaded, build.main_file_size);
-                    extract_zip_archive(temp_zip.path(), config.root_dir())?;
-                    let mini_installer = MiniInstaller::new(config.root_dir());
-                    mini_installer.grant_execute_permission()?;
-                    mini_installer.execute()?;
                 }
-                EverestSubCommand::Version => todo!("show currently installed Everest version"),
+                EverestSubCommand::Version => {
+                    println!("{}", current_v)
+                }
                 EverestSubCommand::List { all, limit } => {
                     let display_n = if all { builds.len() } else { limit };
-                    let groups = get_latest_builds(builds, display_n);
-                    print_builds(groups)
+                    everest::print_builds(builds, display_n)
                 }
             }
         }

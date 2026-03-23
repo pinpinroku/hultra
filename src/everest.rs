@@ -1,5 +1,6 @@
 pub mod client;
 pub mod installer;
+pub mod version;
 
 use std::{
     collections::BTreeMap,
@@ -72,7 +73,7 @@ pub enum ExtractError {
 }
 
 /// Extracts ZIP archive to the specified directory.
-pub fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), ExtractError> {
+fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), ExtractError> {
     let file = File::open(temp_zip)?;
     let mut archive = ZipArchive::new(file)?;
 
@@ -93,28 +94,10 @@ pub fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), Extra
     Ok(())
 }
 
-pub fn get_latest_builds(
-    builds: Vec<EverestBuild>,
-    n: usize,
-) -> BTreeMap<String, Vec<EverestBuild>> {
-    let mut groups: BTreeMap<String, Vec<EverestBuild>> = BTreeMap::new();
+/// Prints the `n` most recent Everest build vesrions.
+pub fn print_builds(builds: Vec<EverestBuild>, n: usize) {
+    let groups = get_latest_builds(builds, n);
 
-    for build in builds {
-        groups
-            .entry(build.branch.to_string())
-            .or_default()
-            .push(build);
-    }
-
-    for builds_in_branch in groups.values_mut() {
-        builds_in_branch.sort_by_key(|b| std::cmp::Reverse(b.version));
-        builds_in_branch.truncate(n);
-    }
-
-    groups
-}
-
-pub fn print_builds(groups: BTreeMap<String, Vec<EverestBuild>>) {
     println!(
         "{:<10} {:<8} {:<10} {:<20} DETAILS",
         "BRANCH", "VERSION", "COMMIT", "DATE"
@@ -149,4 +132,23 @@ pub fn print_builds(groups: BTreeMap<String, Vec<EverestBuild>>) {
             );
         }
     }
+}
+
+/// Returns the `n` most recent Everest builds .
+fn get_latest_builds(builds: Vec<EverestBuild>, n: usize) -> BTreeMap<String, Vec<EverestBuild>> {
+    let mut groups: BTreeMap<String, Vec<EverestBuild>> = BTreeMap::new();
+
+    for build in builds {
+        groups
+            .entry(build.branch.to_string())
+            .or_default()
+            .push(build);
+    }
+
+    for builds_in_branch in groups.values_mut() {
+        builds_in_branch.sort_by_key(|b| std::cmp::Reverse(b.version));
+        builds_in_branch.truncate(n);
+    }
+
+    groups
 }

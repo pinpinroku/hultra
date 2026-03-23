@@ -6,12 +6,20 @@ use std::{
     process::{Command, Stdio},
 };
 
-pub struct MiniInstaller {
+/// Runs MiniInstaller.
+pub fn run(root_dir: &Path) -> io::Result<()> {
+    let installer = MiniInstaller::new(root_dir);
+    installer.grant_execute_permission()?;
+    installer.execute()?;
+    Ok(())
+}
+
+struct MiniInstaller {
     path: PathBuf,
 }
 
 impl MiniInstaller {
-    pub fn new(root_dir: &Path) -> Self {
+    fn new(root_dir: &Path) -> Self {
         Self {
             path: root_dir.join(Self::PATH_MINI_INSTALLER),
         }
@@ -19,7 +27,8 @@ impl MiniInstaller {
 
     const PATH_MINI_INSTALLER: &str = "MiniInstaller-linux";
 
-    pub fn grant_execute_permission(&self) -> io::Result<()> {
+    /// Grants execute permission to the installer.
+    fn grant_execute_permission(&self) -> io::Result<()> {
         let user_exec_bit = 0o100;
 
         let metadata = fs::metadata(&self.path)?;
@@ -34,7 +43,8 @@ impl MiniInstaller {
         fs::set_permissions(&self.path, perms)
     }
 
-    pub fn execute(&self) -> io::Result<()> {
+    /// Executes the installer.
+    fn execute(&self) -> io::Result<()> {
         let mut child = Command::new(&self.path).stdout(Stdio::piped()).spawn()?;
 
         if let Some(stdout) = child.stdout.take() {
