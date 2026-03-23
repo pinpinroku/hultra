@@ -52,7 +52,7 @@ pub struct Cli {
     #[command(subcommand)]
     pub commands: Command,
 
-    /// Use the custom directory where the Celeste is installed.
+    /// Directory where the Celeste is installed.
     #[arg(short = 'd', long = "directory", value_name = "DIR", global = true)]
     pub directory: Option<PathBuf>,
 
