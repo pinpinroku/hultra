@@ -120,16 +120,16 @@ hultra install https://gamebanana.com/mods/123456 https://gamebanana.com/mods/45
 
 Options can be applied globally.
 
-### `-d, --mods-dir` \<DIR\>
+### `-d, --directory` \<DIR\>
 
 The default mods directory is set to the Steam game installation folder:
 
 `~/.local/share/Steam/steamapps/common/Celeste/Mods/`
 
-You can specify your custom mods directory using `--mods-dir`.
+You can specify your custom mods directory using `--directory`.
 ```bash
 # Install the mod "SpeedrunTool" while specifying the mods directory
-hultra --mods-dir ~/game/exokgames/celeste/Mods/ install "SpeedrunTool"
+hultra --directory ~/game/exokgames/celeste/Mods/ install "SpeedrunTool"
 ```
 > The directory should have permissions of at least 0700.
 
