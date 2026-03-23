@@ -62,7 +62,7 @@ pub fn sync(config: &AppConfig) -> Result<BTreeMap<u64, CacheEntry>, CacheError>
     // Load existing cache database
     let mut cache = load_cache_db(config.cache_db_path()).unwrap_or_default();
 
-    if update_cache(&mut cache, config.mods_dir())? {
+    if update_cache(&mut cache, &config.mods_dir())? {
         save_cache_db(&cache, config.cache_db_path())?;
     }
 

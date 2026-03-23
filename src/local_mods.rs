@@ -89,7 +89,7 @@ impl LocalMod {
     }
 
     /// Creates values of this type for each path of given paths in parallel.
-    #[instrument(skip(config), fields(mods_dir = %anonymize(config.mods_dir()), cache_path = %anonymize(config.cache_db_path())))]
+    #[instrument(skip(config), fields(mods_dir = %anonymize(&config.mods_dir()), cache_path = %anonymize(config.cache_db_path())))]
     pub fn load_local_mods(config: &AppConfig) -> io::Result<Vec<Self>> {
         use rayon::prelude::*;
 

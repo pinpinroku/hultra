@@ -10,7 +10,7 @@ use tracing::{debug, error, warn};
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
-const STEAM_MODS_DIRECTORY: &str = ".local/share/Steam/steamapps/common/Celeste/Mods/";
+const STEAM_GAME_DIRECTORY: &str = ".local/share/Steam/steamapps/common/Celeste/";
 
 #[derive(thiserror::Error, Debug)]
 pub enum AppConfigError {
@@ -21,15 +21,15 @@ pub enum AppConfigError {
 /// Application configuration.
 #[derive(Debug, Clone)]
 pub struct AppConfig {
-    /// Directory containing the installed mods.
-    mods_dir: PathBuf,
+    /// Directory where `Celeste.exe` is installed originally.
+    root_dir: PathBuf,
 
     /// Path to the file hash cache.
     cache_db_path: PathBuf,
 }
 
 impl AppConfig {
-    pub fn new(mods_dir: Option<&Path>) -> Result<Self, AppConfigError> {
+    pub fn new(directory: Option<&Path>) -> Result<Self, AppConfigError> {
         // Determine user home directory
         let Some(home) = env::home_dir() else {
             return Err(AppConfigError::DetermineHomeDirectory);
@@ -42,18 +42,26 @@ impl AppConfig {
             .join("checksum")
             .with_extension("cache");
 
-        let mods_dir = mods_dir
+        let root_dir = directory
             .map(|dir| dir.into())
-            .unwrap_or_else(|| home.join(STEAM_MODS_DIRECTORY));
+            .unwrap_or_else(|| home.join(STEAM_GAME_DIRECTORY));
+
+        let root_dir = resolve_root_dir(&root_dir);
 
         Ok(Self {
-            mods_dir,
+            root_dir: root_dir.to_path_buf(),
             cache_db_path,
         })
     }
 
-    pub fn mods_dir(&self) -> &Path {
-        &self.mods_dir
+    // NOTE: This method will be used in the next feature update.
+    #[allow(dead_code)]
+    pub fn root_dir(&self) -> &Path {
+        &self.root_dir
+    }
+
+    pub fn mods_dir(&self) -> PathBuf {
+        self.root_dir.join("Mods")
     }
 
     pub fn cache_db_path(&self) -> &Path {
@@ -62,7 +70,7 @@ impl AppConfig {
 
     /// Scans mods directory and returns list of archive paths.
     pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
-        let found_paths: Vec<PathBuf> = fs::read_dir(&self.mods_dir)
+        let found_paths: Vec<PathBuf> = fs::read_dir(self.mods_dir())
             .inspect_err(|err| error!(?err, "failed to read mods directory"))?
             .filter_map(|res| {
                 res.inspect_err(|err| warn!(?err, "failed to read entry"))
@@ -81,7 +89,7 @@ impl AppConfig {
 
     /// Reads `updaterblacklist.txt` and returns blacklisted mod paths.
     pub fn read_updater_blacklist(&self) -> io::Result<HashSet<String>> {
-        let path = self.mods_dir.join(Self::UPDATER_BLACKLIST_FILE);
+        let path = self.mods_dir().join(Self::UPDATER_BLACKLIST_FILE);
         let mut blacklist = HashSet::new();
 
         let mut file = match File::open(&path) {
@@ -115,6 +123,26 @@ fn is_mod_archive(path: &Path) -> bool {
         && path
             .extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+}
+
+/// Resolves installation path by searching Celeste executables.
+fn resolve_root_dir(dir: &Path) -> &Path {
+    let is_root = dir.join("Celeste.exe").exists() || dir.join("Celeste.dll").exists();
+
+    let is_mods_dir = dir.ends_with("Mods") || dir.join("blacklist.txt").exists();
+
+    if is_mods_dir
+        && !is_root
+        && let Some(parent) = dir.parent()
+    {
+        warn!(
+            ?parent,
+            "Note: 'Mods' folder detected. Using parent directory as game root",
+        );
+        return parent;
+    }
+
+    dir
 }
 
 #[cfg(test)]
