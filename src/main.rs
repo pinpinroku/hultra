@@ -190,9 +190,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Everest(subcommand) => {
             let client = EverestClient::new()?;
-            // TODO: make `use_api_mirror` option global to be able to use it in Everest commands
-            let endpoint = client.get_url(true).await?;
-            let builds = client.fetch_update_list(endpoint).await?;
+            let builds = client.fetch_database(true).await?;
 
             let current_v = version::ensure_installed_version(config.root_dir())?;
 
@@ -216,6 +214,8 @@ async fn main() -> anyhow::Result<()> {
                         .await?;
                 }
                 EverestSubCommand::Version => {
+                    // FIXME: we do not need to fetch the build list to print out the installed version
+                    // or we can remove this command entirely as it is used for update check pupose
                     println!("{}", current_v)
                 }
                 EverestSubCommand::List { all, limit } => {

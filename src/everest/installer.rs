@@ -6,14 +6,16 @@ use std::{
     process::{Command, Stdio},
 };
 
+use crate::config::AppConfig;
+
 /// Runs MiniInstaller.
-pub fn run(root_dir: &Path) -> io::Result<()> {
-    let installer = MiniInstaller::new(root_dir);
+pub fn run(config: &AppConfig) -> io::Result<()> {
+    let installer = MiniInstaller::new(config.root_dir());
     installer.grant_execute_permission()?;
-    installer.execute()?;
-    Ok(())
+    installer.execute()
 }
 
+/// Installer for Everest.
 struct MiniInstaller {
     path: PathBuf,
 }
@@ -21,11 +23,9 @@ struct MiniInstaller {
 impl MiniInstaller {
     fn new(root_dir: &Path) -> Self {
         Self {
-            path: root_dir.join(Self::PATH_MINI_INSTALLER),
+            path: root_dir.join("MiniInstaller-linux"),
         }
     }
-
-    const PATH_MINI_INSTALLER: &str = "MiniInstaller-linux";
 
     /// Grants execute permission to the installer.
     fn grant_execute_permission(&self) -> io::Result<()> {

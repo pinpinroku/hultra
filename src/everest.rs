@@ -1,5 +1,5 @@
 pub mod client;
-pub mod installer;
+mod installer;
 pub mod version;
 
 use std::{
