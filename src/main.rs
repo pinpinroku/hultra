@@ -198,7 +198,6 @@ async fn main() -> anyhow::Result<()> {
             EverestSubCommand::NetworkRequired(action) => {
                 let client = EverestClient::new()?;
                 let builds = client.fetch_database(true).await?;
-                let current_v = version::ensure_installed_version(config.root_dir())?;
 
                 match action {
                     NetworkCommand::List { all, limit } => {
@@ -206,6 +205,7 @@ async fn main() -> anyhow::Result<()> {
                         everest::print_builds(builds, display_n)
                     }
                     NetworkCommand::Update => {
+                        let current_v = version::ensure_installed_version(config.root_dir())?;
                         let current_b = version::get_installed_branch(&builds, &current_v)
                             .context("Installed version not found on the database")?;
                         let target_build = version::get_latest_build_on_branch(&builds, current_b)
