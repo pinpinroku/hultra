@@ -55,7 +55,6 @@ impl MiniInstaller {
         }
 
         child.wait()?;
-
         Ok(())
     }
 }

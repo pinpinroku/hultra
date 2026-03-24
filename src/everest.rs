@@ -54,6 +54,16 @@ pub enum Branch {
     Beta,
 }
 
+impl Branch {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Branch::Stable => "stable",
+            Branch::Dev { .. } => "dev",
+            Branch::Beta => "beta",
+        }
+    }
+}
+
 impl fmt::Display for Branch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -106,7 +116,7 @@ pub fn print_builds(builds: Vec<EverestBuild>, n: usize) {
 
     for (branch_name, builds) in groups {
         for (i, build) in builds.into_iter().enumerate() {
-            let branch_ptr = if i == 0 { &branch_name } else { "" };
+            let branch_ptr = if i == 0 { branch_name } else { "" };
 
             let short_sha = if build.commit.len() > 7 {
                 &build.commit[..7]
@@ -135,20 +145,22 @@ pub fn print_builds(builds: Vec<EverestBuild>, n: usize) {
 }
 
 /// Returns the `n` most recent Everest builds .
-fn get_latest_builds(builds: Vec<EverestBuild>, n: usize) -> BTreeMap<String, Vec<EverestBuild>> {
-    let mut groups: BTreeMap<String, Vec<EverestBuild>> = BTreeMap::new();
+fn get_latest_builds(
+    builds: Vec<EverestBuild>,
+    n: usize,
+) -> BTreeMap<&'static str, Vec<EverestBuild>> {
+    let mut groups: BTreeMap<&'static str, Vec<EverestBuild>> = BTreeMap::new();
 
     for build in builds {
-        groups
-            .entry(build.branch.to_string())
-            .or_default()
-            .push(build);
-    }
-
-    for builds_in_branch in groups.values_mut() {
-        builds_in_branch.sort_by_key(|b| std::cmp::Reverse(b.version));
-        builds_in_branch.truncate(n);
+        groups.entry(build.branch.as_str()).or_default().push(build);
     }
 
     groups
+        .into_iter()
+        .map(|(branch, mut branch_builds)| {
+            branch_builds.sort_by_key(|b| std::cmp::Reverse(b.version));
+            branch_builds.truncate(n);
+            (branch, branch_builds)
+        })
+        .collect()
 }
