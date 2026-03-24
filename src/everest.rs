@@ -36,6 +36,18 @@ pub struct EverestBuild {
     pub main_file_size: u64,
 }
 
+impl fmt::Display for EverestBuild {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "{}: version {} (released {})",
+            self.branch.as_str(),
+            self.version,
+            self.formatted_date()
+        )
+    }
+}
+
 impl EverestBuild {
     /// Gets first 19 charcters from "2026-03-07T19:48:53.0343351Z", replace 'T' with ' '
     fn formatted_date(&self) -> String {

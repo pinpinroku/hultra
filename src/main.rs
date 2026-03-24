@@ -196,10 +196,16 @@ async fn main() -> anyhow::Result<()> {
 
             match subcommand {
                 EverestSubCommand::Update => {
-                    let branch = version::get_installed_branch(&builds, &current_v)
+                    let current_b = version::get_installed_branch(&builds, &current_v)
                         .context("Installed version not found on the database")?;
-                    let target_build = version::get_latest_build_on_branch(&builds, branch)
+                    let target_build = version::get_latest_build_on_branch(&builds, current_b)
                         .context("No builds found on the branch")?;
+                    debug!(?target_build, ?current_v, ?current_b);
+                    if current_v == target_build.version {
+                        println!("Everest is up-to-date");
+                        println!("  {}", target_build);
+                        return Ok(());
+                    }
                     client
                         .download_and_run_installer(target_build, &config)
                         .await?;
