@@ -11,7 +11,7 @@ use tokio::{
     fs::File,
     io::{AsyncWriteExt, BufWriter},
 };
-use tracing::{info, instrument};
+use tracing::{error, info, instrument};
 use url::Url;
 
 use crate::{config::AppConfig, everest::installer};
@@ -63,6 +63,7 @@ impl EverestClient {
     }
 
     /// Downloads `main.zip` and runs `MiniInstaller-linux`.
+    #[instrument(skip(self))]
     pub async fn download_and_run_installer(
         &self,
         build: &EverestBuild,
@@ -72,10 +73,12 @@ impl EverestClient {
 
         let downloaded = self
             .download_everest(&build.main_download, temp_zip.path())
-            .await?;
+            .await
+            .inspect_err(|err| error!(?err, "failed to download Everest"))?;
         debug_assert_eq!(downloaded, build.main_file_size);
 
-        super::extract_zip_archive(temp_zip.path(), config.root_dir())?;
+        super::extract_zip_archive(temp_zip.path(), config.root_dir())
+            .inspect_err(|err| error!(?err, "failed to extract ZIP archive"))?;
         drop(temp_zip);
 
         installer::run(config)?;
@@ -101,6 +104,7 @@ impl EverestClient {
         let mut url = self
             .client
             .get(Self::ENDPOINT_ORIGINAL)
+            .timeout(Duration::from_secs(10))
             .header(ACCEPT, HeaderValue::from_static("application/json"))
             .header(ACCEPT_ENCODING, HeaderValue::from_static("gzip"))
             .send()
@@ -126,14 +130,20 @@ impl EverestClient {
     // 2. Downloads file and save it to given destination. Returns actual downloaded size in bytes.
     #[instrument(skip(self), err(Debug))]
     pub async fn download_everest(&self, url: &str, dest: &Path) -> Result<u64, Error> {
+        info!("downloading Everest");
+        let pb = ProgressBar::new_spinner();
+        pb.enable_steady_tick(Duration::from_millis(120));
+        pb.set_message("downloading Everest");
+
         let response = self
             .client
             .get(url)
+            .timeout(Duration::from_secs(90))
             .header(ACCEPT, "application/octet-stream")
             .send()
             .await?;
 
-        let file = File::create(dest).await?;
+        let file = File::open(dest).await?;
         let mut writer = BufWriter::new(file);
         let mut stream = response.bytes_stream();
         let mut downloaded = 0;
@@ -145,6 +155,7 @@ impl EverestClient {
         }
 
         writer.flush().await?;
+        pb.finish_and_clear();
         Ok(downloaded)
     }
 }
