@@ -5,7 +5,7 @@ use clap::Parser;
 use tracing::{debug, info};
 
 use crate::{
-    cli::{Cli, Command, EverestSubCommand},
+    cli::{Cli, Command, EverestSubCommand, NetworkCommand},
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
     download::Downloader,
@@ -188,49 +188,50 @@ async fn main() -> anyhow::Result<()> {
             downloader.download_files(targets, &config, &option).await;
             info!("updating completed")
         }
-        Command::Everest(subcommand) => {
-            let client = EverestClient::new()?;
-            let builds = client.fetch_database(true).await?;
+        Command::Everest(subcommand) => match subcommand {
+            EverestSubCommand::Version => {
+                let current_v = version::ensure_installed_version(config.root_dir())?;
+                println!("Current version: {}", current_v);
+                return Ok(());
+            }
 
-            let current_v = version::ensure_installed_version(config.root_dir())?;
+            EverestSubCommand::NetworkRequired(action) => {
+                let client = EverestClient::new()?;
+                let builds = client.fetch_database(true).await?;
+                let current_v = version::ensure_installed_version(config.root_dir())?;
 
-            match subcommand {
-                EverestSubCommand::Update => {
-                    let current_b = version::get_installed_branch(&builds, &current_v)
-                        .context("Installed version not found on the database")?;
-                    let target_build = version::get_latest_build_on_branch(&builds, current_b)
-                        .context("No builds found on the branch")?;
-                    debug!(?target_build, ?current_v, ?current_b);
-                    if current_v == target_build.version {
-                        println!("Everest is up-to-date");
-                        println!("  {}", target_build);
-                        return Ok(());
+                match action {
+                    NetworkCommand::List { all, limit } => {
+                        let display_n = if all { builds.len() } else { limit };
+                        everest::print_builds(builds, display_n)
                     }
-                    client
-                        .download_and_run_installer(target_build, &config)
-                        .await?;
-                }
-                EverestSubCommand::Install { version } => {
-                    let target_build = builds
-                        .iter()
-                        .find(|b| b.version == version)
-                        .context("Specified version is not available")?;
-                    client
-                        .download_and_run_installer(target_build, &config)
-                        .await?;
-                }
-                EverestSubCommand::Version => {
-                    // FIXME: we do not need to fetch the build list to print out the installed version
-                    // or we can remove this command entirely as it is used for update check pupose
-                    println!("{}", current_v)
-                }
-                EverestSubCommand::List { all, limit } => {
-                    let display_n = if all { builds.len() } else { limit };
-                    everest::print_builds(builds, display_n)
+                    NetworkCommand::Update => {
+                        let current_b = version::get_installed_branch(&builds, &current_v)
+                            .context("Installed version not found on the database")?;
+                        let target_build = version::get_latest_build_on_branch(&builds, current_b)
+                            .context("No builds found on the branch")?;
+                        debug!(?target_build, ?current_v, ?current_b);
+                        if current_v == target_build.version {
+                            println!("Everest is up-to-date");
+                            println!("  {}", target_build);
+                            return Ok(());
+                        }
+                        client
+                            .download_and_run_installer(target_build, &config)
+                            .await?;
+                    }
+                    NetworkCommand::Install { version } => {
+                        let target_build = builds
+                            .iter()
+                            .find(|b| b.version == version)
+                            .context("Specified version is not available")?;
+                        client
+                            .download_and_run_installer(target_build, &config)
+                            .await?;
+                    }
                 }
             }
-        }
+        },
     }
-
     Ok(())
 }

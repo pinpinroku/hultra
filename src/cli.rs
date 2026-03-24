@@ -48,7 +48,6 @@ impl Mirror {
 #[derive(Debug, Clone, Parser)]
 #[command(version, about = "A simple cli tool to update/install mods for Celeste.", long_about = None)]
 pub struct Cli {
-    /// Subcommands of the CLI.
     #[command(subcommand)]
     pub commands: Command,
 
@@ -67,7 +66,7 @@ pub enum Command {
     /// List installed mods.
     List,
 
-    /// Installs mods from GameBanana URLs.
+    /// Install mods from the GameBanana URLs.
     Install {
         /// URL(s) of mod page on GameBanana.
         #[arg(required = true, num_args = 1..20)]
@@ -78,32 +77,42 @@ pub enum Command {
         option: DownloadOption,
     },
 
-    /// Updates mods.
+    /// Update mods.
     Update(DownloadOption),
 
-    /// Sub command for the Everest itself.
+    /// Manage Everest.
     #[command(subcommand)]
     Everest(EverestSubCommand),
 }
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum EverestSubCommand {
-    /// Update Everest.
+    /// Print the current installed version and branch information
+    Version,
+
+    #[command(flatten)]
+    NetworkRequired(NetworkCommand),
+}
+
+/// Commands that requires network action
+#[derive(Debug, Clone, Subcommand)]
+pub enum NetworkCommand {
+    /// Update Everest to the latest version if available
     Update,
-    /// Install Everest.
+
+    /// Install a specific version of Everest
     Install {
-        #[arg(short, long)]
+        /// The version of Everest to install (e.g., "6194")
         version: u32,
     },
-    /// Print current version along with branch.
-    Version,
-    /// List available Everest versions.
+
+    /// List all available Everest versions from the database
     List {
-        /// Prints all versions.
+        /// Prints all versions
         #[arg(short, long)]
         all: bool,
 
-        /// Prints latest versions up to specified number.
+        /// Prints latest versions up to specified number
         #[arg(short, long, default_value_t = 3)]
         limit: usize,
     },
