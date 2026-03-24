@@ -143,7 +143,7 @@ impl EverestClient {
             .send()
             .await?;
 
-        let file = File::open(dest).await?;
+        let file = File::create(dest).await?;
         let mut writer = BufWriter::new(file);
         let mut stream = response.bytes_stream();
         let mut downloaded = 0;
