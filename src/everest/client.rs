@@ -54,8 +54,10 @@ impl EverestClient {
         let pb = ProgressBar::new_spinner();
         pb.enable_steady_tick(Duration::from_millis(120));
         pb.set_message("Fetching database...");
+
         let endpoint = self.get_url(is_mirror).await?;
         let builds = self.fetch_update_list(endpoint).await?;
+
         pb.finish_and_clear();
         Ok(builds)
     }
@@ -74,9 +76,9 @@ impl EverestClient {
         debug_assert_eq!(downloaded, build.main_file_size);
 
         super::extract_zip_archive(temp_zip.path(), config.root_dir())?;
+        drop(temp_zip);
 
         installer::run(config)?;
-
         Ok(())
     }
 
@@ -90,7 +92,6 @@ impl EverestClient {
             info!("Fetching Everest updater database URL");
             self.fetch_url().await?
         };
-
         Ok(url)
     }
 
@@ -111,7 +112,6 @@ impl EverestClient {
 
         url.query_pairs_mut()
             .append_pair("supportsNativeBuilds", "true");
-
         Ok(url)
     }
 
@@ -136,7 +136,6 @@ impl EverestClient {
         let file = File::create(dest).await?;
         let mut writer = BufWriter::new(file);
         let mut stream = response.bytes_stream();
-
         let mut downloaded = 0;
 
         while let Some(chunk) = stream.next().await {
@@ -146,7 +145,6 @@ impl EverestClient {
         }
 
         writer.flush().await?;
-
         Ok(downloaded)
     }
 }
