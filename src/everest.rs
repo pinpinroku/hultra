@@ -11,6 +11,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use tracing::{info, instrument};
 use zip::ZipArchive;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -95,7 +96,9 @@ pub enum ExtractError {
 }
 
 /// Extracts ZIP archive to the specified directory.
+#[instrument]
 fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), ExtractError> {
+    info!("extracting ZIP archive");
     let file = File::open(temp_zip)?;
     let mut archive = ZipArchive::new(file)?;
 

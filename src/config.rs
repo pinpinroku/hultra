@@ -69,6 +69,7 @@ impl AppConfig {
     /// Scans mods directory and returns list of archive paths.
     pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
         let found_paths: Vec<PathBuf> = fs::read_dir(self.mods_dir())
+            // FIXME: ignore the error if the Everet is not installed
             .inspect_err(|err| error!(?err, "failed to read mods directory"))?
             .filter_map(|res| {
                 res.inspect_err(|err| warn!(?err, "failed to read entry"))
