@@ -29,7 +29,7 @@ pub enum Error {
     Network(#[from] reqwest::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
+    #[error("failed to parse string as valid URL")]
     UrlParse(#[from] url::ParseError),
     #[error(transparent)]
     Extract(#[from] super::ExtractError),
@@ -86,51 +86,51 @@ impl EverestClient {
     }
 
     /// Returns API endpoint.
-    #[instrument(skip(self), err(Debug))]
+    #[instrument(skip(self))]
     async fn get_url(&self, is_mirror: bool) -> Result<Url, Error> {
         let url = if is_mirror {
             info!("Using mirror for the Everest updater database");
             Url::parse(Self::ENDPOINT_MIRROR)?
         } else {
             info!("Fetching Everest updater database URL");
-            self.fetch_url().await?
+            let text = self.fetch_url().await?;
+            let mut url = text.trim().parse::<Url>()?;
+
+            url.query_pairs_mut()
+                .append_pair("supportsNativeBuilds", "true");
+            url
         };
         Ok(url)
     }
 
     /// Fetches URL from GitHub endopint.
-    #[instrument(skip_all, err(Debug))]
-    async fn fetch_url(&self) -> Result<Url, Error> {
-        let mut url = self
-            .client
+    #[instrument(skip_all)]
+    async fn fetch_url(&self) -> reqwest::Result<String> {
+        self.client
             .get(Self::ENDPOINT_ORIGINAL)
             .timeout(Duration::from_secs(10))
             .header(ACCEPT, HeaderValue::from_static("application/json"))
             .header(ACCEPT_ENCODING, HeaderValue::from_static("gzip"))
             .send()
             .await?
+            .error_for_status()?
             .text()
-            .await?
-            .trim()
-            .parse::<Url>()?;
-
-        url.query_pairs_mut()
-            .append_pair("supportsNativeBuilds", "true");
-        Ok(url)
+            .await
     }
 
     // 1. Returns list of builds by sending request to endpoint.
-    #[instrument(skip(self), err(Debug))]
+    #[instrument(skip(self))]
     async fn fetch_update_list(&self, url: Url) -> Result<Vec<EverestBuild>, Error> {
+        info!("Fetching version list");
         let response = self.client.get(url).send().await?;
         let builds: Vec<EverestBuild> = response.json().await?;
         Ok(builds)
     }
 
     // 2. Downloads file and save it to given destination. Returns actual downloaded size in bytes.
-    #[instrument(skip(self), err(Debug))]
+    #[instrument(skip(self))]
     pub async fn download_everest(&self, url: &str, dest: &Path) -> Result<u64, Error> {
-        info!("downloading Everest");
+        info!("Downloading Everest");
         let pb = ProgressBar::new_spinner();
         pb.enable_steady_tick(Duration::from_millis(120));
         pb.set_message("downloading Everest");
@@ -141,7 +141,8 @@ impl EverestClient {
             .timeout(Duration::from_secs(90))
             .header(ACCEPT, "application/octet-stream")
             .send()
-            .await?;
+            .await?
+            .error_for_status()?;
 
         let file = File::create(dest).await?;
         let mut writer = BufWriter::new(file);

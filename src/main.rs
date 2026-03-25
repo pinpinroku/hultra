@@ -83,7 +83,6 @@ async fn main() -> anyhow::Result<()> {
                 println!("{}", installed)
             }
         }
-
         Command::Install { urls, option } => {
             info!("installing mods");
             debug!("\n{:#?}\n{:#?}", urls, option);
@@ -191,10 +190,9 @@ async fn main() -> anyhow::Result<()> {
         Command::Everest(subcommand) => match subcommand {
             EverestSubCommand::Version => {
                 let current_v = version::ensure_installed_version(config.root_dir())?;
-                println!("Current version: {}", current_v);
+                println!("{}", current_v);
                 return Ok(());
             }
-
             EverestSubCommand::NetworkRequired(action) => {
                 let client = EverestClient::new()?;
                 let builds = client.fetch_database(true).await?;
