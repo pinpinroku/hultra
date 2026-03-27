@@ -3,7 +3,7 @@ use clap::{Args, Subcommand};
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum EverestSubCommand {
-    /// Print the current installed version and branch information
+    /// Print the current installed version
     Version,
 
     #[command(flatten)]
