@@ -194,15 +194,16 @@ async fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
             EverestSubCommand::NetworkRequired(action) => {
+                let option = action.network_option();
                 let client = EverestClient::new()?;
-                let builds = client.fetch_database(true).await?;
+                let builds = client.fetch_database(option.use_api_mirror).await?;
 
                 match action {
-                    NetworkCommand::List { all, limit } => {
+                    NetworkCommand::List { all, limit, .. } => {
                         let display_n = if all { builds.len() } else { limit };
                         everest::print_builds(builds, display_n)
                     }
-                    NetworkCommand::Update => {
+                    NetworkCommand::Update(_) => {
                         let current_v = version::ensure_installed_version(config.root_dir())?;
                         let current_b = version::get_installed_branch(&builds, &current_v)
                             .context("Installed version not found on the database")?;
@@ -218,7 +219,7 @@ async fn main() -> anyhow::Result<()> {
                             .download_and_run_installer(target_build, &config)
                             .await?;
                     }
-                    NetworkCommand::Install { version } => {
+                    NetworkCommand::Install { version, .. } => {
                         let target_build = builds
                             .iter()
                             .find(|b| b.version == version)
