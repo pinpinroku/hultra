@@ -5,10 +5,11 @@ use clap::Parser;
 use tracing::{debug, info};
 
 use crate::{
-    cli::{Cli, Command},
+    cli::{Cli, Command, EverestSubCommand, NetworkCommand},
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
     dependency::DependencyGraph,
     download::Downloader,
+    everest::{client::EverestClient, version},
     local_mods::LocalMod,
     registry::ModRegistry,
 };
@@ -18,6 +19,7 @@ mod cli;
 mod config;
 mod dependency;
 mod download;
+mod everest;
 mod local_mods;
 mod log;
 mod mirrorlist;
@@ -81,7 +83,6 @@ async fn main() -> anyhow::Result<()> {
                 println!("{}", installed)
             }
         }
-
         Command::Install { urls, option } => {
             info!("installing mods");
             debug!("\n{:#?}\n{:#?}", urls, option);
@@ -94,6 +95,7 @@ async fn main() -> anyhow::Result<()> {
 
             // Fetch metadata
             info!("fetching database");
+            // TODO: Introduce `timeout` option for CLI, or use default value inside the Downloader
             let downloader = Downloader::new(60, option.jobs as usize);
             let spinner = download::create_spinner();
             let (registry, graph) = tokio::try_join!(
@@ -185,7 +187,50 @@ async fn main() -> anyhow::Result<()> {
             downloader.download_files(targets, &config, &option).await;
             info!("updating completed")
         }
-    }
+        Command::Everest(subcommand) => match subcommand {
+            EverestSubCommand::Version => {
+                let current_v = version::ensure_installed_version(config.root_dir())?;
+                println!("{}", current_v);
+                return Ok(());
+            }
+            EverestSubCommand::NetworkRequired(action) => {
+                let option = action.network_option();
+                let client = EverestClient::new()?;
+                let builds = client.fetch_database(option.use_api_mirror).await?;
 
+                match action {
+                    NetworkCommand::List { all, limit, .. } => {
+                        let display_n = if all { builds.len() } else { limit };
+                        everest::print_builds(builds, display_n)
+                    }
+                    NetworkCommand::Update(_) => {
+                        let current_v = version::ensure_installed_version(config.root_dir())?;
+                        let current_b = version::get_installed_branch(&builds, &current_v)
+                            .context("Installed version not found on the database")?;
+                        let target_build = version::get_latest_build_on_branch(&builds, current_b)
+                            .context("No builds found on the branch")?;
+                        debug!(?target_build, ?current_v, ?current_b);
+                        if current_v == target_build.version {
+                            println!("Everest is up-to-date");
+                            println!("  {}", target_build);
+                            return Ok(());
+                        }
+                        client
+                            .download_and_run_installer(target_build, &config)
+                            .await?;
+                    }
+                    NetworkCommand::Install { version, .. } => {
+                        let target_build = builds
+                            .iter()
+                            .find(|b| b.version == version)
+                            .context("Specified version is not available")?;
+                        client
+                            .download_and_run_installer(target_build, &config)
+                            .await?;
+                    }
+                }
+            }
+        },
+    }
     Ok(())
 }

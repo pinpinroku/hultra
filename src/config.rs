@@ -54,8 +54,6 @@ impl AppConfig {
         })
     }
 
-    // NOTE: This method will be used in the next feature update.
-    #[allow(dead_code)]
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
     }
@@ -70,6 +68,11 @@ impl AppConfig {
 
     /// Scans mods directory and returns list of archive paths.
     pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
+        // HACK: This is temporary resolution for Everest command does not require Mods directory.
+        if !self.mods_dir().exists() {
+            return Ok(Vec::new());
+        }
+
         let found_paths: Vec<PathBuf> = fs::read_dir(self.mods_dir())
             .inspect_err(|err| error!(?err, "failed to read mods directory"))?
             .filter_map(|res| {
