@@ -1,48 +1,17 @@
-use std::{ops::Deref, path::PathBuf, str::FromStr};
+mod everest;
+mod gamebanana;
+mod mirror;
+mod network;
 
-use clap::{Args, Parser, Subcommand, ValueEnum};
+pub use everest::{EverestSubCommand, NetworkCommand};
+pub use mirror::Mirror;
+pub use network::DownloadOption;
 
-use crate::download::DbBaseUrl;
+use gamebanana::GamebananaUrl;
 
-/// Supported mirrors.
-#[derive(Debug, Clone, PartialEq, Eq, ValueEnum)]
-#[value(rename_all = "lower")]
-pub enum Mirror {
-    /// Default GameBanana Server (United States).
-    Gb,
-    /// Germany.
-    Jade,
-    /// China.
-    Wegfan,
-    /// North America.
-    Otobot,
-}
+use std::path::PathBuf;
 
-impl Mirror {
-    /// Generates the full mirror URL for a given GameBanana ID.
-    pub fn url_for_id(&self, gbid: u32) -> String {
-        match self {
-            Mirror::Gb => {
-                format!("https://gamebanana.com/mmdl/{}", gbid)
-            }
-            Mirror::Jade => {
-                format!(
-                    "https://celestemodupdater.0x0a.de/banana-mirror/{}.zip",
-                    gbid
-                )
-            }
-            Mirror::Wegfan => {
-                format!(
-                    "https://celeste.weg.fan/api/v2/download/gamebanana-files/{}",
-                    gbid
-                )
-            }
-            Mirror::Otobot => {
-                format!("https://banana-mirror-mods.celestemods.com/{}.zip", gbid)
-            }
-        }
-    }
-}
+use clap::{Parser, Subcommand};
 
 /// Command line interface.
 #[derive(Debug, Clone, Parser)]
@@ -83,142 +52,4 @@ pub enum Command {
     /// Manage Everest.
     #[command(subcommand)]
     Everest(EverestSubCommand),
-}
-
-#[derive(Debug, Clone, Args)]
-pub struct DownloadOption {
-    /// Comma-separated list of mirror priorities.
-    #[arg(
-        value_enum,
-        short = 'p',
-        long = "mirror-priority",
-        value_name = "MIRROR",
-        value_delimiter = ',',
-        long_help = "Comma-separated list of mirror priorities.
-        This option allows you to specify the order in which mirrors should be tried when downloading mods.
-        You can specify up to 4 mirrors, but providing fewer will restrict download attempts to only those mirrors.",
-        default_value = "otobot,gb,jade,wegfan"
-    )]
-    pub mirror_priority: Vec<Mirror>,
-
-    /// Enables GitHub mirror for database retrieval.
-    #[arg(short = 'm', long)]
-    pub use_api_mirror: bool,
-
-    /// Maximum number of concurrent downloads [range: 1-6]
-    #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
-    pub jobs: u8,
-}
-
-impl DownloadOption {
-    pub fn url_set(&self) -> DbBaseUrl {
-        match self.use_api_mirror {
-            true => DbBaseUrl::Mirror,
-            false => DbBaseUrl::Primary,
-        }
-    }
-
-    pub fn mirror_priority(&self) -> &Vec<Mirror> {
-        &self.mirror_priority
-    }
-}
-
-#[derive(Debug, Clone, Subcommand)]
-pub enum EverestSubCommand {
-    /// Print the current installed version and branch information
-    Version,
-
-    #[command(flatten)]
-    NetworkRequired(NetworkCommand),
-}
-
-/// Commands that requires network action
-#[derive(Debug, Clone, Subcommand)]
-pub enum NetworkCommand {
-    /// Update Everest to the latest version if available
-    Update(NetworkOption),
-
-    /// Install a specific version of Everest
-    Install {
-        /// The version of Everest to install (e.g., "6194")
-        version: u32,
-
-        #[command(flatten)]
-        option: NetworkOption,
-    },
-
-    /// List all available Everest versions from the database
-    List {
-        /// Prints all versions
-        #[arg(short, long)]
-        all: bool,
-
-        /// Prints latest versions up to specified number
-        #[arg(short, long, default_value_t = 3)]
-        limit: usize,
-
-        #[command(flatten)]
-        option: NetworkOption,
-    },
-}
-
-impl NetworkCommand {
-    pub fn network_option(&self) -> &NetworkOption {
-        match self {
-            NetworkCommand::Update(opt) => opt,
-            NetworkCommand::Install { option, .. } => option,
-            NetworkCommand::List { option, .. } => option,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Args)]
-pub struct NetworkOption {
-    /// Enables GitHub mirror for database retrieval.
-    #[arg(short = 'm', long)]
-    pub use_api_mirror: bool,
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ArgumentError {
-    #[error(
-        "last path segment of URL must be a positive integer up to {}",
-        u32::MAX
-    )]
-    ParseLastSegAsInt(#[from] std::num::ParseIntError),
-    #[error("it must be starts with 'https://gamebanana.com/mods/'")]
-    InvalidUrl,
-}
-
-#[derive(Debug, Clone)]
-pub struct GamebananaUrl(String);
-
-impl FromStr for GamebananaUrl {
-    type Err = ArgumentError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        s.strip_prefix("https://gamebanana.com/mods/")
-            .ok_or(ArgumentError::InvalidUrl)?
-            .parse::<u32>()?;
-        Ok(GamebananaUrl(s.to_string()))
-    }
-}
-
-impl Deref for GamebananaUrl {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl GamebananaUrl {
-    pub fn extract_id(&self) -> Result<u32, ArgumentError> {
-        let id_part = self
-            .0
-            .strip_prefix("https://gamebanana.com/mods/")
-            .ok_or(ArgumentError::InvalidUrl)?;
-        let id = id_part.parse()?;
-        Ok(id)
-    }
 }
