@@ -1,7 +1,7 @@
 [package]
 name = "hultra"
 description = "A simple cli tool to update/install mods for Celeste."
-version = "5.0.0"
+version = "5.1.3"
 edition = "2024"
 readme = "README.md"
 license = "GPL-3.0-or-later"
