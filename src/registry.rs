@@ -4,8 +4,6 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Deserializer};
 use tracing::instrument;
 
-use crate::download::Database;
-
 /// Represents `everest_update.yaml`.
 #[derive(Debug)]
 pub struct ModRegistry {
@@ -13,10 +11,6 @@ pub struct ModRegistry {
     pub mods: HashMap<String, RemoteMod>,
     /// Inverted index for the mod lookup by ID
     id_to_names: HashMap<u32, Vec<String>>,
-}
-
-impl Database for ModRegistry {
-    const ENDPOINT: &'static str = "everest_update.yaml";
 }
 
 /// Helper that matches the raw YAML shape
@@ -61,17 +55,14 @@ impl ModRegistry {
             .map(|s| s.as_str()) // -> &str
             .collect()
     }
-}
 
-/// Extracts mod records matching given names.
-pub fn extract_target_mods(
-    mut registry: HashMap<String, RemoteMod>,
-    names: &HashSet<String>,
-) -> HashMap<String, RemoteMod> {
-    names
-        .iter()
-        .filter_map(|name| registry.remove_entry(name))
-        .collect()
+    /// Extracts mod records matching given names.
+    pub fn extract_targets(mut self, names: &HashSet<String>) -> HashMap<String, RemoteMod> {
+        names
+            .iter()
+            .filter_map(|name| self.mods.remove_entry(name))
+            .collect()
+    }
 }
 
 /// Each entry in `everest_update.yaml` containing information about a mod.

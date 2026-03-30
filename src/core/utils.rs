@@ -1,0 +1,92 @@
+/// Sanitizes a mod name as file stem for Unix file systems.
+///
+/// # Rules
+/// - Trims leading/trailing whitespace.
+/// - Removes control characters.
+/// - Replaces characters not in the whitelist `[A-Za-z0-9 -_'()]` with `_`.
+/// - Truncates the result to 255 bytes.
+///
+/// # Panics
+/// All characters in given string must be ASCII, otherwise it will panic.
+///
+/// # Notes
+/// Mod database only allows ASCII characters for the mod name. So the name should always valid UTF-8 and ASCII.
+pub fn sanitize_stem(input: &str) -> String {
+    let trimmed = input.trim();
+
+    assert!(
+        trimmed.is_ascii(),
+        "Input string should contains only ASCII characters"
+    );
+
+    let sanitized_bytes = trimmed
+        .bytes()
+        .filter(|c| !c.is_ascii_control())
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || is_allowed_byte(c) {
+                c
+            } else {
+                b'_'
+            }
+        })
+        .take(u8::MAX as usize)
+        .collect();
+
+    // NOTE This is safe because `input` is always valid UFT-8 and ASCII
+    unsafe { String::from_utf8_unchecked(sanitized_bytes) }
+}
+
+/// Checks if a byte is allowed in the filename stem.
+#[inline(always)]
+fn is_allowed_byte(b: u8) -> bool {
+    matches!(
+        b,
+        b'A'..=b'Z' |            // Uppercase
+        b'a'..=b'z' |            // Lowercase
+        b'0'..=b'9' |            // Digits
+        b' ' | b'-' | b'_' |     // Separators
+        b'\'' | b'(' | b')' |    // Special allowed chars
+        b'+' | b','              // Special allowed chars 2 (common in mods name)
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_no_change() {
+        let input = "valid-filename_123(final)";
+        let result = sanitize_stem(input);
+        assert_eq!(result, "valid-filename_123(final)");
+    }
+
+    #[tokio::test]
+    async fn test_replace_invalid_chars() {
+        let input = "file!?.txt";
+        let result = sanitize_stem(input);
+        assert_eq!(result, "file___txt");
+    }
+
+    #[tokio::test]
+    async fn test_remove_control_chars() {
+        // Control chars should be removed, not replaced
+        let input = "file\0name\n";
+        let result = sanitize_stem(input);
+        assert_eq!(result, "filename");
+    }
+
+    #[tokio::test]
+    async fn test_mixed_whitelist() {
+        // Ensure added whitelist chars ' and () are respected
+        let input = "  Spooooky's Asset Pack (WIP)  ";
+        let result = sanitize_stem(input);
+        assert_eq!(result, "Spooooky's Asset Pack (WIP)");
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Input string should contains only ASCII characters")]
+    async fn test_panic_on_non_ascii() {
+        sanitize_stem("Error_日本語");
+    }
+}

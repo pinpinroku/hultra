@@ -4,8 +4,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use serde::Deserialize;
 use tracing::{debug, instrument, warn};
 
-use crate::download::Database;
-
 /// Each entry of the `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
 pub struct DependencyNode {
@@ -20,10 +18,6 @@ pub struct DependencyNode {
 pub struct DependencyGraph {
     /// Detail of nodes
     pub nodes: HashMap<String, DependencyNode>,
-}
-
-impl Database for DependencyGraph {
-    const ENDPOINT: &'static str = "mod_dependency_graph.yaml";
 }
 
 impl DependencyGraph {

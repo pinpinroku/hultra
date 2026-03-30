@@ -88,8 +88,10 @@ impl AppConfig {
         Ok(found_paths)
     }
 
+    // FIXME Create this field in AppConfig or getter
     const UPDATER_BLACKLIST_FILE: &str = "updaterblacklist.txt";
 
+    // FIXME `AppConfig` should not read the File or perform any actions, move this method to outside
     /// Reads `updaterblacklist.txt` and returns blacklisted mod paths.
     pub fn read_updater_blacklist(&self) -> io::Result<HashSet<String>> {
         let path = self.mods_dir().join(Self::UPDATER_BLACKLIST_FILE);

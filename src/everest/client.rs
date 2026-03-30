@@ -32,7 +32,7 @@ pub enum Error {
     #[error("failed to parse string as valid URL")]
     UrlParse(#[from] url::ParseError),
     #[error(transparent)]
-    Extract(#[from] super::ExtractError),
+    Extract(#[from] crate::archive::ExtractError),
 }
 
 impl EverestClient {
@@ -77,7 +77,7 @@ impl EverestClient {
             .inspect_err(|err| error!(?err, "failed to download Everest"))?;
         debug_assert_eq!(downloaded, build.main_file_size);
 
-        super::extract_zip_archive(temp_zip.path(), config.root_dir())
+        crate::archive::extract_zip_archive(temp_zip.path(), config.root_dir())
             .inspect_err(|err| error!(?err, "failed to extract ZIP archive"))?;
         drop(temp_zip);
 

@@ -1,17 +1,13 @@
-mod everest;
-mod gamebanana;
-mod mirror;
-mod network;
-
-pub use everest::{EverestSubCommand, NetworkCommand};
-pub use mirror::Mirror;
-pub use network::DownloadOption;
-
-use gamebanana::GamebananaUrl;
-
+//! Command list and global options.
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+
+use crate::commands::{DownloadOption, InstallArgs};
+
+pub use everest::{EverestSubCommand, NetworkCommand};
+
+mod everest;
 
 /// Command line interface.
 #[derive(Debug, Clone, Parser)]
@@ -36,15 +32,7 @@ pub enum Command {
     List,
 
     /// Install mods from the GameBanana URLs.
-    Install {
-        /// URL(s) of mod page on GameBanana.
-        #[arg(required = true, num_args = 1..20)]
-        urls: Vec<GamebananaUrl>,
-
-        /// Options specific to downloading.
-        #[command(flatten)]
-        option: DownloadOption,
-    },
+    Install(InstallArgs),
 
     /// Update mods.
     Update(DownloadOption),
