@@ -24,7 +24,13 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
 
     info!("reading updater blacklist file");
     let blacklist = config.read_updater_blacklist()?;
-    local_mods.retain(|local_mod| !blacklist.contains(local_mod.get_file_name().as_ref()));
+    local_mods.retain(|local_mod| {
+        local_mod
+            .path()
+            .file_name()
+            .map(|name| !blacklist.contains(name.to_string_lossy().as_ref()))
+            .unwrap_or(true)
+    });
 
     if local_mods.is_empty() {
         println!("All mods are blacklisted")

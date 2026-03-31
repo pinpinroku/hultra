@@ -5,7 +5,11 @@ use std::{
 
 use tracing::instrument;
 
-use crate::{cache::CacheEntry, local_mods::LocalMod, registry::RemoteMod};
+use crate::{
+    cache::CacheEntry,
+    local_mods::{FileSystemExt, LocalMod},
+    registry::RemoteMod,
+};
 
 /// Identifies local mods that require updates by comparing file hashes with the remote registry.
 ///
@@ -38,7 +42,7 @@ pub fn detect(
         };
 
         // attempts to retrieve the mod's inode
-        let Ok(inode) = local_mod.get_inode() else {
+        let Ok(inode) = local_mod.fetch_inode() else {
             continue;
         };
 

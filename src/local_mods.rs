@@ -42,6 +42,18 @@ impl fmt::Display for LocalMod {
 }
 
 impl LocalMod {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn name(&self) -> &str {
+        &self.manifest.name
+    }
+
+    pub fn version(&self) -> &str {
+        &self.manifest.version
+    }
+
     /// Returns a value of this type from the given file path by extracting and parsing the manifest.
     fn from_path(mod_path: &Path) -> Option<Self> {
         let Ok(manifest_bytes) =
@@ -65,29 +77,6 @@ impl LocalMod {
         })
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn name(&self) -> &str {
-        &self.manifest.name
-    }
-
-    pub fn version(&self) -> &str {
-        &self.manifest.version
-    }
-
-    /// Gets current inode of path.
-    pub fn get_inode(&self) -> io::Result<u64> {
-        let meta = self.path.metadata()?;
-        let inode = meta.ino();
-        Ok(inode)
-    }
-
-    pub fn get_file_name(&self) -> Cow<'_, str> {
-        self.path.file_name().unwrap_or_default().to_string_lossy()
-    }
-
     /// Creates values of this type for each path of given paths in parallel.
     #[instrument(skip(config), fields(mods_dir = %anonymize(&config.mods_dir()), cache_path = %anonymize(config.cache_db_path())))]
     pub fn load_local_mods(config: &AppConfig) -> io::Result<Vec<Self>> {
@@ -106,6 +95,19 @@ impl LocalMod {
         );
 
         Ok(local_mods)
+    }
+}
+
+#[cfg(unix)]
+pub trait FileSystemExt {
+    /// Gets current inode from path.
+    fn fetch_inode(&self) -> io::Result<u64>;
+}
+
+#[cfg(unix)]
+impl FileSystemExt for LocalMod {
+    fn fetch_inode(&self) -> io::Result<u64> {
+        self.path.metadata().map(|m| m.ino())
     }
 }
 
