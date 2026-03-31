@@ -8,16 +8,67 @@ use std::{
 };
 
 use serde::Deserialize;
-use tracing::{debug, error, instrument};
 
-use crate::{config::AppConfig, log::anonymize};
-
+/// Information of locally installed mod.
 #[derive(Debug)]
 pub struct LocalMod {
     /// Full path of the mod.
     path: PathBuf,
     /// Metadata of the mod.
     manifest: Manifest,
+}
+
+impl LocalMod {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn name(&self) -> &str {
+        &self.manifest.name
+    }
+
+    pub fn version(&self) -> &str {
+        &self.manifest.version
+    }
+
+    pub fn new(path: &Path, manifest: Manifest) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            manifest,
+        }
+    }
+}
+
+/// Represents the `everest.yaml`; metadata of the mod.
+#[derive(Debug, Default, Deserialize)]
+pub struct Manifest {
+    #[serde(rename = "Name")]
+    name: String,
+    #[serde(rename = "Version")]
+    version: String,
+}
+
+impl Manifest {
+    /// Deserializes an instance of Manifest from bytes of YAML text.
+    pub fn from_slice(buffer: &[u8]) -> Result<VecDeque<Self>, serde_yaml_ng::Error> {
+        // Remove UTF-8 BOM if present
+        let clean_slice = buffer.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(buffer);
+
+        // NOTE Use `VecDeque` for efficient `pop_front` operation (`O(1)` vs `Vec::remove(0)` which is `O(n)`)
+        let manifest = serde_yaml_ng::from_slice(clean_slice)?;
+        Ok(manifest)
+    }
+}
+
+pub trait FileSystemExt {
+    /// Gets current inode from path.
+    fn fetch_inode(&self) -> io::Result<u64>;
+}
+
+impl FileSystemExt for LocalMod {
+    fn fetch_inode(&self) -> io::Result<u64> {
+        self.path.metadata().map(|m| m.ino())
+    }
 }
 
 impl fmt::Display for LocalMod {
@@ -38,97 +89,6 @@ impl fmt::Display for LocalMod {
             write!(f, "*{} (v{}) [{}]", self.name(), self.version(), filename)?;
         }
         Ok(())
-    }
-}
-
-impl LocalMod {
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn name(&self) -> &str {
-        &self.manifest.name
-    }
-
-    pub fn version(&self) -> &str {
-        &self.manifest.version
-    }
-
-    /// Returns a value of this type from the given file path by extracting and parsing the manifest.
-    fn from_path(mod_path: &Path) -> Option<Self> {
-        let Ok(manifest_bytes) =
-            zip_finder::extract_file_from_zip(mod_path, b"everest.yaml", Some(b"everest.yml"))
-                .inspect_err(
-                    |err| error!(?err, file_name = ?mod_path.file_name(), "manifest is missing"),
-                )
-        else {
-            return None;
-        };
-
-        let Ok(mut manifest) = Manifest::from_slice(&manifest_bytes)
-            .inspect_err(|err| error!(?err, file_name = ?mod_path.file_name()))
-        else {
-            return None;
-        };
-
-        manifest.pop_front().map(|value| Self {
-            path: mod_path.to_path_buf(),
-            manifest: value,
-        })
-    }
-
-    /// Creates values of this type for each path of given paths in parallel.
-    #[instrument(skip(config), fields(mods_dir = %anonymize(&config.mods_dir()), cache_path = %anonymize(config.cache_db_path())))]
-    pub fn load_local_mods(config: &AppConfig) -> io::Result<Vec<Self>> {
-        use rayon::prelude::*;
-
-        let archive_paths = config.read_mods_dir()?;
-
-        let local_mods: Vec<Self> = archive_paths
-            .par_iter()
-            .filter_map(|archive_path| Self::from_path(archive_path))
-            .collect();
-
-        debug!(
-            detected_archives = archive_paths.len(),
-            found_mods = local_mods.len()
-        );
-
-        Ok(local_mods)
-    }
-}
-
-#[cfg(unix)]
-pub trait FileSystemExt {
-    /// Gets current inode from path.
-    fn fetch_inode(&self) -> io::Result<u64>;
-}
-
-#[cfg(unix)]
-impl FileSystemExt for LocalMod {
-    fn fetch_inode(&self) -> io::Result<u64> {
-        self.path.metadata().map(|m| m.ino())
-    }
-}
-
-/// Represents the `everest.yaml`; metadata of the mod.
-#[derive(Debug, Default, Deserialize)]
-struct Manifest {
-    #[serde(rename = "Name")]
-    name: String,
-    #[serde(rename = "Version")]
-    version: String,
-}
-
-impl Manifest {
-    /// Deserializes an instance of Manifest from bytes of YAML text.
-    pub fn from_slice(buffer: &[u8]) -> Result<VecDeque<Self>, serde_yaml_ng::Error> {
-        // Remove UTF-8 BOM if present
-        let clean_slice = buffer.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(buffer);
-
-        // NOTE Use `VecDeque` for efficient `pop_front` operation (`O(1)` vs `Vec::remove(0)` which is `O(n)`)
-        let manifest = serde_yaml_ng::from_slice(clean_slice)?;
-        Ok(manifest)
     }
 }
 

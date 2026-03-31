@@ -6,13 +6,13 @@ use tracing::{info, instrument};
 use crate::{
     config::AppConfig,
     core::{
+        loader::ModLoader,
         network::{
             api::{ApiClient, ApiSource},
             downloader::{DownloadTask, ModDownloader},
         },
         resolver,
     },
-    local_mods::LocalMod,
     mirror::DomainMirror,
     ui::create_spinner,
 };
@@ -24,7 +24,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");
 
     info!("loading installed mods");
-    let mods = LocalMod::load_local_mods(config)?;
+    let mods = ModLoader::load_from_config(config)?;
 
     // Initialize client
     let client = Client::builder()

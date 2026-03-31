@@ -6,11 +6,13 @@ use crate::{
     cache,
     commands::DownloadOption,
     config::AppConfig,
-    core::network::{
-        api::{ApiClient, ApiSource},
-        downloader::{DownloadTask, ModDownloader},
+    core::{
+        loader::ModLoader,
+        network::{
+            api::{ApiClient, ApiSource},
+            downloader::{DownloadTask, ModDownloader},
+        },
     },
-    local_mods::LocalMod,
     mirror::DomainMirror,
     ui::create_spinner,
     update,
@@ -20,7 +22,7 @@ use crate::{
 pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
     info!("updating mods");
 
-    let mut local_mods = LocalMod::load_local_mods(config)?;
+    let mut local_mods = ModLoader::load_from_config(config)?;
 
     info!("reading updater blacklist file");
     let blacklist = config.read_updater_blacklist()?;

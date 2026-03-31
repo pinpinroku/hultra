@@ -1,12 +1,12 @@
 use std::{
     collections::HashSet,
     env,
-    fs::{self, File},
+    fs::File,
     io::{self, BufRead, BufReader},
     path::{Path, PathBuf},
 };
 
-use tracing::{debug, error, warn};
+use tracing::{error, warn};
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -66,28 +66,6 @@ impl AppConfig {
         &self.cache_db_path
     }
 
-    /// Scans mods directory and returns list of archive paths.
-    pub fn read_mods_dir(&self) -> io::Result<Vec<PathBuf>> {
-        // HACK: This is temporary resolution for Everest command does not require Mods directory.
-        if !self.mods_dir().exists() {
-            return Ok(Vec::new());
-        }
-
-        let found_paths: Vec<PathBuf> = fs::read_dir(self.mods_dir())
-            .inspect_err(|err| error!(?err, "failed to read mods directory"))?
-            .filter_map(|res| {
-                res.inspect_err(|err| warn!(?err, "failed to read entry"))
-                    .map(|entry| entry.path())
-                    .ok() // Some(PathBuf)
-            })
-            .filter(|path| is_mod_archive(path))
-            .collect();
-
-        debug!(found_archives = found_paths.len());
-
-        Ok(found_paths)
-    }
-
     // FIXME Create this field in AppConfig or getter
     const UPDATER_BLACKLIST_FILE: &str = "updaterblacklist.txt";
 
@@ -123,13 +101,6 @@ impl AppConfig {
     }
 }
 
-fn is_mod_archive(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-}
-
 /// Resolves installation path by searching Celeste executables.
 fn resolve_root_dir(dir: &Path) -> &Path {
     let is_root = dir.join("Celeste.exe").exists() || dir.join("Celeste.dll").exists();
@@ -148,38 +119,4 @@ fn resolve_root_dir(dir: &Path) -> &Path {
     }
 
     dir
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    use std::fs::File;
-
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_is_mod_archive() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-
-        let valid_target = temp_dir.path().join("SpeedrunTool.zip");
-        let valid_target_upper = temp_dir.path().join("SPEEDRUNTOOL.ZIP");
-        let blacklist_file = temp_dir.path().join("updaterblacklist.txt");
-        let cache_dir = temp_dir.path().join("Cache/");
-        let custom_mod = temp_dir.path().join("LocalCustomMod/");
-
-        File::create_new(&valid_target)?;
-        File::create_new(&valid_target_upper)?;
-        File::create_new(&blacklist_file)?;
-        fs::create_dir(&cache_dir)?;
-        fs::create_dir(&custom_mod)?;
-
-        assert!(is_mod_archive(&valid_target));
-        assert!(is_mod_archive(&valid_target_upper));
-        assert!(!is_mod_archive(&blacklist_file));
-        assert!(!is_mod_archive(&cache_dir));
-        assert!(!is_mod_archive(&custom_mod));
-
-        Ok(())
-    }
 }
