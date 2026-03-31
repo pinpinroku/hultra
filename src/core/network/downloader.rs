@@ -44,7 +44,7 @@ impl From<(String, RemoteMod)> for DownloadTask {
 pub struct ModDownloader {
     client: Client,
     semaphore: Arc<Semaphore>,
-    output_dir: PathBuf,
+    mods_dir: PathBuf,
     mirror_priority: Vec<DomainMirror>,
 }
 
@@ -52,13 +52,13 @@ impl ModDownloader {
     pub fn new(
         client: Client,
         jobs: u8,
-        output_dir: &Path,
+        mods_dir: PathBuf,
         mirror_priority: Vec<DomainMirror>,
     ) -> Self {
         Self {
             client,
             semaphore: Arc::new(Semaphore::new(jobs as usize)),
-            output_dir: output_dir.to_path_buf(),
+            mods_dir,
             mirror_priority,
         }
     }
@@ -77,7 +77,7 @@ impl ModDownloader {
 
                 let name = task.filename.clone();
                 let clean_name = utils::sanitize_stem(&name);
-                let dest = self.output_dir.join(&clean_name).with_extension("zip");
+                let dest = self.mods_dir.join(&clean_name).with_extension("zip");
 
                 let size = task.filesize;
                 let hashes = task.checksums.clone();
