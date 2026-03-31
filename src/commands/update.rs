@@ -77,7 +77,7 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
         .iter()
         .map(DomainMirror::from)
         .collect();
-    let downloader = ModDownloader::new(client.clone(), args.jobs, config.root_dir(), mirrors);
+    let downloader = ModDownloader::new(client.clone(), args.jobs, config.mods_dir(), mirrors);
     downloader.download_all(&tasks).await;
 
     info!("updating completed");

@@ -72,7 +72,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
 
     // Construct download context
     let downloader =
-        ModDownloader::new(client.clone(), args.option.jobs, config.root_dir(), mirrors);
+        ModDownloader::new(client.clone(), args.option.jobs, config.mods_dir(), mirrors);
 
     // Download all mods
     info!("downloading mods");
