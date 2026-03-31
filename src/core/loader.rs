@@ -5,10 +5,9 @@ use std::{
 };
 
 use rayon::prelude::*;
-use tracing::{error, instrument};
+use tracing::{error, info, instrument, warn};
 
 use crate::{
-    config::AppConfig,
     local_mods::{LocalMod, Manifest},
     log::anonymize,
 };
@@ -16,15 +15,18 @@ use crate::{
 pub struct ModLoader;
 
 impl ModLoader {
-    #[instrument(skip_all)]
-    pub fn load_from_config(config: &AppConfig) -> io::Result<Vec<LocalMod>> {
-        let mods_dir = &config.mods_dir();
+    /// Returns found installed mods in given directory.
+    #[instrument(fields(directory = %anonymize(mods_dir)))]
+    pub fn load(mods_dir: &Path) -> io::Result<Vec<LocalMod>> {
         if !mods_dir.exists() {
+            warn!("mods directory not found, Everest is not installed");
             return Ok(Vec::new());
         }
 
+        info!("scanning mods directory");
         let paths = Self::scan_directory(mods_dir)?;
 
+        info!("loading all mods in the directory");
         Self::load_all(&paths)
     }
 
@@ -44,7 +46,7 @@ impl ModLoader {
             .ok()?;
 
         let mut manifests = Manifest::from_slice(&bytes)
-            .inspect_err(|e| error!(?e, "Failed to parse YAML"))
+            .inspect_err(|e| error!(?e, "Failed to parse everest.yaml"))
             .ok()?;
 
         manifests.pop_front().map(|m| LocalMod::new(path, m))

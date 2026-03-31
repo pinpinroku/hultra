@@ -22,7 +22,7 @@ use crate::{
 pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
     info!("updating mods");
 
-    let mut local_mods = ModLoader::load_from_config(config)?;
+    let mut local_mods = ModLoader::load(&config.mods_dir())?;
 
     info!("reading updater blacklist file");
     let blacklist = config.read_updater_blacklist()?;

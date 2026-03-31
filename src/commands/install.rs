@@ -24,7 +24,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");
 
     info!("loading installed mods");
-    let mods = ModLoader::load_from_config(config)?;
+    let mods = ModLoader::load(&config.mods_dir())?;
 
     // Initialize client
     let client = Client::builder()

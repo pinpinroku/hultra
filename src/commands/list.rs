@@ -5,7 +5,7 @@ use crate::{config::AppConfig, core::loader::ModLoader};
 /// Lists currently installed mods.
 pub fn run(config: &AppConfig) -> anyhow::Result<()> {
     info!("loading installed mods");
-    let installed_mods = ModLoader::load_from_config(config)?;
+    let installed_mods = ModLoader::load(&config.mods_dir())?;
 
     info!("listing installed mods");
     for installed in installed_mods {
