@@ -50,15 +50,37 @@ impl DomainMirror {
 }
 
 mod mirrorlist {
+    use tracing::warn;
+
     use super::DomainMirror;
 
     pub fn generate(url: &str, priority: &[DomainMirror]) -> Vec<String> {
-        let Some(gbid) = "https://gamebanana.com/mmdl/".strip_prefix(url) else {
+        let Some(gbid) = url.strip_prefix("https://gamebanana.com/mmdl/") else {
+            warn!("failed to extract Gamebanana ID from '{}'", url);
             return vec![url.to_string()];
         };
         priority
             .iter()
             .map(|mirror| mirror.url_for_id(gbid))
             .collect()
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+
+        #[test]
+        fn test_generate() {
+            let url = "https://gamebanana.com/mmdl/1298450";
+            let result = generate(
+                url,
+                &[DomainMirror::Otobot, DomainMirror::Gb, DomainMirror::Jade],
+            );
+            assert_eq!(result.len(), 3, "should return three URLs");
+            assert_eq!(
+                result.first().unwrap(),
+                &"https://banana-mirror-mods.celestemods.com/1298450.zip".to_string()
+            )
+        }
     }
 }
