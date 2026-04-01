@@ -13,13 +13,13 @@ use tracing_subscriber::{
 
 pub fn init_logger(log_file: Option<&Path>) -> Result<(), io::Error> {
     // if the variable `$RUST_LOG` is not set, do not display any logs to the console
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("off"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let console_layer = fmt::layer()
         .with_writer(std::io::stderr)
         .with_target(false)
         .without_time()
-        .pretty()
+        // .pretty()
         .with_filter(env_filter);
 
     let file_layer = if let Some(p) = log_file {

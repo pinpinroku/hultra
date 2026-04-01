@@ -9,8 +9,8 @@ use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
 use tempfile::{self, Builder, NamedTempFile};
-use tokio::{io::AsyncWriteExt, sync::Semaphore};
-use tracing::{error, info, instrument, warn};
+use tokio::{io::AsyncWriteExt, sync::Semaphore, task::JoinSet};
+use tracing::{error, instrument};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
@@ -70,45 +70,36 @@ impl ModDownloader {
     /// Download all mod files concurrently.
     #[instrument(skip(self))]
     pub async fn download_all(&self, tasks: &[DownloadTask]) {
+        let mut set = JoinSet::new();
         let mp = MultiProgress::new();
 
-        let handles: Vec<_> = tasks
-            .iter()
-            .map(|task| {
-                let client = self.client.clone();
-                let jobs = self.semaphore.clone();
+        for task in tasks {
+            let client = self.client.clone();
+            let jobs = self.semaphore.clone();
 
-                let mirror_urls = mirror::generate(&task.url, &self.mirror_priority);
+            let mirror_urls = mirror::generate(&task.url, &self.mirror_priority);
 
-                let name = task.filename.clone();
-                let clean_name = utils::sanitize_stem(&name);
-                let dest = self.mods_dir.join(&clean_name).with_extension("zip");
+            let name = task.filename.clone();
+            let clean_name = utils::sanitize_stem(&name);
+            let dest = self.mods_dir.join(&clean_name).with_extension("zip");
 
-                let size = task.filesize;
-                let checksums = task.checksums.clone();
+            let size = task.filesize;
+            let checksums = task.checksums.clone();
 
-                let pb = mp.add(create_download_progress_bar(&name, size));
+            let pb = mp.add(create_download_progress_bar(&name, size));
 
-                tokio::spawn(async move {
-                    let _permit = jobs.acquire().await.unwrap();
+            set.spawn(async move {
+                let _permit = jobs.acquire().await.unwrap();
 
-                    download_with_fallbacks(
-                        &client,
-                        &mirror_urls,
-                        &clean_name,
-                        &checksums,
-                        &dest,
-                        &pb,
-                    )
+                download_with_fallbacks(&client, &mirror_urls, &clean_name, &checksums, &dest, &pb)
                     .await
-                })
-            })
-            .collect();
+            });
+        }
 
-        for handle in handles {
-            match handle.await {
+        while let Some(result) = set.join_next().await {
+            match result {
                 Ok(Ok(_)) => {}
-                Ok(Err(e)) => eprintln!("{:?}", e),
+                Ok(Err(e)) => error!("{:?}", e),
                 Err(e) => error!(?e, "failed to complete task, canceled or pacnicked"),
             }
         }
@@ -123,7 +114,6 @@ pub struct AllMirrorsFailedError {
 }
 
 /// Retry downloading a file for given mirror urls until success or all mirrors are exhausted.
-#[instrument(skip_all, fields(urls = ?urls))]
 async fn download_with_fallbacks(
     client: &Client,
     urls: &[String],
@@ -135,7 +125,6 @@ async fn download_with_fallbacks(
     let mut errors = Vec::new();
 
     for url in urls {
-        pb.set_message(format!("Downloading {}", name));
         pb.set_position(0);
 
         match download(client, url, checksums, dest, pb).await {
@@ -144,7 +133,6 @@ async fn download_with_fallbacks(
                 return Ok(());
             }
             Err(e) => {
-                warn!(?e, url = %url, "mirror failed");
                 errors.push((url.clone(), e));
             }
         }
@@ -218,7 +206,6 @@ async fn download(
     // Abort if the file is corrupt. NamedTempFile will be auto-deleted.
     let digest = hasher.digest();
     verify(digest, checksums)?;
-    info!("checksum verified");
 
     // Finalize the download by copying across filesystem boundaries.
     tokio::fs::copy(temp_path, dest).await?;
