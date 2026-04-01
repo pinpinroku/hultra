@@ -100,17 +100,26 @@ impl ModDownloader {
                         &dest,
                         &pb,
                     )
-                    .await;
+                    .await
                 })
             })
             .collect();
 
         for handle in handles {
-            if let Err(e) = handle.await {
-                error!(?e, "failed to complete the task, canceled or panicked")
+            match handle.await {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => eprintln!("{:?}", e),
+                Err(e) => error!(?e, "failed to complete task, canceled or pacnicked"),
             }
         }
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("All mirrors failed for '{name}'")]
+pub struct AllMirrorsFailedError {
+    name: String,
+    errors: Vec<(String, DownloadError)>,
 }
 
 /// Retry downloading a file for given mirror urls until success or all mirrors are exhausted.
@@ -122,35 +131,32 @@ async fn download_with_fallbacks(
     checksums: &[u64],
     dest: &Path,
     pb: &ProgressBar,
-) {
-    let mut success = false;
+) -> Result<(), AllMirrorsFailedError> {
+    let mut errors = Vec::new();
 
     for url in urls {
+        pb.set_message(format!("Downloading {}", name));
+        pb.set_position(0);
+
         match download(client, url, checksums, dest, pb).await {
             Ok(_) => {
-                success = true;
                 pb.finish_with_message(format!("{} 🍓", name));
-                break;
+                return Ok(());
             }
             Err(e) => {
-                warn!(
-                    ?e,
-                    "failed to download '{}' from '{}', trying another mirror", name, url
-                );
-                pb.set_message(format!(
-                    "{}: Failed to download, trying another mirror.",
-                    name
-                ));
-                pb.reset();
+                warn!(?e, url = %url, "mirror failed");
+                errors.push((url.clone(), e));
             }
         }
     }
 
-    // TODO implement error summary by collecting all the errors
-    if !success {
-        error!("failed to download '{}' for all mirrors", name);
-        pb.finish_with_message(format!("{} ❌ Failed", name))
-    }
+    pb.finish_and_clear();
+
+    error!("failed to download '{}' for all mirrors", name);
+    Err(AllMirrorsFailedError {
+        name: name.to_string(),
+        errors,
+    })
 }
 
 #[derive(thiserror::Error, Debug)]
