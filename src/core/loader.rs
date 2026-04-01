@@ -16,14 +16,14 @@ pub struct ModLoader;
 
 impl ModLoader {
     /// Returns found installed mods in given directory.
-    #[instrument(fields(directory = %anonymize(mods_dir)))]
+    #[instrument(skip_all, fields(directory = %anonymize(mods_dir)))]
     pub fn load(mods_dir: &Path) -> io::Result<Vec<LocalMod>> {
         if !mods_dir.exists() {
             warn!("mods directory not found, Everest is not installed");
             return Ok(Vec::new());
         }
 
-        info!("scanning mods directory");
+        info!("scanning directory for mods");
         let paths = Self::scan_directory(mods_dir)?;
 
         info!("loading all mods in the directory");
@@ -39,7 +39,6 @@ impl ModLoader {
         Ok(mods)
     }
 
-    #[instrument(fields(path = %anonymize(path)))]
     fn load_single(path: &Path) -> Option<LocalMod> {
         let bytes = zip_finder::extract_file_from_zip(path, b"everest.yaml", Some(b"everest.yml"))
             .inspect_err(|e| error!(?e, "Failed to extract manifest"))
@@ -53,7 +52,7 @@ impl ModLoader {
     }
 
     /// Scans mods directory and returns list of archive paths.
-    #[instrument]
+    #[instrument(skip_all, fields(directory = %anonymize(mods_dir)))]
     fn scan_directory(mods_dir: &Path) -> io::Result<Vec<PathBuf>> {
         let found_paths: Vec<_> = fs::read_dir(mods_dir)?
             .filter_map(|res| res.ok())
