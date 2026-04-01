@@ -13,7 +13,7 @@ use tokio::{
     io::{self, AsyncWriteExt},
     sync::Semaphore,
 };
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
@@ -89,7 +89,7 @@ impl ModDownloader {
                 let size = task.filesize;
                 let checksums = task.checksums.clone();
 
-                let pb = mp.add(create_download_progress_bar(&name));
+                let pb = mp.add(create_download_progress_bar(&name, size));
 
                 tokio::spawn(async move {
                     let _permit = jobs.acquire().await.unwrap();
@@ -184,13 +184,8 @@ async fn download(
         .await?
         .error_for_status()?;
 
-    // TODO Use ProgressBar::new(size) instead of set_length(size)
-    let total_size = response.content_length().unwrap_or(size);
-    pb.set_length(total_size);
-    pb.reset();
-
     // TODO Use tempfile to store temporary file on RAM disk
-    let mut buffer = Vec::with_capacity(total_size as usize);
+    let mut buffer = Vec::with_capacity(size as usize);
 
     let mut hasher = Xxh64::new(0);
     let mut stream = response.bytes_stream();
@@ -202,7 +197,6 @@ async fn download(
         buffer.extend_from_slice(&chunk);
         pb.inc(chunk.len() as u64);
     }
-    debug!(filesize = %size, "download completed");
     // TODO flush file
 
     // TODO remove the file if verification fails

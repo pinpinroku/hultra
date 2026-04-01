@@ -40,16 +40,16 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .filter_map(|url| url.extract_id().ok())
         .collect();
 
-    info!("fetching database");
-    let spinner = create_spinner();
-
-    // Fetch databases
     let api_client = ApiClient::new(client.clone());
     let source = ApiSource::from(args.option.use_api_mirror);
+
+    info!("fetching database");
+    let spinner = create_spinner();
     let (registry, graph) = try_join!(
         api_client.fetch_registry(source),
         api_client.fetch_graph(source)
     )?;
+    spinner.finish_and_clear();
 
     // Resolve missing deps
     info!("resolving missing dependencies");
@@ -79,6 +79,5 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     downloader.download_all(&tasks).await;
 
     info!("installation completed");
-    spinner.finish_and_clear();
     Ok(())
 }
