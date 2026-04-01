@@ -5,7 +5,7 @@ use std::{
 };
 
 use rayon::prelude::*;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, instrument, warn};
 
 use crate::{
     local_mods::{LocalMod, Manifest},
@@ -23,10 +23,8 @@ impl ModLoader {
             return Ok(Vec::new());
         }
 
-        info!("scanning directory for mods");
         let paths = Self::scan_directory(mods_dir)?;
 
-        info!("loading all mods in the directory");
         Self::load_all(&paths)
     }
 

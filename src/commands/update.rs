@@ -22,6 +22,7 @@ use crate::{
 pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
     info!("updating mods");
 
+    info!("loading installed mods");
     let mut local_mods = ModLoader::load(&config.mods_dir())?;
 
     info!("reading updater blacklist file");
@@ -59,15 +60,14 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
     let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
 
     if targets.is_empty() {
-        println!("All mods are up-to-date");
+        info!("all mods are up-to-date");
         return Ok(());
     } else {
         // send update info to stdout
-        println!("Available updates:\n");
+        info!("available updates:");
         for update_info in update_info_list {
-            println!("{}", update_info);
+            info!("{}", update_info);
         }
-        println!();
     }
 
     let tasks: Vec<DownloadTask> = targets.into_iter().map(DownloadTask::from).collect();
