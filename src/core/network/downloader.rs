@@ -8,8 +8,12 @@ use std::{
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
-use tokio::{fs, io::AsyncWriteExt, sync::Semaphore};
-use tracing::{debug, error, instrument, warn};
+use tokio::{
+    fs,
+    io::{self, AsyncWriteExt},
+    sync::Semaphore,
+};
+use tracing::{debug, error, info, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
@@ -21,6 +25,7 @@ use crate::{
 };
 
 /// Metadata of target mod to be downloaded.
+#[derive(Debug)]
 pub struct DownloadTask {
     url: String,
     filename: String,
@@ -41,6 +46,7 @@ impl From<(String, RemoteMod)> for DownloadTask {
 }
 
 /// Context for downloading mods.
+#[derive(Debug)]
 pub struct ModDownloader {
     client: Client,
     semaphore: Arc<Semaphore>,
@@ -64,6 +70,7 @@ impl ModDownloader {
     }
 
     /// Download all mod files concurrently.
+    #[instrument(skip(self))]
     pub async fn download_all(&self, tasks: &[DownloadTask]) {
         let mp = MultiProgress::new();
 
@@ -80,7 +87,7 @@ impl ModDownloader {
                 let dest = self.mods_dir.join(&clean_name).with_extension("zip");
 
                 let size = task.filesize;
-                let hashes = task.checksums.clone();
+                let checksums = task.checksums.clone();
 
                 let pb = mp.add(create_download_progress_bar(&name));
 
@@ -92,7 +99,7 @@ impl ModDownloader {
                         &mirror_urls,
                         &clean_name,
                         size,
-                        &hashes,
+                        &checksums,
                         &dest,
                         &pb,
                     )
@@ -110,20 +117,20 @@ impl ModDownloader {
 }
 
 /// Retry downloading a file for given mirror urls until success or all mirrors are exhausted.
-#[instrument(skip_all, fields(name))]
+#[instrument(skip_all, fields(urls = ?urls))]
 async fn download_with_fallbacks(
     client: &Client,
     urls: &[String],
     name: &str,
     size: u64,
-    hashes: &[u64],
+    checksums: &[u64],
     dest: &Path,
     pb: &ProgressBar,
 ) {
     let mut success = false;
 
     for url in urls {
-        match download(client, url, size, hashes, dest, pb).await {
+        match download(client, url, size, checksums, dest, pb).await {
             Ok(_) => {
                 success = true;
                 pb.finish_with_message(format!("{} 🍓", name));
@@ -143,6 +150,7 @@ async fn download_with_fallbacks(
         }
     }
 
+    // TODO implement error summary by collection all the errors
     if !success {
         error!("failed to download '{}' for all mirrors", name);
         pb.finish_with_message(format!("{} ❌ Failed", name))
@@ -155,14 +163,8 @@ pub enum DownloadError {
     Network(#[from] reqwest::Error),
     #[error("failed to save the mod")]
     Io(#[from] std::io::Error),
-    #[error(
-        "failed to verify checksum for {file_path:?}: computed {computed}, expected {expected:?}"
-    )]
-    FileHashMissMatch {
-        file_path: PathBuf,
-        computed: u64,
-        expected: Vec<u64>,
-    },
+    #[error(transparent)]
+    Hash(#[from] HashValidationError),
 }
 
 /// Downloads a single mod file while hashing the file.
@@ -171,21 +173,23 @@ async fn download(
     client: &Client,
     url: &str,
     size: u64,
-    hashes: &[u64],
+    checksums: &[u64],
     dest: &Path,
     pb: &ProgressBar,
 ) -> Result<(), DownloadError> {
     let response = client
         .get(url)
-        .timeout(Duration::from_secs(60))
+        .timeout(Duration::from_secs(120))
         .send()
         .await?
         .error_for_status()?;
 
+    // TODO Use ProgressBar::new(size) instead of set_length(size)
     let total_size = response.content_length().unwrap_or(size);
     pb.set_length(total_size);
     pb.reset();
 
+    // TODO Use tempfile to store temporary file on RAM disk
     let mut buffer = Vec::with_capacity(total_size as usize);
 
     let mut hasher = Xxh64::new(0);
@@ -194,26 +198,49 @@ async fn download(
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         hasher.update(&chunk);
+        // TODO Write buffer directly to tempfile
         buffer.extend_from_slice(&chunk);
         pb.inc(chunk.len() as u64);
     }
     debug!(filesize = %size, "download completed");
+    // TODO flush file
 
-    let computed_hash = hasher.digest();
-    if !hashes.contains(&computed_hash) {
-        return Err(DownloadError::FileHashMissMatch {
-            file_path: dest.to_path_buf(),
-            computed: computed_hash,
-            expected: hashes.to_vec(),
-        });
+    // TODO remove the file if verification fails
+    let digest = hasher.digest();
+    verify(digest, checksums)?;
+    info!("checksum verified");
+
+    // TODO persist (copy) the file to the disk if verification check passes
+    save_to_disk(dest, &buffer).await?;
+
+    Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Hash mismatch: computed: {computed}, expected: {expected:?}")]
+pub struct HashValidationError {
+    computed: String,
+    expected: Vec<String>,
+}
+
+/// Verifies given checksums are equal.
+fn verify(computed: u64, expected: &[u64]) -> Result<(), HashValidationError> {
+    if expected.contains(&computed) {
+        Ok(())
+    } else {
+        Err(HashValidationError {
+            computed: format!("{:016x}", computed),
+            expected: expected.iter().map(|v| format!("{:016x}", v)).collect(),
+        })
     }
-    debug!(xxhash64 = %computed_hash, "hash check passed");
+}
 
+/// Writes buffer to destination path.
+#[instrument(skip_all, fields(path = %anonymize(dest)))]
+async fn save_to_disk(dest: &Path, buffer: &[u8]) -> io::Result<()> {
     let mut file = fs::File::create(dest).await?;
-    file.write_all(&buffer).await?;
+    file.write_all(buffer).await?;
     file.flush().await?;
-
-    debug!(path = %anonymize(dest), "saved to disk");
 
     Ok(())
 }
