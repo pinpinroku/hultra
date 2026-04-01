@@ -1,7 +1,7 @@
 //! Handle install command.
 use reqwest::Client;
 use tokio::try_join;
-use tracing::{info, instrument};
+use tracing::info;
 
 use crate::{
     config::AppConfig,
@@ -19,7 +19,6 @@ use crate::{
 
 use super::InstallArgs;
 
-#[instrument(skip(config))]
 pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");
 
