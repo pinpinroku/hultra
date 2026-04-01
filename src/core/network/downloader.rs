@@ -8,15 +8,13 @@ use std::{
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
-use tokio::{
-    fs,
-    io::{self, AsyncWriteExt},
-    sync::Semaphore,
-};
+use tempfile::{self, Builder, NamedTempFile};
+use tokio::{io::AsyncWriteExt, sync::Semaphore};
 use tracing::{error, info, instrument, warn};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
+    config::CARGO_PKG_NAME,
     core::utils,
     log::anonymize,
     mirror::{self, DomainMirror},
@@ -98,7 +96,6 @@ impl ModDownloader {
                         &client,
                         &mirror_urls,
                         &clean_name,
-                        size,
                         &checksums,
                         &dest,
                         &pb,
@@ -122,7 +119,6 @@ async fn download_with_fallbacks(
     client: &Client,
     urls: &[String],
     name: &str,
-    size: u64,
     checksums: &[u64],
     dest: &Path,
     pb: &ProgressBar,
@@ -130,7 +126,7 @@ async fn download_with_fallbacks(
     let mut success = false;
 
     for url in urls {
-        match download(client, url, size, checksums, dest, pb).await {
+        match download(client, url, checksums, dest, pb).await {
             Ok(_) => {
                 success = true;
                 pb.finish_with_message(format!("{} 🍓", name));
@@ -150,7 +146,7 @@ async fn download_with_fallbacks(
         }
     }
 
-    // TODO implement error summary by collection all the errors
+    // TODO implement error summary by collecting all the errors
     if !success {
         error!("failed to download '{}' for all mirrors", name);
         pb.finish_with_message(format!("{} ❌ Failed", name))
@@ -167,12 +163,17 @@ pub enum DownloadError {
     Hash(#[from] HashValidationError),
 }
 
-/// Downloads a single mod file while hashing the file.
-#[instrument(skip_all, fields(url = %url))]
+/// Downloads a file while hashing, verifying its integrity before final persistence.
+///
+/// ### Note
+/// - Uses `tempfile` (typically in `tmpfs`) to avoid polluting the destination
+///   with corrupt/partial data if verification fails.
+/// - Performs `tokio::fs::copy` instead of `tempfile::persist` because `temp_path` and `dest`
+///   often reside on different filesystems (e.g., RAM vs. Disk).
+#[instrument(skip_all, fields(url = %url, path = %anonymize(dest)))]
 async fn download(
     client: &Client,
     url: &str,
-    size: u64,
     checksums: &[u64],
     dest: &Path,
     pb: &ProgressBar,
@@ -184,29 +185,37 @@ async fn download(
         .await?
         .error_for_status()?;
 
-    // TODO Use tempfile to store temporary file on RAM disk
-    let mut buffer = Vec::with_capacity(size as usize);
+    // Use a temp file for "Verify-then-Commit" strategy.
+    let temp_dir = Builder::new()
+        .prefix(&format!("{}-", CARGO_PKG_NAME))
+        .rand_bytes(6)
+        .tempdir()?;
+    let named_temp_file = NamedTempFile::new_in(temp_dir.path())?;
+    let temp_path = named_temp_file.path();
+
+    // Reopen handle to keep `named_temp_file` (and its path) alive for the final copy.
+    let std_file = named_temp_file.reopen()?;
+    let mut file = tokio::fs::File::from_std(std_file);
 
     let mut hasher = Xxh64::new(0);
     let mut stream = response.bytes_stream();
 
+    // Stream download while hashing to minimize RAM usage.
     while let Some(chunk) = stream.next().await {
         let chunk = chunk?;
         hasher.update(&chunk);
-        // TODO Write buffer directly to tempfile
-        buffer.extend_from_slice(&chunk);
+        file.write_all(&chunk).await?;
         pb.inc(chunk.len() as u64);
     }
-    // TODO flush file
+    file.flush().await?;
 
-    // TODO remove the file if verification fails
+    // Abort if the file is corrupt. NamedTempFile will be auto-deleted.
     let digest = hasher.digest();
     verify(digest, checksums)?;
     info!("checksum verified");
 
-    // TODO persist (copy) the file to the disk if verification check passes
-    save_to_disk(dest, &buffer).await?;
-
+    // Finalize the download by copying across filesystem boundaries.
+    tokio::fs::copy(temp_path, dest).await?;
     Ok(())
 }
 
@@ -227,14 +236,4 @@ fn verify(computed: u64, expected: &[u64]) -> Result<(), HashValidationError> {
             expected: expected.iter().map(|v| format!("{:016x}", v)).collect(),
         })
     }
-}
-
-/// Writes buffer to destination path.
-#[instrument(skip_all, fields(path = %anonymize(dest)))]
-async fn save_to_disk(dest: &Path, buffer: &[u8]) -> io::Result<()> {
-    let mut file = fs::File::create(dest).await?;
-    file.write_all(buffer).await?;
-    file.flush().await?;
-
-    Ok(())
 }
