@@ -25,16 +25,16 @@ pub fn create_download_progress_bar(name: &str, size: u64) -> ProgressBar {
 
 /// Create a spinner progress bar for fetching online database.
 pub fn create_spinner() -> ProgressBar {
-    let spinner = if log::should_show_progress() {
-        ProgressBar::new_spinner()
+    if log::should_show_progress() {
+        let spinner = ProgressBar::new_spinner();
+        spinner.enable_steady_tick(Duration::from_millis(100));
+        spinner.set_style(
+            ProgressStyle::with_template("{spinner:.bold} {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+        );
+        spinner.set_message("fetching database...");
+        spinner
     } else {
         ProgressBar::hidden()
-    };
-    spinner.enable_steady_tick(Duration::from_millis(100));
-    spinner.set_style(
-        ProgressStyle::with_template("{spinner:.bold} {msg}")
-            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
-    );
-    spinner.set_message("fetching database...");
-    spinner
+    }
 }

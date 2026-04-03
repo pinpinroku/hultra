@@ -14,7 +14,7 @@ use tokio::{
 use tracing::{error, info, instrument};
 use url::Url;
 
-use crate::{config::AppConfig, everest::installer};
+use crate::{config::AppConfig, everest::installer, log::anonymize};
 
 use super::EverestBuild;
 
@@ -49,7 +49,7 @@ impl EverestClient {
         Ok(Self { client })
     }
 
-    // TODO: make `use_api_mirror` option global to be able to use it in Everest commands
+    #[instrument(skip(self))]
     pub async fn fetch_database(&self, is_mirror: bool) -> Result<Vec<EverestBuild>, Error> {
         let pb = ProgressBar::new_spinner();
         pb.enable_steady_tick(Duration::from_millis(120));
@@ -86,7 +86,6 @@ impl EverestClient {
     }
 
     /// Returns API endpoint.
-    #[instrument(skip(self))]
     async fn get_url(&self, is_mirror: bool) -> Result<Url, Error> {
         let url = if is_mirror {
             info!("Using mirror for the Everest updater database");
@@ -119,7 +118,7 @@ impl EverestClient {
     }
 
     // 1. Returns list of builds by sending request to endpoint.
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(url = %url))]
     async fn fetch_update_list(&self, url: Url) -> Result<Vec<EverestBuild>, Error> {
         info!("Fetching version list");
         let response = self.client.get(url).send().await?;
@@ -128,7 +127,7 @@ impl EverestClient {
     }
 
     // 2. Downloads file and save it to given destination. Returns actual downloaded size in bytes.
-    #[instrument(skip(self))]
+    #[instrument(skip(self), fields(url, path = %anonymize(dest)))]
     pub async fn download_everest(&self, url: &str, dest: &Path) -> Result<u64, Error> {
         info!("Downloading Everest");
         let pb = ProgressBar::new_spinner();
