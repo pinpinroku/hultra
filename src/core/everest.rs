@@ -54,17 +54,17 @@ impl EverestBuild {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Ord, PartialOrd)]
 #[serde(rename_all = "lowercase", tag = "branch")]
 pub enum Branch {
-    Stable,
     Dev { author: String, description: String },
     Beta,
+    Stable,
 }
 
 impl Branch {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Branch::Stable => "stable",
             Branch::Dev { .. } => "dev",
             Branch::Beta => "beta",
+            Branch::Stable => "stable",
         }
     }
 }
@@ -72,9 +72,9 @@ impl Branch {
 impl fmt::Display for Branch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Branch::Stable => write!(f, "stable"),
             Branch::Dev { .. } => write!(f, "dev"),
             Branch::Beta => write!(f, "beta"),
+            Branch::Stable => write!(f, "stable"),
         }
     }
 }

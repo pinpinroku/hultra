@@ -26,7 +26,7 @@ pub fn run(args: &ListArgs, builds: Vec<EverestBuild>) {
 
 /// Prints the `n` most recent Everest build vesrions.
 fn print_builds(builds: Vec<EverestBuild>, n: usize) {
-    let groups = get_latest_builds(builds, n);
+    let mut groups = get_latest_builds(builds, n);
 
     println!(
         "{:<10} {:<8} {:<10} {:<20} DETAILS",
@@ -34,32 +34,34 @@ fn print_builds(builds: Vec<EverestBuild>, n: usize) {
     );
     println!("{}", "-".repeat(80));
 
-    for (branch_name, builds) in groups {
-        for (i, build) in builds.into_iter().enumerate() {
-            let branch_ptr = if i == 0 { branch_name } else { "" };
+    for branch_name in ["dev", "beta", "stable"] {
+        if let Some(builds_for_branch) = groups.remove(branch_name) {
+            for (i, build) in builds_for_branch.into_iter().enumerate() {
+                let branch_ptr = if i == 0 { branch_name } else { "" };
 
-            let short_sha = if build.commit.len() > 7 {
-                &build.commit[..7]
-            } else {
-                &build.commit
-            };
+                let short_sha = if build.commit.len() > 7 {
+                    &build.commit[..7]
+                } else {
+                    &build.commit
+                };
 
-            let details = match &build.branch {
-                Branch::Dev {
-                    author,
-                    description,
-                } => {
-                    format!("[{}] {}", author, description)
-                }
-                _ => "-".to_string(),
-            };
+                let details = match &build.branch {
+                    Branch::Dev {
+                        author,
+                        description,
+                    } => {
+                        format!("[{}] {}", author, description)
+                    }
+                    _ => "-".to_string(),
+                };
 
-            let date = build.formatted_date();
+                let date = build.formatted_date();
 
-            println!(
-                "{:<10} {:<8} {:<10} {:<20} {}",
-                branch_ptr, build.version, short_sha, date, details
-            );
+                println!(
+                    "{:<10} {:<8} {:<10} {:<20} {}",
+                    branch_ptr, build.version, short_sha, date, details
+                );
+            }
         }
     }
 }
