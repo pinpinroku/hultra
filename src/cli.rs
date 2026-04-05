@@ -1,6 +1,4 @@
 //! Command list and global options.
-//!
-//! TODO: Move match arms in main.rs to here
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
@@ -12,7 +10,7 @@ use crate::{
         install::InstallArgs,
     },
     config::AppConfig,
-    everest::client::EverestClient,
+    core::everest::network::{EverestHttpClient, api::EverestApiClient},
 };
 
 /// Command line interface.
@@ -57,19 +55,30 @@ pub async fn dispatch(args: Cli, config: AppConfig) -> anyhow::Result<()> {
             EverestSubCommand::Version => commands::everest::version::run(&config)?,
             EverestSubCommand::NetworkRequired(action) => {
                 let option = action.network_option();
-                let client = EverestClient::new()?;
-                let builds = client.fetch_database(option.use_api_mirror).await?;
+                let shared_client = EverestHttpClient::new()?;
+                let api_client = EverestApiClient::new(shared_client.inner.clone());
+                let builds = api_client.fetch_database(option.use_api_mirror).await?;
 
                 match action {
                     NetworkCommand::List(args) => {
-                        commands::everest::network::list::run(&args, &builds)
+                        commands::everest::network::list::run(&args, builds)
                     }
                     NetworkCommand::Update(_) => {
-                        commands::everest::network::update::run(&config, &builds, &client).await?
+                        commands::everest::network::update::run(
+                            &config,
+                            builds,
+                            shared_client.inner.clone(),
+                        )
+                        .await?
                     }
                     NetworkCommand::Install(args) => {
-                        commands::everest::network::install::run(&args, &builds, &client, &config)
-                            .await?
+                        commands::everest::network::install::run(
+                            &args,
+                            builds,
+                            shared_client.inner.clone(),
+                            config,
+                        )
+                        .await?
                     }
                 }
             }

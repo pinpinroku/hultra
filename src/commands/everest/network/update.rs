@@ -1,25 +1,31 @@
-//! write update logic here
-//! move logic from main.rs
-
 use anyhow::Context;
+use reqwest::Client;
 use tracing::debug;
 
 use crate::{
     config::AppConfig,
-    everest::{EverestBuild, client::EverestClient, version},
+    core::everest::{
+        EverestBuild, get_installed_branch, get_latest_build_on_branch,
+        network::{
+            downloader::{DownloadTask, EverestDownloader},
+            install,
+        },
+        version::FileVersionRepository,
+    },
 };
 
 pub async fn run(
     config: &AppConfig,
-    builds: &[EverestBuild],
-    client: &EverestClient,
+    builds: Vec<EverestBuild>,
+    client: Client,
 ) -> anyhow::Result<()> {
-    let current_v = version::ensure_installed_version(config.root_dir())?;
-    let current_b = version::get_installed_branch(builds, &current_v)
+    let repo = FileVersionRepository::new(config);
+    let current_v = crate::core::everest::version::fetch_installed_version(&repo)?.value();
+    let current_b = get_installed_branch(&builds, current_v)
         .context("Installed version not found on the database")?;
 
-    let target_build = version::get_latest_build_on_branch(builds, current_b)
-        .context("No builds found on the branch")?;
+    let target_build =
+        get_latest_build_on_branch(&builds, current_b).context("No builds found on the branch")?;
     debug!(?target_build, ?current_v, ?current_b);
 
     if current_v == target_build.version {
@@ -27,9 +33,9 @@ pub async fn run(
         println!("  {}", target_build);
         return Ok(());
     }
-    client
-        .download_and_run_installer(target_build, config)
-        .await?;
 
-    Ok(())
+    let downloader = EverestDownloader::new(client, config.root_dir());
+    let task = DownloadTask::from(target_build.clone());
+
+    install(&downloader, task).await
 }

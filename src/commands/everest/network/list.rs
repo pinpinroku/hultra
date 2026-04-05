@@ -1,7 +1,7 @@
 use clap::Args;
 
 use super::NetworkOption;
-use crate::everest::{self, EverestBuild};
+use crate::core::everest::{Branch, EverestBuild, get_latest_builds};
 
 #[derive(Debug, Clone, Args)]
 pub struct ListArgs {
@@ -15,11 +15,51 @@ pub struct ListArgs {
     pub option: NetworkOption,
 }
 
-pub fn run(args: &ListArgs, builds: &[EverestBuild]) {
+pub fn run(args: &ListArgs, builds: Vec<EverestBuild>) {
     let display_n = if args.all {
         builds.len()
     } else {
         args.limit as usize
     };
-    everest::print_builds(builds.to_vec(), display_n)
+    print_builds(builds, display_n)
+}
+
+/// Prints the `n` most recent Everest build vesrions.
+fn print_builds(builds: Vec<EverestBuild>, n: usize) {
+    let groups = get_latest_builds(builds, n);
+
+    println!(
+        "{:<10} {:<8} {:<10} {:<20} DETAILS",
+        "BRANCH", "VERSION", "COMMIT", "DATE"
+    );
+    println!("{}", "-".repeat(80));
+
+    for (branch_name, builds) in groups {
+        for (i, build) in builds.into_iter().enumerate() {
+            let branch_ptr = if i == 0 { branch_name } else { "" };
+
+            let short_sha = if build.commit.len() > 7 {
+                &build.commit[..7]
+            } else {
+                &build.commit
+            };
+
+            let details = match &build.branch {
+                Branch::Dev {
+                    author,
+                    description,
+                } => {
+                    format!("[{}] {}", author, description)
+                }
+                _ => "-".to_string(),
+            };
+
+            let date = build.formatted_date();
+
+            println!(
+                "{:<10} {:<8} {:<10} {:<20} {}",
+                branch_ptr, build.version, short_sha, date, details
+            );
+        }
+    }
 }

@@ -14,7 +14,6 @@ mod commands;
 mod config;
 mod core;
 mod dependency;
-mod everest;
 mod local_mods;
 mod log;
 mod mirror;
