@@ -5,6 +5,7 @@
 //! Actual business logic like `install`, or `update` are defined in the upper modules (src/lib.rs, or core/network/download.rs).
 use clap::{Args, ValueEnum};
 
+pub mod everest;
 pub mod install;
 pub mod list;
 pub mod update;
@@ -46,61 +47,4 @@ pub struct DownloadOption {
     /// Maximum number of concurrent downloads [range: 1-6]
     #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
     pub jobs: u8,
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct InstallArgs {
-    /// URL(s) of mod page on GameBanana.
-    #[arg(required = true, num_args = 1..20)]
-    pub urls: Vec<GamebananaUrl>,
-
-    /// Options specific to downloading.
-    #[command(flatten)]
-    pub option: DownloadOption,
-}
-
-use std::{ops::Deref, str::FromStr};
-
-#[derive(thiserror::Error, Debug)]
-pub enum ArgumentError {
-    #[error(
-        "last path segment of URL must be a positive integer up to {}",
-        u32::MAX
-    )]
-    ParseLastSegAsInt(#[from] std::num::ParseIntError),
-    #[error("it must be starts with 'https://gamebanana.com/mods/'")]
-    InvalidUrl,
-}
-
-#[derive(Debug, Clone)]
-pub struct GamebananaUrl(String);
-
-impl FromStr for GamebananaUrl {
-    type Err = ArgumentError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        s.strip_prefix("https://gamebanana.com/mods/")
-            .ok_or(ArgumentError::InvalidUrl)?
-            .parse::<u32>()?;
-        Ok(GamebananaUrl(s.to_string()))
-    }
-}
-
-impl Deref for GamebananaUrl {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl GamebananaUrl {
-    pub fn extract_id(&self) -> Result<u32, ArgumentError> {
-        let id_part = self
-            .0
-            .strip_prefix("https://gamebanana.com/mods/")
-            .ok_or(ArgumentError::InvalidUrl)?;
-        let id = id_part.parse()?;
-        Ok(id)
-    }
 }

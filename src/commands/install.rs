@@ -1,4 +1,7 @@
 //! Handle install command.
+use std::{ops::Deref, str::FromStr};
+
+use clap::Args;
 use reqwest::Client;
 use tokio::try_join;
 use tracing::info;
@@ -17,7 +20,62 @@ use crate::{
     ui::create_spinner,
 };
 
-use super::InstallArgs;
+use super::DownloadOption;
+
+#[derive(Debug, Args, Clone)]
+pub struct InstallArgs {
+    /// URL(s) of mod page on GameBanana.
+    #[arg(required = true, num_args = 1..20)]
+    pub urls: Vec<GamebananaUrl>,
+
+    /// Options specific to downloading.
+    #[command(flatten)]
+    pub option: DownloadOption,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ArgumentError {
+    #[error(
+        "last path segment of URL must be a positive integer up to {}",
+        u32::MAX
+    )]
+    ParseLastSegAsInt(#[from] std::num::ParseIntError),
+    #[error("it must be starts with 'https://gamebanana.com/mods/'")]
+    InvalidUrl,
+}
+
+#[derive(Debug, Clone)]
+pub struct GamebananaUrl(String);
+
+impl FromStr for GamebananaUrl {
+    type Err = ArgumentError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        s.strip_prefix("https://gamebanana.com/mods/")
+            .ok_or(ArgumentError::InvalidUrl)?
+            .parse::<u32>()?;
+        Ok(GamebananaUrl(s.to_string()))
+    }
+}
+
+impl Deref for GamebananaUrl {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl GamebananaUrl {
+    pub fn extract_id(&self) -> Result<u32, ArgumentError> {
+        let id_part = self
+            .0
+            .strip_prefix("https://gamebanana.com/mods/")
+            .ok_or(ArgumentError::InvalidUrl)?;
+        let id = id_part.parse()?;
+        Ok(id)
+    }
+}
 
 pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");

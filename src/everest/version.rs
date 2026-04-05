@@ -4,47 +4,49 @@ use super::{Branch, EverestBuild};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error(transparent)]
+    #[error("failed to read version file")]
     Io(#[from] std::io::Error),
     #[error("invalid version string '{version}' in the `update-build.txt`: {source}")]
     InvalidVersion {
         source: std::num::ParseIntError,
         version: String,
     },
-    #[error("version text not found in the root directory")]
-    VersionNotFound,
+    #[error("version file not found in the root directory")]
+    VersionFileNotFound,
+    #[error("version file does not contain any strings")]
+    VersionTextNotFound,
 }
 
 /// Ensures installed version.
 pub fn ensure_installed_version(root_dir: &Path) -> Result<u32, Error> {
-    get_installed_version(root_dir)?.ok_or(Error::VersionNotFound)
+    get_installed_version(root_dir)
 }
 
-/// Returns currently installed Everst version number if the file is found.
+/// Returns installed Everst version number.
 ///
-/// This function will returns None if the file is empty or not found on the path.
-/// Returns InvalidVersion error when the version number cannot be parsed as unsigned 32 bit integer.
-fn get_installed_version(root_dir: &Path) -> Result<Option<u32>, Error> {
+/// ## Errors
+///
+/// * VersionFileNotFound: If version file is not found in the path, it indicates Everest is not installed.
+/// * VersionTextNotFound: If version file does not contain any strings. This will not going to happen. Corrupt Everest installation.
+/// * InvalidVersion: If version number can not be parsed as unsigned 32 bit integer. It might occur if the beta or dev version is used but I'm not sure.
+fn get_installed_version(root_dir: &Path) -> Result<u32, Error> {
     let path = root_dir.join("update-build.txt");
 
     let content = match fs::read_to_string(&path) {
         Ok(c) => c,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(Error::VersionFileNotFound),
         Err(e) => return Err(e.into()),
     };
 
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
+    let content = content.trim();
+    if content.is_empty() {
+        return Err(Error::VersionTextNotFound);
     }
 
-    trimmed
-        .parse::<u32>()
-        .map(Some)
-        .map_err(|e| Error::InvalidVersion {
-            source: e,
-            version: trimmed.to_string(),
-        })
+    content.parse::<u32>().map_err(|e| Error::InvalidVersion {
+        source: e,
+        version: content.to_string(),
+    })
 }
 
 pub fn get_installed_branch<'a>(builds: &'a [EverestBuild], version: &u32) -> Option<&'a Branch> {
