@@ -7,10 +7,10 @@ use crate::{
     core::everest::{
         EverestBuild, get_installed_branch, get_latest_build_on_branch,
         network::{
+            self,
             downloader::{DownloadTask, EverestDownloader},
-            install,
         },
-        version::FileVersionRepository,
+        version::{self, FileVersionRepository},
     },
 };
 
@@ -20,7 +20,7 @@ pub async fn run(
     client: Client,
 ) -> anyhow::Result<()> {
     let repo = FileVersionRepository::new(config);
-    let current_v = crate::core::everest::version::fetch_installed_version(&repo)?.value();
+    let current_v = version::fetch_installed_version(&repo)?.value();
     let current_b = get_installed_branch(&builds, current_v)
         .context("Installed version not found on the database")?;
 
@@ -37,5 +37,5 @@ pub async fn run(
     let downloader = EverestDownloader::new(client, config.root_dir());
     let task = DownloadTask::from(target_build.clone());
 
-    install(&downloader, task).await
+    network::install(&downloader, task).await
 }
