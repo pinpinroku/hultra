@@ -5,7 +5,7 @@ use reqwest::{
     Client,
     header::{ACCEPT, ACCEPT_ENCODING, HeaderValue},
 };
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 use url::Url;
 
 use crate::core::everest::EverestBuild;
@@ -35,7 +35,6 @@ impl EverestApiClient {
         Self { client }
     }
 
-    #[instrument(skip(self))]
     pub async fn fetch_database(&self, is_mirror: bool) -> Result<Vec<EverestBuild>, Error> {
         let pb = ProgressBar::new_spinner();
         pb.enable_steady_tick(Duration::from_millis(120));
@@ -51,10 +50,10 @@ impl EverestApiClient {
     /// Returns API endpoint.
     async fn get_url(&self, is_mirror: bool) -> Result<Url, Error> {
         let url = if is_mirror {
-            info!("Using mirror for the Everest updater database");
+            debug!("Using mirror for the Everest updater database");
             Url::parse(Self::ENDPOINT_MIRROR)?
         } else {
-            info!("Fetching Everest updater database URL");
+            debug!("Fetching Everest updater database URL");
             let text = self.fetch_url().await?;
             let mut url = text.trim().parse::<Url>()?;
 
@@ -83,7 +82,6 @@ impl EverestApiClient {
     // Returns list of builds by sending request to endpoint.
     #[instrument(skip(self), fields(url = %url))]
     async fn fetch_update_list(&self, url: Url) -> Result<Vec<EverestBuild>, Error> {
-        info!("Fetching version list");
         let response = self
             .client
             .get(url)
