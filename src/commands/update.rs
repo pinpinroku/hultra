@@ -12,10 +12,10 @@ use crate::{
             api::{ApiClient, ApiSource},
             downloader::ModDownloader,
         },
+        update,
     },
     mirror::DomainMirror,
     ui::create_spinner,
-    update,
 };
 
 /// Checks update for the mods and download the latest one if available.

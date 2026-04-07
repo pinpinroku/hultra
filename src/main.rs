@@ -19,7 +19,6 @@ mod log;
 mod mirror;
 mod registry;
 mod ui;
-mod update;
 mod utils;
 
 #[tokio::main]
