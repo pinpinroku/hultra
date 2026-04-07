@@ -2,6 +2,8 @@ use std::{collections::BTreeMap, fmt};
 
 use serde::{Deserialize, Serialize};
 
+use crate::utils;
+
 pub mod installer;
 pub mod network;
 pub mod version;
@@ -9,6 +11,7 @@ pub mod version;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EverestBuild {
+    /// ISO 8601 format date string.
     date: String,
     /// Four digits number of version. This value does not follows semantic versiong.
     pub version: u32,
@@ -36,18 +39,14 @@ impl fmt::Display for EverestBuild {
             "{}: version {} (released {})",
             self.branch.as_str(),
             self.version,
-            self.formatted_date()
+            utils::format_date(&self.date)
         )
     }
 }
 
 impl EverestBuild {
-    /// Gets first 19 charcters from "2026-03-07T19:48:53.0343351Z", replace 'T' with ' '
-    pub fn formatted_date(&self) -> String {
-        self.date
-            .get(0..19)
-            .map(|s| s.replace('T', " "))
-            .unwrap_or_else(|| self.date.clone())
+    pub fn date(&self) -> &str {
+        &self.date
     }
 }
 

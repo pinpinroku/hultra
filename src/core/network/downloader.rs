@@ -15,11 +15,11 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     config::CARGO_PKG_NAME,
-    core::utils,
     log::anonymize,
     mirror::{self, DomainMirror},
     registry::RemoteMod,
     ui::create_download_progress_bar,
+    utils,
 };
 
 /// Metadata of target mod to be downloaded.

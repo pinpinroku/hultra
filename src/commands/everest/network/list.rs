@@ -1,7 +1,10 @@
 use clap::Args;
 
 use super::NetworkOption;
-use crate::core::everest::{Branch, EverestBuild, EverestBuildExt};
+use crate::{
+    core::everest::{Branch, EverestBuild, EverestBuildExt},
+    utils,
+};
 
 #[derive(Debug, Clone, Args)]
 pub struct ListArgs {
@@ -55,7 +58,7 @@ fn print_builds(builds: &[EverestBuild], n: usize) {
                     _ => "-".to_string(),
                 };
 
-                let date = build.formatted_date();
+                let date = utils::format_date(build.date());
 
                 println!(
                     "{:<10} {:<8} {:<10} {:<20} {}",

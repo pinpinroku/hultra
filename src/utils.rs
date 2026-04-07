@@ -51,7 +51,7 @@ fn is_allowed_byte(b: u8) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
+mod test_sanitize_name {
     use super::*;
 
     #[tokio::test]
@@ -88,5 +88,44 @@ mod tests {
     #[should_panic(expected = "Input string should contains only ASCII characters")]
     async fn test_panic_on_non_ascii() {
         sanitize_stem("Error_日本語");
+    }
+}
+
+/// Gets first 19 charcters from "2026-03-07T19:48:53.0343351Z", replace 'T' with ' '
+pub fn format_date(date: &str) -> String {
+    date.get(0..19)
+        .map(|s| s.replace('T', " "))
+        .unwrap_or_else(|| date.to_string())
+}
+
+#[cfg(test)]
+mod test_format_date {
+    use super::*;
+
+    #[test]
+    fn test_expected_variations() {
+        let cases = vec![
+            (
+                "2026-03-07T19:48:53.034Z",
+                "2026-03-07 19:48:53",
+                "Long ISO",
+            ),
+            ("2026-03-07T19:48:53Z", "2026-03-07 19:48:53", "Short ISO"),
+            (
+                "2026-03-07 19:48:53",
+                "2026-03-07 19:48:53",
+                "Already formatted",
+            ),
+            ("invalid-date", "invalid-date", "Invalid format"),
+        ];
+
+        for (input, expected, description) in cases {
+            assert_eq!(
+                format_date(input),
+                expected,
+                "Failed on case: {}",
+                description
+            );
+        }
     }
 }
