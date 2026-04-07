@@ -25,14 +25,13 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
     info!("loading installed mods");
     let mut local_mods = ModLoader::load(&config.mods_dir())?;
 
-    info!("reading updater blacklist file");
-    let blacklist = config.read_updater_blacklist()?;
+    info!("checking updater blacklist");
+    let blacklist = update::fetch_updater_blacklist(&config.mods_dir())?;
     local_mods.retain(|local_mod| {
-        local_mod
-            .path()
-            .file_name()
-            .map(|name| !blacklist.contains(name.to_string_lossy().as_ref()))
-            .unwrap_or(true)
+        let Some(name) = local_mod.path().file_name() else {
+            return true;
+        };
+        !blacklist.contains(name)
     });
 
     if local_mods.is_empty() {

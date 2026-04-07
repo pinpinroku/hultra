@@ -1,9 +1,13 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
+    ffi::OsString,
     fmt::Display,
+    fs::File,
+    io::{self, BufRead, BufReader},
+    path::Path,
 };
 
-use tracing::instrument;
+use tracing::{instrument, warn};
 
 use crate::{
     cache::CacheEntry,
@@ -82,4 +86,29 @@ impl Display for UpdateInfo {
             self.name, self.current_version, self.available_version
         )
     }
+}
+
+/// Returns blacklisted mods for update.
+pub fn fetch_updater_blacklist(mods_dir: &Path) -> io::Result<HashSet<OsString>> {
+    let path = mods_dir.join("updaterblacklist.txt");
+    let file = match File::open(&path) {
+        Ok(f) => f,
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => return Ok(HashSet::new()),
+        Err(e) => return Err(e),
+    };
+
+    let mut blacklist = HashSet::new();
+    // NOTE The default 8KiB buffer is overkill for small text files.
+    let reader = BufReader::with_capacity(1024, &file);
+
+    for line in reader.lines() {
+        let line = line?;
+        let line = line.trim();
+        if !line.starts_with('#') && !line.is_empty() {
+            warn!("'{}' will be excluded from updates", line);
+            blacklist.insert(OsString::from(line));
+        }
+    }
+
+    Ok(blacklist)
 }
