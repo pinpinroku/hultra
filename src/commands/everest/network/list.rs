@@ -20,15 +20,15 @@ pub struct ListArgs {
 
 pub fn run(args: &ListArgs, builds: &[EverestBuild]) {
     let display_n = if args.all {
-        builds.len()
+        builds.len() as u8
     } else {
-        args.limit as usize
+        args.limit
     };
     print_builds(builds, display_n)
 }
 
 /// Prints the `n` most recent Everest build vesrions.
-fn print_builds(builds: &[EverestBuild], n: usize) {
+fn print_builds(builds: &[EverestBuild], n: u8) {
     let mut groups = builds.get_latest_builds(n);
 
     println!(
