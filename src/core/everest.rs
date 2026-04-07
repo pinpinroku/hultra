@@ -79,42 +79,51 @@ impl fmt::Display for Branch {
     }
 }
 
-/// Returns the `n` most recent Everest builds .
-pub fn get_latest_builds(
-    builds: Vec<EverestBuild>,
-    n: usize,
-) -> BTreeMap<&'static str, Vec<EverestBuild>> {
-    let mut groups: BTreeMap<&'static str, Vec<EverestBuild>> = BTreeMap::new();
+pub trait EverestBuildExt {
+    fn get_latest_builds(&self, n: usize) -> BTreeMap<&'static str, Vec<EverestBuild>>;
+    fn get_installed_branch(&self, version: u32) -> Option<&Branch>;
+    fn get_latest_build_for_branch<'a>(&'a self, branch: &Branch) -> Option<&'a EverestBuild>;
+    fn get_build_for_version(&self, version: u32) -> Option<&EverestBuild>;
+}
 
-    for build in builds {
-        groups.entry(build.branch.as_str()).or_default().push(build);
+impl EverestBuildExt for [EverestBuild] {
+    /// Returns the `n` most recent Everest builds .
+    fn get_latest_builds(&self, n: usize) -> BTreeMap<&'static str, Vec<EverestBuild>> {
+        let mut groups: BTreeMap<&'static str, Vec<EverestBuild>> = BTreeMap::new();
+
+        for build in self {
+            groups
+                .entry(build.branch.as_str())
+                .or_default()
+                .push(build.clone());
+        }
+
+        groups
+            .into_iter()
+            .map(|(branch, mut branch_builds)| {
+                branch_builds.sort_by_key(|b| std::cmp::Reverse(b.version));
+                branch_builds.truncate(n);
+                (branch, branch_builds)
+            })
+            .collect()
     }
 
-    groups
-        .into_iter()
-        .map(|(branch, mut branch_builds)| {
-            branch_builds.sort_by_key(|b| std::cmp::Reverse(b.version));
-            branch_builds.truncate(n);
-            (branch, branch_builds)
-        })
-        .collect()
-}
+    /// Returns installed Everest version.
+    fn get_installed_branch(&self, version: u32) -> Option<&Branch> {
+        self.iter()
+            .find(|b| b.version == version)
+            .map(|b| &b.branch)
+    }
 
-/// Returns installed Everest version.
-pub fn get_installed_branch(builds: &[EverestBuild], version: u32) -> Option<&Branch> {
-    builds
-        .iter()
-        .find(|b| b.version == version)
-        .map(|b| &b.branch)
-}
+    /// Returns latest build on given branch.
+    fn get_latest_build_for_branch<'a>(&'a self, branch: &Branch) -> Option<&'a EverestBuild> {
+        self.iter()
+            .filter(|b| &b.branch == branch)
+            .max_by_key(|b| b.version)
+    }
 
-/// Returns latest build on given branch.
-pub fn get_latest_build_on_branch<'a>(
-    builds: &'a [EverestBuild],
-    branch: &Branch,
-) -> Option<&'a EverestBuild> {
-    builds
-        .iter()
-        .filter(|b| &b.branch == branch)
-        .max_by_key(|b| b.version)
+    /// Returns a build that matches given version, otherwise returns None.
+    fn get_build_for_version(&self, version: u32) -> Option<&EverestBuild> {
+        self.iter().find(|b| b.version == version)
+    }
 }

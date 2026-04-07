@@ -1,7 +1,7 @@
 use clap::Args;
 
 use super::NetworkOption;
-use crate::core::everest::{Branch, EverestBuild, get_latest_builds};
+use crate::core::everest::{Branch, EverestBuild, EverestBuildExt};
 
 #[derive(Debug, Clone, Args)]
 pub struct ListArgs {
@@ -15,7 +15,7 @@ pub struct ListArgs {
     pub option: NetworkOption,
 }
 
-pub fn run(args: &ListArgs, builds: Vec<EverestBuild>) {
+pub fn run(args: &ListArgs, builds: &[EverestBuild]) {
     let display_n = if args.all {
         builds.len()
     } else {
@@ -25,8 +25,8 @@ pub fn run(args: &ListArgs, builds: Vec<EverestBuild>) {
 }
 
 /// Prints the `n` most recent Everest build vesrions.
-fn print_builds(builds: Vec<EverestBuild>, n: usize) {
-    let mut groups = get_latest_builds(builds, n);
+fn print_builds(builds: &[EverestBuild], n: usize) {
+    let mut groups = builds.get_latest_builds(n);
 
     println!(
         "{:<10} {:<8} {:<10} {:<20} DETAILS",

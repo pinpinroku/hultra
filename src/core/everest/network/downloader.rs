@@ -22,11 +22,11 @@ pub struct DownloadTask {
     filesize: u64,
 }
 
-impl From<EverestBuild> for DownloadTask {
+impl From<&EverestBuild> for DownloadTask {
     /// Converts EverestBuild into this type.
-    fn from(build: EverestBuild) -> Self {
+    fn from(build: &EverestBuild) -> Self {
         Self {
-            url: build.main_download,
+            url: build.main_download.clone(),
             filesize: build.main_file_size,
         }
     }
@@ -37,7 +37,7 @@ impl DownloadTask {
         &self.url
     }
 
-    pub fn filesize(self) -> u64 {
+    pub fn filesize(&self) -> u64 {
         self.filesize
     }
 }

@@ -1,14 +1,13 @@
 use anyhow::Context;
 use clap::Args;
-use reqwest::Client;
 
 use crate::{
     config::AppConfig,
     core::everest::{
-        EverestBuild,
+        EverestBuild, EverestBuildExt,
         network::{
+            self, EverestHttpClient,
             downloader::{DownloadTask, EverestDownloader},
-            install,
         },
     },
 };
@@ -25,19 +24,18 @@ pub struct InstallArgs {
 
 pub async fn run(
     args: &InstallArgs,
-    builds: Vec<EverestBuild>,
-    client: Client,
-    config: AppConfig,
+    builds: &[EverestBuild],
+    client: &EverestHttpClient,
+    config: &AppConfig,
 ) -> anyhow::Result<()> {
     let target_build = builds
-        .into_iter()
-        .find(|b| b.version == args.version)
+        .get_build_for_version(args.version)
         .context("Specified version is not available")?;
 
-    let downloader = EverestDownloader::new(client, config.root_dir());
+    let downloader = EverestDownloader::new(client.inner.clone(), config.root_dir());
 
     let task = DownloadTask::from(target_build);
 
-    install(&downloader, task).await?;
+    network::install(&downloader, &task).await?;
     Ok(())
 }

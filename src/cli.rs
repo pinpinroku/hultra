@@ -61,22 +61,18 @@ pub async fn dispatch(args: Cli, config: AppConfig) -> anyhow::Result<()> {
 
                 match action {
                     NetworkCommand::List(args) => {
-                        commands::everest::network::list::run(&args, builds)
+                        commands::everest::network::list::run(&args, &builds)
                     }
                     NetworkCommand::Update(_) => {
-                        commands::everest::network::update::run(
-                            &config,
-                            builds,
-                            shared_client.inner.clone(),
-                        )
-                        .await?
+                        commands::everest::network::update::run(&config, &builds, &shared_client)
+                            .await?
                     }
                     NetworkCommand::Install(args) => {
                         commands::everest::network::install::run(
                             &args,
-                            builds,
-                            shared_client.inner.clone(),
-                            config,
+                            &builds,
+                            &shared_client,
+                            &config,
                         )
                         .await?
                     }

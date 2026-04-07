@@ -20,7 +20,7 @@ impl EverestHttpClient {
 }
 
 /// Downloads `main.zip` and runs `MiniInstaller-linux`.
-pub async fn install(downloader: &EverestDownloader, task: DownloadTask) -> anyhow::Result<()> {
+pub async fn install(downloader: &EverestDownloader, task: &DownloadTask) -> anyhow::Result<()> {
     let temp_zip = NamedTempFile::new()?;
 
     let downloaded = downloader
