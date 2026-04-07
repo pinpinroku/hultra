@@ -31,14 +31,14 @@ pub struct DownloadTask {
     checksums: Vec<u64>,
 }
 
-impl From<(String, RemoteMod)> for DownloadTask {
-    /// Converts HashMap<String, RemoteMod> into this type.
-    fn from((name, remote): (String, RemoteMod)) -> Self {
+impl From<&(String, RemoteMod)> for DownloadTask {
+    /// Converts &HashMap<String, RemoteMod> into this type.
+    fn from((name, remote): &(String, RemoteMod)) -> Self {
         Self {
-            url: remote.download_url,
-            filename: name,
+            url: remote.download_url.clone(),
+            filename: name.to_string(),
             filesize: remote.file_size,
-            checksums: remote.checksums,
+            checksums: remote.checksums.clone(),
         }
     }
 }

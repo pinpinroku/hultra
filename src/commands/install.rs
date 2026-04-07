@@ -118,7 +118,10 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     }
 
     // Convert targets into tasks
-    let tasks: Vec<DownloadTask> = targets.into_iter().map(DownloadTask::from).collect();
+    let tasks: Vec<DownloadTask> = targets
+        .into_iter()
+        .map(|reg| DownloadTask::from(&reg))
+        .collect();
 
     info!("generating mirror urls");
     let mirrors: Vec<DomainMirror> = args

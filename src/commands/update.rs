@@ -10,7 +10,7 @@ use crate::{
         loader::ModLoader,
         network::{
             api::{ApiClient, ApiSource},
-            downloader::{DownloadTask, ModDownloader},
+            downloader::ModDownloader,
         },
     },
     mirror::DomainMirror,
@@ -56,20 +56,19 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
 
     // check updates
     info!("checking updates");
-    let (targets, update_info_list) = update::detect(cache_db, registry.mods, &local_mods);
+    let report = update::UpdateScanner::new(cache_db, registry.mods).scan(&local_mods);
 
-    if targets.is_empty() {
+    // TODO make `display_updates()` function
+    if report.updates.is_empty() {
         info!("all mods are up-to-date");
         return Ok(());
     } else {
         // send update info to stdout
         info!("available updates:");
-        for update_info in update_info_list {
+        for update_info in report.updates {
             info!("{}", update_info);
         }
     }
-
-    let tasks: Vec<DownloadTask> = targets.into_iter().map(DownloadTask::from).collect();
 
     // Download updates
     info!("downloading mods");
@@ -79,7 +78,7 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
         .map(DomainMirror::from)
         .collect();
     let downloader = ModDownloader::new(client.clone(), args.jobs, config.mods_dir(), mirrors);
-    downloader.download_all(&tasks).await;
+    downloader.download_all(&report.download_tasks).await;
 
     info!("updating completed");
     Ok(())
