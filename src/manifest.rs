@@ -1,0 +1,56 @@
+//! Raw data of `everest.yaml`.
+use std::collections::VecDeque;
+
+use serde::Deserialize;
+
+/// Represents the metadata of mod.
+#[derive(Debug, Default, Deserialize)]
+pub struct Manifest {
+    #[serde(rename = "Name")]
+    pub name: String,
+    #[serde(rename = "Version")]
+    pub version: String,
+}
+
+impl Manifest {
+    /// Deserializes an instance of Manifest from bytes of YAML text.
+    pub fn parse(buffer: &[u8]) -> Result<VecDeque<Self>, serde_yaml_ng::Error> {
+        // Remove UTF-8 BOM if present
+        let clean_slice = buffer.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(buffer);
+
+        // NOTE Use `VecDeque` for efficient `pop_front` operation (`O(1)` vs `Vec::remove(0)` which is `O(n)`)
+        let manifest = serde_yaml_ng::from_slice(clean_slice)?;
+        // TODO この場合 `pop_front()` が `Some(T)` を返すとこまで保証すべきは？
+        Ok(manifest)
+    }
+}
+
+#[cfg(test)]
+mod tests_manifest_parsing {
+    use anyhow::{Context, Result};
+
+    use super::*;
+
+    #[test]
+    fn test_parse_manifest() -> Result<()> {
+        let bytes = br#"
+- Name: darkmoonruins
+  Version: 1.1.4
+  Dependencies:
+    - Name: AvBdayHelper2021
+      Version: 1.0.2
+    - Name: CherryHelper
+      Version: 1.7.1
+    - Name: CollabUtils2
+      Version: 1.6.13
+"#;
+        let manifest = Manifest::parse(bytes);
+        assert!(manifest.is_ok());
+
+        let mut manifest = manifest.context("failed to parse manifest from YAML")?;
+        let primary = manifest.pop_front().context("should be at least one")?;
+        assert_eq!(primary.name, "darkmoonruins");
+        assert_eq!(primary.version, "1.1.4");
+        Ok(())
+    }
+}

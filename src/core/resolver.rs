@@ -2,8 +2,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::{
+    core::local::LocalMod,
     dependency::DependencyGraph,
-    local_mods::LocalMod,
     registry::{ModRegistry, RemoteMod},
 };
 

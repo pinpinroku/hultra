@@ -11,8 +11,8 @@ use tracing::{instrument, warn};
 
 use crate::{
     cache::CacheEntry,
+    core::local::{FileSystemExt, LocalMod},
     core::network::downloader::DownloadTask,
-    local_mods::{FileSystemExt, LocalMod},
     registry::RemoteMod,
 };
 

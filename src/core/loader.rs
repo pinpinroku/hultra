@@ -7,10 +7,7 @@ use std::{
 use rayon::prelude::*;
 use tracing::{error, instrument, warn};
 
-use crate::{
-    local_mods::{LocalMod, Manifest},
-    log::anonymize,
-};
+use crate::{core::local::LocalMod, log::anonymize, manifest::Manifest};
 
 pub struct ModLoader;
 
@@ -42,7 +39,7 @@ impl ModLoader {
             .inspect_err(|e| error!(?e, "Failed to extract manifest"))
             .ok()?;
 
-        let mut manifests = Manifest::from_slice(&bytes)
+        let mut manifests = Manifest::parse(&bytes)
             .inspect_err(|e| error!(?e, "Failed to parse everest.yaml"))
             .ok()?;
 
