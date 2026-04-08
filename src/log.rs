@@ -80,5 +80,5 @@ pub fn should_show_progress() -> bool {
     let filter = EnvFilter::from_default_env();
     filter
         .max_level_hint()
-        .is_some_and(|lvl| lvl > tracing::Level::DEBUG)
+        .is_some_and(|lvl| lvl < tracing::Level::DEBUG)
 }
