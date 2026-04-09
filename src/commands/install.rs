@@ -1,5 +1,5 @@
 //! Handle install command.
-use std::{ops::Deref, str::FromStr};
+use std::{collections::HashSet, ops::Deref, str::FromStr};
 
 use clap::Args;
 use reqwest::Client;
@@ -80,9 +80,6 @@ impl GamebananaUrl {
 pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");
 
-    info!("loading installed mods");
-    let mods = ModLoader::load(&config.mods_dir())?;
-
     // Initialize client
     let client = Client::builder()
         .https_only(true)
@@ -91,7 +88,8 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .unwrap_or_default();
 
     // Parse mod page URLs to get mod IDs
-    let ids: Vec<u32> = args
+    // TODO collect u32 as HashSet
+    let ids: HashSet<u32> = args
         .urls
         .iter()
         .filter_map(|url| url.extract_id().ok())
@@ -103,14 +101,18 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("fetching database");
     let spinner = create_spinner();
     let (registry, graph) = try_join!(
-        api_client.fetch_registry(source),
+        api_client.fetch_everest_update_yaml(source),
         api_client.fetch_graph(source)
     )?;
     spinner.finish_and_clear();
 
+    info!("extracting installed mod names");
+    let installed_names = ModLoader::extract(&config.mods_dir())?;
+
     // Resolve missing deps
     info!("resolving missing dependencies");
-    let targets = resolver::resolve_missing_mods(&ids, registry, &graph, &mods);
+    // TODO this method should be `graph::resolve()`
+    let targets = resolver::resolve_missing_mods(&ids, &registry, &graph, &installed_names);
 
     if targets.is_empty() {
         println!("You have already installed the mod and its dependencies");
@@ -118,10 +120,9 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     }
 
     // Convert targets into tasks
-    let tasks: Vec<DownloadTask> = targets
-        .into_iter()
-        .map(|reg| DownloadTask::from(&reg))
-        .collect();
+    // TODO this method should be `downloader::create_tasks()`
+    let tasks: Vec<DownloadTask> =
+        resolver::create_download_tasks(targets, installed_names, registry)?;
 
     info!("generating mirror urls");
     let mirrors: Vec<DomainMirror> = args

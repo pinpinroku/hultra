@@ -15,11 +15,11 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     config::CARGO_PKG_NAME,
+    core::registry::Entry,
     log::anonymize,
     mirror::{self, DomainMirror},
-    registry::RemoteMod,
     ui::create_download_progress_bar,
-    utils,
+    utils::{self, ChecksumError},
 };
 
 /// Metadata of target mod to be downloaded.
@@ -31,15 +31,22 @@ pub struct DownloadTask {
     checksums: Vec<u64>,
 }
 
-impl From<&(String, RemoteMod)> for DownloadTask {
-    /// Converts &HashMap<String, RemoteMod> into this type.
-    fn from((name, remote): &(String, RemoteMod)) -> Self {
-        Self {
-            url: remote.download_url.clone(),
-            filename: name.to_string(),
-            filesize: remote.file_size,
-            checksums: remote.checksums.clone(),
-        }
+impl TryFrom<(String, Entry)> for DownloadTask {
+    type Error = ChecksumError;
+
+    fn try_from((filename, e): (String, Entry)) -> Result<Self, Self::Error> {
+        let checksums = e
+            .checksums
+            .into_iter()
+            .map(|s| utils::from_str_digest(&s))
+            .collect::<Result<Vec<u64>, _>>()?;
+
+        Ok(Self {
+            url: e.url,
+            filename,
+            filesize: e.file_size,
+            checksums,
+        })
     }
 }
 
@@ -125,8 +132,6 @@ async fn download_with_fallbacks(
     let mut errors = Vec::new();
 
     for url in urls {
-        pb.set_position(0);
-
         match download(client, url, checksums, dest, pb).await {
             Ok(_) => {
                 pb.finish_with_message(format!("{} 🍓", name));
@@ -134,6 +139,7 @@ async fn download_with_fallbacks(
             }
             Err(e) => {
                 errors.push((url.clone(), e));
+                pb.reset();
             }
         }
     }

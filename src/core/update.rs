@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     ffi::OsString,
     fmt::Display,
     fs::File,
@@ -11,9 +11,12 @@ use tracing::{instrument, warn};
 
 use crate::{
     cache::CacheEntry,
-    core::local::{FileSystemExt, LocalMod},
-    core::network::downloader::DownloadTask,
-    registry::RemoteMod,
+    core::{
+        local::{FileSystemExt, LocalMod},
+        network::downloader::DownloadTask,
+        registry::{Entry, EverestUpdateYaml},
+    },
+    utils::{self, ChecksumError},
 };
 
 /// Result of scanning mods for update.
@@ -29,17 +32,17 @@ pub struct UpdateScanner {
     /// Represents cache for file hash.
     cache_db: BTreeMap<u64, CacheEntry>,
     /// Database of all mods.
-    registry: HashMap<String, RemoteMod>,
+    registry: EverestUpdateYaml,
 }
 
 impl UpdateScanner {
-    pub fn new(cache_db: BTreeMap<u64, CacheEntry>, registry: HashMap<String, RemoteMod>) -> Self {
+    pub fn new(cache_db: BTreeMap<u64, CacheEntry>, registry: EverestUpdateYaml) -> Self {
         Self { cache_db, registry }
     }
 
     /// Identifies required updates by comparing local mods with the remote registry.
     #[instrument(skip_all)]
-    pub fn scan(mut self, local_mods: &[LocalMod]) -> UpdateReport {
+    pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ChecksumError> {
         let mut available_mods = Vec::with_capacity(local_mods.len());
         let mut available_info = Vec::with_capacity(local_mods.len());
 
@@ -56,25 +59,31 @@ impl UpdateScanner {
                 continue;
             };
 
+            let digests = remote_mod
+                .checksums
+                .iter()
+                .map(|s| utils::from_str_digest(s))
+                .collect::<Result<Vec<u64>, _>>()?;
+
             // check if an update is required
             let is_update_needed = self
                 .cache_db
                 .get(&inode)
-                .map(|entry| !remote_mod.checksums.contains(entry.hash()))
+                .map(|entry| !digests.contains(entry.hash()))
                 .unwrap_or(false);
 
             // extract the metadata from the remote registry if an update is required
-            if is_update_needed && let Some(reg) = self.registry.remove_entry(name) {
-                let update_info = UpdateInfo::from(&reg);
+            if is_update_needed && let Some((n, e)) = self.registry.remove_entry(name) {
+                let update_info = UpdateInfo::new(&n, local_mod, &e);
                 available_info.push(update_info);
-                available_mods.push(DownloadTask::from(&reg));
+                available_mods.push(DownloadTask::try_from((n, e))?);
             }
         }
 
-        UpdateReport {
+        Ok(UpdateReport {
             download_tasks: available_mods,
             updates: available_info,
-        }
+        })
     }
 }
 
@@ -85,6 +94,16 @@ pub struct UpdateInfo {
     available_version: String,
 }
 
+impl UpdateInfo {
+    pub fn new(name: &str, local_mod: &LocalMod, remote_mod: &Entry) -> Self {
+        Self {
+            name: name.to_string(),
+            current_version: local_mod.version().to_string(),
+            available_version: remote_mod.version.to_string(),
+        }
+    }
+}
+
 impl Display for UpdateInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -92,17 +111,6 @@ impl Display for UpdateInfo {
             "* {}: {} -> {}",
             self.name, self.current_version, self.available_version
         )
-    }
-}
-
-impl From<&(String, RemoteMod)> for UpdateInfo {
-    /// Converts HashMap<String, RemoteMod> into this type.
-    fn from((name, remote): &(String, RemoteMod)) -> Self {
-        Self {
-            name: name.to_string(),
-            current_version: remote.version().to_string(),
-            available_version: remote.version().to_string(),
-        }
     }
 }
 

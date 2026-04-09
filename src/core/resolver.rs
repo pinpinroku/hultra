@@ -1,39 +1,43 @@
 //! Handle resolving missing dependency of the mod.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use crate::{
-    core::local::LocalMod,
+    core::{network::downloader::DownloadTask, registry::EverestUpdateYaml},
     dependency::DependencyGraph,
-    registry::{ModRegistry, RemoteMod},
+    utils::ChecksumError,
 };
 
-/// Resolves dependencies and returns a list of mods that actually need to be downloaded.
+/// Returns a list of mods that actually need to be downloaded.
 pub fn resolve_missing_mods(
-    target_ids: &[u32],
-    registry: ModRegistry,
-    graph: &DependencyGraph,
-    installed_mods: &[LocalMod],
-) -> HashMap<String, RemoteMod> {
+    target_ids: &HashSet<u32>,
+    registry: &EverestUpdateYaml,
+    graph: &DependencyGraph, // NOTE こいつがこのモジュールの主体
+    installed_names: &HashSet<String>,
+) -> HashSet<String> {
     // 1. Retrieve mod names associated with the provided IDs
     let mod_names = registry.get_names_by_ids(target_ids);
 
-    // 2. Create a set of names for mods already installed locally
-    let local_names: HashSet<&str> = installed_mods.iter().map(|m| m.name()).collect();
-
     // 3. Check if all required mods are already installed
-    if local_names.is_superset(&mod_names) {
-        return HashMap::new();
+    if installed_names.is_superset(&mod_names) {
+        return HashSet::new();
     }
 
     // 4. Traverse the dependency graph to list all required mods (BFS)
-    let all_required_deps = graph.bfs_traversal(mod_names);
+    graph.bfs_traversal(mod_names)
+}
 
+// TODO is this function should be here? might move this to downloader
+pub fn create_download_tasks(
+    required_names: HashSet<String>,
+    installed_names: HashSet<String>,
+    registry: EverestUpdateYaml,
+) -> Result<Vec<DownloadTask>, ChecksumError> {
     // 5. Filter out mods that are already present locally
-    let missing_names: HashSet<String> = all_required_deps
+    let missing_names: HashSet<String> = required_names
         .into_iter()
-        .filter(|name| !local_names.contains(name.as_str()))
+        .filter(|name| !installed_names.contains(name))
         .collect();
 
     // 6. Extract detailed download information from the registry and return it
-    registry.extract_targets(&missing_names)
+    registry.create_tasks_by_names(missing_names)
 }

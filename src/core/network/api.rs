@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use tracing::instrument;
 
-use crate::{dependency::DependencyGraph, registry::ModRegistry};
+use crate::{core::registry::EverestUpdateYaml, dependency::DependencyGraph};
 
 /// Client for API.
 #[derive(Debug, Clone)]
@@ -89,7 +89,10 @@ impl ApiClient {
         Ok(serde_yaml_ng::from_slice(&bytes)?)
     }
 
-    pub async fn fetch_registry(&self, source: ApiSource) -> Result<ModRegistry, ApiError> {
+    pub async fn fetch_everest_update_yaml(
+        &self,
+        source: ApiSource,
+    ) -> Result<EverestUpdateYaml, ApiError> {
         self.fetch_yaml(source, ApiResource::Registry).await
     }
 

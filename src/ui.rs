@@ -1,14 +1,14 @@
 //! Interface design
 use std::time::Duration;
 
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 
 use crate::log;
 
 /// Create a progress bar for downloading a file.
 pub fn create_download_progress_bar(name: &str, size: u64) -> ProgressBar {
     let pb = if log::should_show_progress() {
-        ProgressBar::new(size)
+        ProgressBar::with_draw_target(Some(size), ProgressDrawTarget::hidden())
     } else {
         ProgressBar::hidden()
     };

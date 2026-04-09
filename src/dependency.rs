@@ -6,7 +6,7 @@ use tracing::{debug, instrument, warn};
 
 /// Each entry of the `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
-pub struct DependencyNode {
+struct DependencyNode {
     /// List of dependencies.
     #[serde(rename = "Dependencies")]
     dependencies: Vec<Dependency>,
@@ -17,10 +17,12 @@ pub struct DependencyNode {
 #[serde(transparent)]
 pub struct DependencyGraph {
     /// Detail of nodes
-    pub nodes: HashMap<String, DependencyNode>,
+    nodes: HashMap<String, DependencyNode>,
 }
 
 impl DependencyGraph {
+    // TODO implement resolve() here, instead of resolver.rs
+
     /// Traverses the dependency graph using BFS from multiple starting mods.
     ///
     /// # Returns
@@ -29,13 +31,13 @@ impl DependencyGraph {
     /// - The starting mods themselves
     /// - All direct and transitive dependencies
     #[instrument(skip(self))]
-    pub fn bfs_traversal(&self, start_mods: HashSet<&str>) -> HashSet<String> {
+    pub fn bfs_traversal(&self, start_mods: HashSet<String>) -> HashSet<String> {
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
 
         // Adds starting mods to queue
         for start_mod in start_mods {
-            queue.push_back(start_mod.to_string());
+            queue.push_back(start_mod);
         }
 
         while let Some(current) = queue.pop_front() {
@@ -104,8 +106,8 @@ ExtendedVariantMode:
 "#;
         let graph: DependencyGraph = serde_yaml_ng::from_slice(yaml_data.as_bytes()).unwrap();
         let mut start_mods = HashSet::new();
-        start_mods.insert("DarkMatterJourney");
-        start_mods.insert("darkmoonruins");
+        start_mods.insert("DarkMatterJourney".to_string());
+        start_mods.insert("darkmoonruins".to_string());
         let all_required = graph.bfs_traversal(start_mods);
 
         let expected_mods: HashSet<String> = [

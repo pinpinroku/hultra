@@ -1,5 +1,6 @@
 //! Handle loading mods.
 use std::{
+    collections::HashSet,
     fs, io,
     path::{Path, PathBuf},
 };
@@ -44,6 +45,40 @@ impl ModLoader {
             .ok()?;
 
         manifests.pop_front().map(|m| LocalMod::new(path, m))
+    }
+
+    /// Returns found installed mod names in given directory.
+    #[instrument(skip_all, fields(directory = %anonymize(mods_dir)))]
+    pub fn extract(mods_dir: &Path) -> io::Result<HashSet<String>> {
+        if !mods_dir.exists() {
+            warn!("mods directory not found, Everest is not installed");
+            return Ok(HashSet::new());
+        }
+
+        let paths = Self::scan_directory(mods_dir)?;
+
+        Self::extract_all_names(&paths)
+    }
+
+    #[instrument(skip_all)]
+    fn extract_all_names(paths: &[PathBuf]) -> io::Result<HashSet<String>> {
+        let mods: HashSet<String> = paths
+            .par_iter()
+            .filter_map(|path| Self::extract_mod_name(path))
+            .collect();
+        Ok(mods)
+    }
+
+    fn extract_mod_name(path: &Path) -> Option<String> {
+        let bytes = zip_finder::extract_file_from_zip(path, b"everest.yaml", Some(b"everest.yml"))
+            .inspect_err(|e| error!(?e, "Failed to extract manifest"))
+            .ok()?;
+
+        let mut manifests = Manifest::parse(&bytes)
+            .inspect_err(|e| error!(?e, "Failed to parse everest.yaml"))
+            .ok()?;
+
+        manifests.pop_front().map(|m| m.name)
     }
 
     /// Scans mods directory and returns list of archive paths.

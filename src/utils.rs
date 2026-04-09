@@ -129,3 +129,50 @@ mod test_format_date {
         }
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("invalid checksum: could not parse the '{input}' with digits in base 16")]
+pub struct ChecksumError {
+    input: String,
+    #[source]
+    source: std::num::ParseIntError,
+}
+
+pub fn from_str_digest(input: &str) -> Result<u64, ChecksumError> {
+    let clean_input = input.trim().strip_prefix("0x").unwrap_or(input.trim());
+    u64::from_str_radix(clean_input, 16).map_err(|err| ChecksumError {
+        input: input.to_string(),
+        source: err,
+    })
+}
+
+#[cfg(test)]
+mod tests_from_str_digest {
+    use super::from_str_digest;
+
+    use anyhow::{Context, Result};
+
+    #[test]
+    fn parses_with_0x() -> Result<()> {
+        assert_eq!(
+            from_str_digest("0x7f4d96733b93c52c").context("should be converted")?,
+            9173153437688513836
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parses_without_0x_and_spaces() -> Result<()> {
+        assert_eq!(
+            from_str_digest(" 7f4d96733b93c52c ").context("should be converted")?,
+            9173153437688513836
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn returns_error_on_invalid() {
+        let err = from_str_digest("not-hex").unwrap_err();
+        assert!(format!("{}", err).contains("invalid checksum"));
+    }
+}

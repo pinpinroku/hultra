@@ -51,12 +51,12 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
     let source = ApiSource::from(args.use_api_mirror);
 
     let spinner = create_spinner();
-    let registry = fetcher.fetch_registry(source).await?;
+    let registry = fetcher.fetch_everest_update_yaml(source).await?;
     spinner.finish_and_clear();
 
     // check updates
     info!("checking updates");
-    let report = update::UpdateScanner::new(cache_db, registry.mods).scan(&local_mods);
+    let report = update::UpdateScanner::new(cache_db, registry).scan(&local_mods)?;
 
     // TODO make `display_updates()` function
     if report.updates.is_empty() {
