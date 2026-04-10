@@ -39,4 +39,5 @@ pub async fn run(
     let task = DownloadTask::from(target_build);
 
     network::install(&downloader, &task).await
+    // FIXME `update-build.txt` is not created when update completed
 }

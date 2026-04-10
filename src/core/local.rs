@@ -5,12 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::manifest::Manifest;
-
 /// Information of installed mod.
 #[derive(Debug)]
 pub struct LocalMod {
-    /// Full path for the ZIP archive of the mod.
+    /// Full path for to the ZIP archive of the mod.
     path: PathBuf,
     /// Mod name.
     name: String,
@@ -27,15 +25,22 @@ impl std::fmt::Display for DisplayVersion {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("the path should be absolute")]
+    PathIsRelative,
+}
+
 impl LocalMod {
-    pub fn new(path: &Path, manifest: Manifest) -> Self {
-        // TODO path.is_absolute()
-        // TODO sanitize mod name as file name
-        Self {
-            path: path.to_path_buf(),
-            name: manifest.name,
-            version: DisplayVersion(manifest.version),
+    pub fn new(path: &Path, name: String, version: String) -> Result<Self, Error> {
+        if !path.is_absolute() {
+            return Err(Error::PathIsRelative);
         }
+        Ok(Self {
+            path: path.to_path_buf(),
+            name,
+            version: DisplayVersion(version),
+        })
     }
 
     pub fn path(&self) -> &Path {
@@ -80,5 +85,20 @@ impl fmt::Display for LocalMod {
             write!(f, "*{} (v{}) [{}]", self.name(), self.version(), filename)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_local_mod_creation() {
+        let result = LocalMod::new(
+            Path::new("./SpeedrunTool.zip"),
+            "SpeedrunTool".into(),
+            "1.0.1".into(),
+        );
+        assert!(result.is_err_and(|e| e.to_string().contains("should be absolute")))
     }
 }

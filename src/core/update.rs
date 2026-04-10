@@ -19,6 +19,8 @@ use crate::{
     utils::{self, ChecksumError},
 };
 
+// TODO Define UpdateTask here or src/domain/update.rs
+
 /// Result of scanning mods for update.
 pub struct UpdateReport {
     /// Tasks to download mods.
@@ -47,10 +49,8 @@ impl UpdateScanner {
         let mut available_info = Vec::with_capacity(local_mods.len());
 
         for local_mod in local_mods {
-            let name = local_mod.name();
-
             // verify if the local mod exist in the remote registry
-            let Some(remote_mod) = self.registry.get(name) else {
+            let Some((n, e)) = self.registry.remove_entry(local_mod.name()) else {
                 continue;
             };
 
@@ -59,7 +59,7 @@ impl UpdateScanner {
                 continue;
             };
 
-            let digests = remote_mod
+            let digests = e
                 .checksums
                 .iter()
                 .map(|s| utils::from_str_digest(s))
@@ -73,10 +73,12 @@ impl UpdateScanner {
                 .unwrap_or(false);
 
             // extract the metadata from the remote registry if an update is required
-            if is_update_needed && let Some((n, e)) = self.registry.remove_entry(name) {
-                let update_info = UpdateInfo::new(&n, local_mod, &e);
+            if is_update_needed {
+                let update_info = UpdateInfo::new(&n, local_mod, &e); // NOTE need: version from Entry
+                let download_task = DownloadTask::try_from((n, e))?; // NOTE need: name,url,size,checksums from Entry
+
                 available_info.push(update_info);
-                available_mods.push(DownloadTask::try_from((n, e))?);
+                available_mods.push(download_task);
             }
         }
 

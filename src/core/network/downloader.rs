@@ -1,6 +1,8 @@
 //! Business logic to download mods.
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
+    str,
     sync::Arc,
     time::Duration,
 };
@@ -25,12 +27,76 @@ use crate::{
 /// Metadata of target mod to be downloaded.
 #[derive(Debug)]
 pub struct DownloadTask {
-    url: String,
-    filename: String,
+    url: String,      // TODO define DownloadUrl to validate the value
+    filename: String, // TODO sanitize when convert from (String, Entry)
     filesize: u64,
-    checksums: Vec<u64>,
+    checksums: Checksums,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Checksums(HashSet<Checksum>);
+
+impl FromIterator<Checksum> for Checksums {
+    fn from_iter<T: IntoIterator<Item = Checksum>>(iter: T) -> Self {
+        Checksums(iter.into_iter().collect::<HashSet<Checksum>>())
+    }
+}
+
+impl std::fmt::Display for Checksums {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, checksum) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", checksum)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Checksum(u64);
+
+impl std::fmt::Display for Checksum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{:016x}", self.0)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Hash mismatch: computed: {computed}, expected: {expected}")]
+pub struct ChecksumVerificationError {
+    computed: String,
+    expected: Checksums,
+}
+
+trait ChecksumVerifier {
+    fn verify(&self, target: &u64) -> Result<(), ChecksumVerificationError>;
+}
+
+impl ChecksumVerifier for Checksums {
+    /// Verifies given checksums are equal.
+    fn verify(&self, digest: &u64) -> Result<(), ChecksumVerificationError> {
+        if self.0.contains(&Checksum(*digest)) {
+            Ok(())
+        } else {
+            Err(ChecksumVerificationError {
+                computed: format!("0x{:016x}", digest),
+                expected: self.clone(),
+            })
+        }
+    }
+}
+
+impl TryFrom<String> for Checksum {
+    type Error = ChecksumError;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        let i = utils::from_str_digest(&s)?;
+        Ok(Self(i))
+    }
+}
+// TODO Write tests
 impl TryFrom<(String, Entry)> for DownloadTask {
     type Error = ChecksumError;
 
@@ -38,8 +104,8 @@ impl TryFrom<(String, Entry)> for DownloadTask {
         let checksums = e
             .checksums
             .into_iter()
-            .map(|s| utils::from_str_digest(&s))
-            .collect::<Result<Vec<u64>, _>>()?;
+            .map(Checksum::try_from)
+            .collect::<Result<Checksums, _>>()?;
 
         Ok(Self {
             url: e.url,
@@ -56,7 +122,7 @@ pub struct ModDownloader {
     client: Client,
     semaphore: Arc<Semaphore>,
     mods_dir: PathBuf,
-    mirror_priority: Vec<DomainMirror>,
+    mirror_priority: Vec<DomainMirror>, // TODO create Vec<String> from DomainMirror when init this instance
 }
 
 impl ModDownloader {
@@ -125,7 +191,7 @@ async fn download_with_fallbacks(
     client: &Client,
     urls: &[String],
     name: &str,
-    checksums: &[u64],
+    checksums: &Checksums,
     dest: &Path,
     pb: &ProgressBar,
 ) -> Result<(), AllMirrorsFailedError> {
@@ -160,7 +226,7 @@ pub enum DownloadError {
     #[error("failed to save the mod")]
     Io(#[from] std::io::Error),
     #[error(transparent)]
-    Hash(#[from] HashValidationError),
+    Hash(#[from] ChecksumVerificationError),
 }
 
 /// Downloads a file while hashing, verifying its integrity before final persistence.
@@ -174,7 +240,7 @@ pub enum DownloadError {
 async fn download(
     client: &Client,
     url: &str,
-    checksums: &[u64],
+    checksums: &Checksums,
     dest: &Path,
     pb: &ProgressBar,
 ) -> Result<(), DownloadError> {
@@ -211,28 +277,94 @@ async fn download(
 
     // Abort if the file is corrupt. NamedTempFile will be auto-deleted.
     let digest = hasher.digest();
-    verify(digest, checksums)?;
+    checksums.verify(&digest)?;
 
     // Finalize the download by copying across filesystem boundaries.
     tokio::fs::copy(temp_path, dest).await?;
     Ok(())
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("Hash mismatch: computed: {computed}, expected: {expected:?}")]
-pub struct HashValidationError {
-    computed: String,
-    expected: Vec<String>,
+#[cfg(test)]
+mod tests_checksum {
+    use super::*;
+
+    #[test]
+    fn test_checksums_display() {
+        let checksums = Checksums(HashSet::from_iter(vec![Checksum(123), Checksum(0xABCDEF)]));
+
+        let display_string = checksums.to_string();
+
+        let mut parts: Vec<_> = display_string.split(',').map(|s| s.trim()).collect();
+        parts.sort();
+
+        assert_eq!(parts, vec!["0x000000000000007b", "0x0000000000abcdef"]);
+    }
+
+    #[test]
+    fn test_single_checksum_display() {
+        let checksums = Checksums(HashSet::from_iter(vec![Checksum(0x123)]));
+        assert_eq!(checksums.to_string(), "0x0000000000000123");
+    }
+
+    #[test]
+    fn test_empty_checksums_display() {
+        let checksums = Checksums(HashSet::new());
+        assert_eq!(checksums.to_string(), "");
+    }
+
+    #[test]
+    fn test_checksums_deduplication() {
+        let raw = vec![Checksum(0xA), Checksum(0xB), Checksum(0xA)];
+        let checksums: Checksums = raw.into_iter().collect();
+        assert_eq!(checksums.0.len(), 2);
+    }
+
+    #[test]
+    fn test_checksum_try_from_invalid_string() {
+        let invalid = "not_a_hex_string".to_string();
+        let result = Checksum::try_from(invalid);
+        assert!(result.is_err());
+    }
 }
 
-/// Verifies given checksums are equal.
-fn verify(computed: u64, expected: &[u64]) -> Result<(), HashValidationError> {
-    if expected.contains(&computed) {
-        Ok(())
-    } else {
-        Err(HashValidationError {
-            computed: format!("{:016x}", computed),
-            expected: expected.iter().map(|v| format!("{:016x}", v)).collect(),
-        })
+#[cfg(test)]
+mod tests_checksum_verification {
+    use super::*;
+
+    fn setup_checksums(values: Vec<u64>) -> Checksums {
+        Checksums(values.into_iter().map(Checksum).collect())
+    }
+
+    #[test]
+    fn test_verify_success() {
+        let checksums = setup_checksums(vec![0x123, 0xABC]);
+
+        assert!(checksums.verify(&0x123).is_ok());
+        assert!(checksums.verify(&0xABC).is_ok());
+    }
+
+    #[test]
+    fn test_verify_mismatch() {
+        let checksums = setup_checksums(vec![0x111]);
+        let computed_val = 0x222;
+
+        let result = checksums.verify(&computed_val);
+
+        assert!(result.is_err());
+
+        if let Err(e) = result {
+            assert_eq!(e.computed, "0x0000000000000222");
+            assert!(e.expected.0.contains(&Checksum(0x111)));
+
+            let err_msg = e.to_string();
+            assert!(err_msg.contains("computed: 0x0000000000000222"));
+            assert!(err_msg.contains("expected: 0x0000000000000111"));
+        }
+    }
+
+    #[test]
+    fn test_verify_empty() {
+        let checksums = setup_checksums(vec![]);
+        assert!(checksums.verify(&0x123).is_err());
     }
 }

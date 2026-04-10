@@ -56,13 +56,22 @@ impl EverestUpdateYaml {
             .collect()
     }
 
-    pub fn get(&self, name: &str) -> Option<&Entry> {
-        self.entries.get(name)
-    }
-
+    // TODO Converts registry to UpdateTask using TryFrom
+    // TODO Then rename this function to create_update_task, and returns Result<UpdateTask, UpdateTaskError>
     pub fn remove_entry(&mut self, name: &str) -> Option<(String, Entry)> {
         self.entries.remove_entry(name)
     }
+}
+
+pub struct UpdateTask {
+    /// Key of HashMap
+    name: String, // used for UpdateInfo
+
+    /// Used for DownloadTask
+    version: String,
+    url: String,
+    size: u64,
+    checksums: Vec<String>, // TODO Should be Checksums
 }
 
 #[cfg(test)]

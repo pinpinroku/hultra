@@ -88,7 +88,6 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .unwrap_or_default();
 
     // Parse mod page URLs to get mod IDs
-    // TODO collect u32 as HashSet
     let ids: HashSet<u32> = args
         .urls
         .iter()
@@ -111,7 +110,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
 
     // Resolve missing deps
     info!("resolving missing dependencies");
-    // TODO this method should be `graph::resolve()`
+    // TODO this method should be `graph::traverse()`
     let targets = resolver::resolve_missing_mods(&ids, &registry, &graph, &installed_names);
 
     if targets.is_empty() {

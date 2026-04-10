@@ -44,7 +44,9 @@ impl ModLoader {
             .inspect_err(|e| error!(?e, "Failed to parse everest.yaml"))
             .ok()?;
 
-        manifests.pop_front().map(|m| LocalMod::new(path, m))
+        manifests
+            .pop_front()
+            .map(|m| LocalMod::new(path, m.name, m.version).ok())?
     }
 
     /// Returns found installed mod names in given directory.

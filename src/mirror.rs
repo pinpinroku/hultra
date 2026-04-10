@@ -49,6 +49,9 @@ impl DomainMirror {
     }
 }
 
+// TODO Create struct: `Mirrors<HashSet<Mirror>>`
+// TODO Create trait: `MirrorUrlGenerator`
+
 mod mirrorlist {
     use tracing::warn;
 
