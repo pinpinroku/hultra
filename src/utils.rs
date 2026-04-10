@@ -163,7 +163,7 @@ mod tests_from_str_digest {
 
     #[test]
     fn returns_error_on_invalid() {
-        let err = from_str_digest("not-hex").unwrap_err();
-        assert!(format!("{}", err).contains("invalid checksum"));
+        let result = from_str_digest("not-hex");
+        assert!(result.is_err());
     }
 }

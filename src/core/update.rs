@@ -1,11 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashSet},
-    ffi::OsString,
-    fmt::Display,
-    fs::File,
-    io::{self, BufRead, BufReader},
-    path::Path,
-};
+use std::{collections::BTreeMap, fmt::Display};
 
 use tracing::{instrument, warn};
 
@@ -13,13 +6,21 @@ use crate::{
     cache::CacheEntry,
     core::{
         local::{FileSystemExt, LocalMod},
-        network::downloader::{ChecksumError, DownloadTask},
-        registry::{Entry, EverestUpdateYaml},
+        network::downloader::{ChecksumError, ChecksumVerifier, Checksums, DownloadTask},
+        registry::EverestUpdateYaml,
     },
-    utils,
 };
 
-// TODO Define UpdateTask here or src/domain/update.rs
+pub struct UpdateTask {
+    /// Key of HashMap
+    pub name: String, // used for UpdateInfo
+
+    /// Used for DownloadTask
+    pub version: String,
+    pub url: String,
+    pub size: u64,
+    pub checksums: Checksums,
+}
 
 /// Result of scanning mods for update.
 pub struct UpdateReport {
@@ -50,7 +51,11 @@ impl UpdateScanner {
 
         for local_mod in local_mods {
             // verify if the local mod exist in the remote registry
-            let Some((n, e)) = self.registry.remove_entry(local_mod.name()) else {
+            let Some(result) = self.registry.create_update_task(local_mod.name()) else {
+                continue;
+            };
+
+            let Ok(task) = result else {
                 continue;
             };
 
@@ -59,28 +64,17 @@ impl UpdateScanner {
                 continue;
             };
 
-            let digests = e
-                .checksums
-                .iter()
-                .map(|s| {
-                    utils::from_str_digest(s).map_err(|err| ChecksumError {
-                        input: s.to_string(),
-                        source: err,
-                    })
-                })
-                .collect::<Result<Vec<u64>, _>>()?;
-
             // check if an update is required
             let is_update_needed = self
                 .cache_db
                 .get(&inode)
-                .map(|entry| !digests.contains(entry.hash()))
+                .map(|entry| task.checksums.verify(entry.hash()).is_ok())
                 .unwrap_or(false);
 
             // extract the metadata from the remote registry if an update is required
             if is_update_needed {
-                let update_info = UpdateInfo::new(&n, local_mod, &e); // NOTE need: version from Entry
-                let download_task = DownloadTask::try_from((n, e))?; // NOTE need: name,url,size,checksums from Entry
+                let update_info = UpdateInfo::new(&task.name, local_mod, &task.version); // NOTE need: version from Entry
+                let download_task = DownloadTask::from(task); // NOTE need: name,url,size,checksums from Entry
 
                 available_info.push(update_info);
                 available_mods.push(download_task);
@@ -102,11 +96,11 @@ pub struct UpdateInfo {
 }
 
 impl UpdateInfo {
-    pub fn new(name: &str, local_mod: &LocalMod, remote_mod: &Entry) -> Self {
+    pub fn new(name: &str, local_mod: &LocalMod, version: &str) -> Self {
         Self {
             name: name.to_string(),
             current_version: local_mod.version().to_string(),
-            available_version: remote_mod.version.to_string(),
+            available_version: version.to_string(),
         }
     }
 }
@@ -119,29 +113,4 @@ impl Display for UpdateInfo {
             self.name, self.current_version, self.available_version
         )
     }
-}
-
-/// Returns blacklisted mods for update.
-pub fn fetch_updater_blacklist(mods_dir: &Path) -> io::Result<HashSet<OsString>> {
-    let path = mods_dir.join("updaterblacklist.txt");
-    let file = match File::open(&path) {
-        Ok(f) => f,
-        Err(ref e) if e.kind() == io::ErrorKind::NotFound => return Ok(HashSet::new()),
-        Err(e) => return Err(e),
-    };
-
-    let mut blacklist = HashSet::new();
-    // NOTE The default 8KiB buffer is overkill for small text files.
-    let reader = BufReader::with_capacity(1024, &file);
-
-    for line in reader.lines() {
-        let line = line?;
-        let line = line.trim();
-        if !line.starts_with('#') && !line.is_empty() {
-            warn!("'{}' will be excluded from updates", line);
-            blacklist.insert(OsString::from(line));
-        }
-    }
-
-    Ok(blacklist)
 }

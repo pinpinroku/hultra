@@ -2,7 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
-use crate::core::network::downloader::{ChecksumError, DownloadTask};
+use crate::core::{
+    network::downloader::{Checksum, ChecksumError, Checksums, DownloadTask},
+    update::UpdateTask,
+};
 
 /// Mod database. The key of main map is the mod name.
 #[derive(Debug, Clone, Deserialize)]
@@ -56,22 +59,28 @@ impl EverestUpdateYaml {
             .collect()
     }
 
-    // TODO Converts registry to UpdateTask using TryFrom
-    // TODO Then rename this function to create_update_task, and returns Result<UpdateTask, UpdateTaskError>
-    pub fn remove_entry(&mut self, name: &str) -> Option<(String, Entry)> {
-        self.entries.remove_entry(name)
+    pub fn create_update_task(&mut self, name: &str) -> Option<Result<UpdateTask, ChecksumError>> {
+        self.entries.remove_entry(name).map(UpdateTask::try_from)
     }
 }
 
-pub struct UpdateTask {
-    /// Key of HashMap
-    name: String, // used for UpdateInfo
+impl TryFrom<(String, Entry)> for UpdateTask {
+    type Error = ChecksumError;
 
-    /// Used for DownloadTask
-    version: String,
-    url: String,
-    size: u64,
-    checksums: Vec<String>, // TODO Should be Checksums
+    fn try_from((name, entry): (String, Entry)) -> Result<UpdateTask, Self::Error> {
+        let checksums = entry
+            .checksums
+            .into_iter()
+            .map(Checksum::try_from)
+            .collect::<Result<Checksums, _>>()?;
+        Ok(Self {
+            name,
+            version: entry.version,
+            url: entry.url,
+            size: entry.file_size,
+            checksums,
+        })
+    }
 }
 
 #[cfg(test)]

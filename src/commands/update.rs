@@ -15,6 +15,7 @@ use crate::{
         update,
     },
     mirror::DomainMirror,
+    service::fs::fetch_updater_blacklist,
     ui::create_spinner,
 };
 
@@ -27,7 +28,7 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
     let mut local_mods = ModResolver::resolve_from_paths(&paths)?;
 
     info!("checking updater blacklist");
-    let blacklist = update::fetch_updater_blacklist(&config.mods_dir())?;
+    let blacklist = fetch_updater_blacklist(&config.mods_dir())?;
     local_mods.retain(|local_mod| {
         let Some(name) = local_mod.path().file_name() else {
             return true;

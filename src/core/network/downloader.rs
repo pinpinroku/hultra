@@ -17,7 +17,7 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     config::CARGO_PKG_NAME,
-    core::registry::Entry,
+    core::{registry::Entry, update::UpdateTask},
     log::anonymize,
     mirror::{self, DomainMirror},
     ui::create_download_progress_bar,
@@ -31,6 +31,17 @@ pub struct DownloadTask {
     filename: String, // TODO sanitize when convert from (String, Entry)
     filesize: u64,
     checksums: Checksums,
+}
+
+impl From<UpdateTask> for DownloadTask {
+    fn from(value: UpdateTask) -> Self {
+        Self {
+            url: value.url,
+            filename: value.name,
+            filesize: value.size,
+            checksums: value.checksums,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,7 +81,7 @@ pub struct ChecksumVerificationError {
     expected: Checksums,
 }
 
-trait ChecksumVerifier {
+pub trait ChecksumVerifier {
     fn verify(&self, target: &u64) -> Result<(), ChecksumVerificationError>;
 }
 

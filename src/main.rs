@@ -17,6 +17,7 @@ mod dependency;
 mod log;
 mod manifest;
 mod mirror;
+mod service;
 mod ui;
 mod utils;
 

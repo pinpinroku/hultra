@@ -102,33 +102,3 @@ mod tests {
         assert!(result.is_err_and(|e| e.to_string().contains("should be absolute")))
     }
 }
-
-mod installed {
-    use std::{io, path::Path};
-
-    use super::LocalMod;
-
-    // #[derive(Debug, thiserror::Error)]
-    // pub enum Error {
-    //     #[error("failed to load all mods")]
-    //     Load,
-    // }
-
-    // #[derive(Debug, Clone)]
-    // pub struct ModList {
-    //     inner: Vec<LocalMod>,
-    // }
-
-    // Domain rule
-    pub trait ModRepository {
-        fn load(mods_dir: &Path) -> io::Result<Vec<LocalMod>>;
-    }
-
-    // Infrastructure/Service/Handler
-    pub struct FileModRepository;
-    impl ModRepository for FileModRepository {
-        fn load(mods_dir: &Path) -> io::Result<Vec<LocalMod>> {
-            todo!()
-        }
-    }
-}
