@@ -218,6 +218,10 @@ async fn main() -> anyhow::Result<()> {
                         client
                             .download_and_run_installer(target_build, &config)
                             .await?;
+                        std::fs::write(
+                            config.root_dir().join("update-build.txt"),
+                            target_build.version.to_string(),
+                        )?;
                     }
                     NetworkCommand::Install { version, .. } => {
                         let target_build = builds
