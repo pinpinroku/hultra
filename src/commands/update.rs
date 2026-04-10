@@ -7,7 +7,7 @@ use crate::{
     commands::DownloadOption,
     config::AppConfig,
     core::{
-        loader::ModLoader,
+        loader::{ModResolver, ModsDirectoryScanner},
         network::{
             api::{ApiClient, ApiSource},
             downloader::ModDownloader,
@@ -23,7 +23,8 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
     info!("updating mods");
 
     info!("loading installed mods");
-    let mut local_mods = ModLoader::load(&config.mods_dir())?;
+    let paths = ModsDirectoryScanner::scan(&config.mods_dir())?;
+    let mut local_mods = ModResolver::resolve_from_paths(&paths)?;
 
     info!("checking updater blacklist");
     let blacklist = update::fetch_updater_blacklist(&config.mods_dir())?;

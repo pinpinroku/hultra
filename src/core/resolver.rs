@@ -2,9 +2,11 @@
 use std::collections::HashSet;
 
 use crate::{
-    core::{network::downloader::DownloadTask, registry::EverestUpdateYaml},
+    core::{
+        network::downloader::{ChecksumError, DownloadTask},
+        registry::EverestUpdateYaml,
+    },
     dependency::DependencyGraph,
-    utils::ChecksumError,
 };
 
 /// Returns a list of mods that actually need to be downloaded.

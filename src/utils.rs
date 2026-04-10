@@ -1,3 +1,5 @@
+use std::num::ParseIntError;
+
 /// Sanitizes a mod name as file stem for Unix file systems.
 ///
 /// # Rules
@@ -130,20 +132,9 @@ mod test_format_date {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("invalid checksum: could not parse the '{input}' with digits in base 16")]
-pub struct ChecksumError {
-    input: String,
-    #[source]
-    source: std::num::ParseIntError,
-}
-
-pub fn from_str_digest(input: &str) -> Result<u64, ChecksumError> {
+pub fn from_str_digest(input: &str) -> Result<u64, ParseIntError> {
     let clean_input = input.trim().strip_prefix("0x").unwrap_or(input.trim());
-    u64::from_str_radix(clean_input, 16).map_err(|err| ChecksumError {
-        input: input.to_string(),
-        source: err,
-    })
+    u64::from_str_radix(clean_input, 16)
 }
 
 #[cfg(test)]

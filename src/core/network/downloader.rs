@@ -21,7 +21,7 @@ use crate::{
     log::anonymize,
     mirror::{self, DomainMirror},
     ui::create_download_progress_bar,
-    utils::{self, ChecksumError},
+    utils,
 };
 
 /// Metadata of target mod to be downloaded.
@@ -88,11 +88,22 @@ impl ChecksumVerifier for Checksums {
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("invalid checksum: could not parse the '{input}' with digits in base 16")]
+pub struct ChecksumError {
+    pub(crate) input: String,
+    #[source]
+    pub(crate) source: std::num::ParseIntError,
+}
+
 impl TryFrom<String> for Checksum {
     type Error = ChecksumError;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        let i = utils::from_str_digest(&s)?;
+        let i = utils::from_str_digest(&s).map_err(|err| ChecksumError {
+            input: s.to_string(),
+            source: err,
+        })?;
         Ok(Self(i))
     }
 }

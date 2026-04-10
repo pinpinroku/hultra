@@ -13,10 +13,10 @@ use crate::{
     cache::CacheEntry,
     core::{
         local::{FileSystemExt, LocalMod},
-        network::downloader::DownloadTask,
+        network::downloader::{ChecksumError, DownloadTask},
         registry::{Entry, EverestUpdateYaml},
     },
-    utils::{self, ChecksumError},
+    utils,
 };
 
 // TODO Define UpdateTask here or src/domain/update.rs
@@ -62,7 +62,12 @@ impl UpdateScanner {
             let digests = e
                 .checksums
                 .iter()
-                .map(|s| utils::from_str_digest(s))
+                .map(|s| {
+                    utils::from_str_digest(s).map_err(|err| ChecksumError {
+                        input: s.to_string(),
+                        source: err,
+                    })
+                })
                 .collect::<Result<Vec<u64>, _>>()?;
 
             // check if an update is required
