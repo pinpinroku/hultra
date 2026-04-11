@@ -1,14 +1,13 @@
 //! Service for resolving installed mods.
-use std::{
-    collections::HashSet,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, io, path::Path};
 
 use rayon::prelude::*;
 use tracing::instrument;
 
-use crate::{core::local::LocalMod, manifest::Manifest};
+use crate::{
+    core::{LocalMod, ModFile},
+    manifest::Manifest,
+};
 
 pub struct ModResolver;
 
@@ -19,51 +18,29 @@ impl ModResolver {
         Ok(manifest)
     }
 
-    /// Resolves a list of installed mods from given paths.
+    /// Resolves a list of installed mods.
     #[instrument(skip_all)]
-    pub fn resolve_from_paths(paths: &[PathBuf]) -> io::Result<Vec<LocalMod>> {
-        let mods = paths
+    pub fn resolve(files: &[ModFile]) -> io::Result<Vec<LocalMod>> {
+        let mods = files
             .into_par_iter()
-            .filter_map(|path| {
-                let manifest = Self::resolve_manifest(path).ok()?;
-                LocalMod::new(path, manifest.name, manifest.version).ok()
+            .filter_map(|file| {
+                let manifest = Self::resolve_manifest(file.path()).ok()?;
+                Some(LocalMod::new(file.clone(), manifest.name, manifest.version))
             })
             .collect();
         Ok(mods)
     }
 
-    /// Resolves a list of installed mod names from given paths.
+    /// Resolves a list of installed mod names.
     #[instrument(skip_all)]
-    pub fn resolve_names_from_paths(paths: &[PathBuf]) -> io::Result<HashSet<String>> {
-        let names = paths
+    pub fn resolve_names(files: &[ModFile]) -> io::Result<HashSet<String>> {
+        let names = files
             .into_par_iter()
-            .filter_map(|path| {
-                let manifest = Self::resolve_manifest(path).ok()?;
+            .filter_map(|file| {
+                let manifest = Self::resolve_manifest(file.path()).ok()?;
                 Some(manifest.name)
             })
             .collect();
         Ok(names)
     }
-}
-
-// TODO move this to proper module
-pub struct ModsDirectoryScanner;
-
-impl ModsDirectoryScanner {
-    /// Scans mods directory to collect the path of ZIP archives.
-    pub fn scan(mods_dir: &Path) -> io::Result<Vec<PathBuf>> {
-        let found_paths: Vec<_> = fs::read_dir(mods_dir)?
-            .filter_map(|res| res.ok())
-            .map(|e| e.path())
-            .filter(|p| is_mod_archive(p))
-            .collect();
-        Ok(found_paths)
-    }
-}
-
-fn is_mod_archive(path: &Path) -> bool {
-    path.is_file()
-        && path
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
 }

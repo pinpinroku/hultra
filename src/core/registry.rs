@@ -16,22 +16,22 @@ pub struct EverestUpdateYaml {
 
 /// Metadata of the mod.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub struct Entry {
+struct Entry {
     /// This is a group ID of the map. It is unique but shared with assets.
     #[serde(rename = "GameBananaId")]
-    pub id: u32,
+    id: u32,
     /// Version string. This value may not follow any specific versioning scheme. Do not expect it to be SemVer.
     #[serde(rename = "Version")]
-    pub version: String,
+    version: String,
     /// Download link for the mod file.
     #[serde(rename = "URL")]
-    pub url: String,
+    url: String,
     /// File size of the mod file, a.k.a. `Content-Length`.
     #[serde(rename = "Size")]
-    pub file_size: u64,
+    file_size: u64,
     /// XxHash checksums for the file. (e.g. "f437bf0515368130")
     #[serde(rename = "xxHash")]
-    pub checksums: Vec<String>,
+    checksums: Vec<String>,
 }
 
 impl EverestUpdateYaml {
@@ -44,8 +44,8 @@ impl EverestUpdateYaml {
             .collect()
     }
 
-    /// Converts DTO to the context for downloads.
-    pub fn create_tasks_by_names(
+    /// Converts Entry to the context for downloads.
+    pub fn create_download_tasks(
         mut self,
         names: HashSet<String>,
     ) -> Result<Vec<DownloadTask>, ChecksumError> {
@@ -54,7 +54,7 @@ impl EverestUpdateYaml {
             .filter_map(|name| {
                 self.entries
                     .remove(&name)
-                    .map(|dto| DownloadTask::try_from((name, dto)))
+                    .map(|entry| DownloadTask::try_from((name, entry)))
             })
             .collect()
     }
@@ -78,6 +78,24 @@ impl TryFrom<(String, Entry)> for UpdateTask {
             version: entry.version,
             url: entry.url,
             size: entry.file_size,
+            checksums,
+        })
+    }
+}
+
+impl TryFrom<(String, Entry)> for DownloadTask {
+    type Error = ChecksumError;
+
+    fn try_from((filename, entry): (String, Entry)) -> Result<Self, Self::Error> {
+        let checksums = entry
+            .checksums
+            .into_iter()
+            .map(Checksum::try_from)
+            .collect::<Result<Checksums, _>>()?;
+        Ok(Self {
+            url: entry.url,
+            filename,
+            filesize: entry.file_size,
             checksums,
         })
     }

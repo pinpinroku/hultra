@@ -1,9 +1,11 @@
 pub mod everest;
 pub mod loader;
 pub mod local;
+pub mod mod_file;
 pub mod network;
 pub mod registry;
 pub mod resolver;
 pub mod update;
 
-// TODO Define Checksums here or src/domain/checksum.rs
+pub use local::LocalMod;
+pub use mod_file::ModFile;

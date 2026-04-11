@@ -7,7 +7,7 @@ use crate::{
     commands::DownloadOption,
     config::AppConfig,
     core::{
-        loader::{ModResolver, ModsDirectoryScanner},
+        loader::ModResolver,
         network::{
             api::{ApiClient, ApiSource},
             downloader::ModDownloader,
@@ -15,7 +15,7 @@ use crate::{
         update,
     },
     mirror::DomainMirror,
-    service::fs::fetch_updater_blacklist,
+    service::{ModsDirectoryScanner, fs::fetch_updater_blacklist},
     ui::create_spinner,
 };
 
@@ -24,18 +24,20 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
     info!("updating mods");
 
     info!("loading installed mods");
-    let paths = ModsDirectoryScanner::scan(&config.mods_dir())?;
-    let mut local_mods = ModResolver::resolve_from_paths(&paths)?;
+    let files = ModsDirectoryScanner::scan(&config.mods_dir())?;
+    let mut local_mods = ModResolver::resolve(&files)?;
+
+    let initial_count = local_mods.len();
+    info!("loaded {} mods", initial_count);
 
     info!("checking updater blacklist");
     let blacklist = fetch_updater_blacklist(&config.mods_dir())?;
-    local_mods.retain(|local_mod| {
-        let Some(name) = local_mod.path().file_name() else {
-            return true;
-        };
-        !blacklist.contains(name)
-    });
+    local_mods.retain(|local_mod| !local_mod.file().is_blacklisted(&blacklist));
 
+    let ignored_count = initial_count - local_mods.len();
+    if ignored_count > 0 {
+        info!("{} mods were ignored due to blacklist", ignored_count);
+    }
     if local_mods.is_empty() {
         println!("All mods are blacklisted")
     }

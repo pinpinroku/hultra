@@ -5,10 +5,12 @@ use tracing::{instrument, warn};
 use crate::{
     cache::CacheEntry,
     core::{
-        local::{FileSystemExt, LocalMod},
+        LocalMod,
+        mod_file::ModIdentityService,
         network::downloader::{ChecksumError, ChecksumVerifier, Checksums, DownloadTask},
         registry::EverestUpdateYaml,
     },
+    service::os::LocalFileSystemService,
 };
 
 pub struct UpdateTask {
@@ -48,6 +50,7 @@ impl UpdateScanner {
     pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ChecksumError> {
         let mut available_mods = Vec::with_capacity(local_mods.len());
         let mut available_info = Vec::with_capacity(local_mods.len());
+        let service = LocalFileSystemService;
 
         for local_mod in local_mods {
             // verify if the local mod exist in the remote registry
@@ -60,7 +63,7 @@ impl UpdateScanner {
             };
 
             // attempts to retrieve the mod's inode
-            let Ok(inode) = local_mod.fetch_inode() else {
+            let Ok(inode) = service.fetch_id(local_mod.file().path()) else {
                 continue;
             };
 
@@ -73,8 +76,8 @@ impl UpdateScanner {
 
             // extract the metadata from the remote registry if an update is required
             if is_update_needed {
-                let update_info = UpdateInfo::new(&task.name, local_mod, &task.version); // NOTE need: version from Entry
-                let download_task = DownloadTask::from(task); // NOTE need: name,url,size,checksums from Entry
+                let update_info = UpdateInfo::new(&task.name, local_mod.version(), &task.version);
+                let download_task = DownloadTask::from(task);
 
                 available_info.push(update_info);
                 available_mods.push(download_task);
@@ -96,11 +99,11 @@ pub struct UpdateInfo {
 }
 
 impl UpdateInfo {
-    pub fn new(name: &str, local_mod: &LocalMod, version: &str) -> Self {
+    fn new(name: &str, current_v: &str, available_v: &str) -> Self {
         Self {
             name: name.to_string(),
-            current_version: local_mod.version().to_string(),
-            available_version: version.to_string(),
+            current_version: current_v.to_string(),
+            available_version: available_v.to_string(),
         }
     }
 }

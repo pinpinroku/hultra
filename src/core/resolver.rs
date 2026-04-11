@@ -41,5 +41,5 @@ pub fn create_download_tasks(
         .collect();
 
     // 6. Extract detailed download information from the registry and return it
-    registry.create_tasks_by_names(missing_names)
+    registry.create_download_tasks(missing_names)
 }

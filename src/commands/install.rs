@@ -9,7 +9,7 @@ use tracing::info;
 use crate::{
     config::AppConfig,
     core::{
-        loader::{ModResolver, ModsDirectoryScanner},
+        loader::ModResolver,
         network::{
             api::{ApiClient, ApiSource},
             downloader::{DownloadTask, ModDownloader},
@@ -17,6 +17,7 @@ use crate::{
         resolver,
     },
     mirror::DomainMirror,
+    service::ModsDirectoryScanner,
     ui::create_spinner,
 };
 
@@ -106,8 +107,8 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     spinner.finish_and_clear();
 
     info!("extracting installed mod names");
-    let paths = ModsDirectoryScanner::scan(&config.mods_dir())?;
-    let installed_names = ModResolver::resolve_names_from_paths(&paths)?;
+    let files = ModsDirectoryScanner::scan(&config.mods_dir())?;
+    let installed_names = ModResolver::resolve_names(&files)?;
 
     // Resolve missing deps
     info!("resolving missing dependencies");

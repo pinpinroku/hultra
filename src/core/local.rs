@@ -1,15 +1,12 @@
-use std::{
-    borrow::Cow,
-    fmt, io,
-    os::unix::fs::MetadataExt,
-    path::{Path, PathBuf},
-};
+use std::{borrow::Cow, fmt};
+
+use crate::core::ModFile;
 
 /// Information of installed mod.
 #[derive(Debug, Clone)]
 pub struct LocalMod {
-    /// Full path for to the ZIP archive of the mod.
-    path: PathBuf,
+    /// Full path to the ZIP archive of the mod.
+    file: ModFile,
     /// Mod name.
     name: String,
     /// Version label of the mod to display.
@@ -25,26 +22,17 @@ impl std::fmt::Display for DisplayVersion {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("the path should be absolute")]
-    PathIsRelative,
-}
-
 impl LocalMod {
-    pub fn new(path: &Path, name: String, version: String) -> Result<Self, Error> {
-        if !path.is_absolute() {
-            return Err(Error::PathIsRelative);
-        }
-        Ok(Self {
-            path: path.to_path_buf(),
+    pub fn new(file: ModFile, name: String, version: String) -> Self {
+        Self {
+            file,
             name,
             version: DisplayVersion(version),
-        })
+        }
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
+    pub fn file(&self) -> &ModFile {
+        &self.file
     }
 
     pub fn name(&self) -> &str {
@@ -56,20 +44,10 @@ impl LocalMod {
     }
 }
 
-pub trait FileSystemExt {
-    /// Gets current inode from path.
-    fn fetch_inode(&self) -> io::Result<u64>;
-}
-
-impl FileSystemExt for LocalMod {
-    fn fetch_inode(&self) -> io::Result<u64> {
-        self.path.metadata().map(|m| m.ino())
-    }
-}
-
 impl fmt::Display for LocalMod {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self
+            .file()
             .path()
             .file_stem()
             .is_some_and(|name| name.eq_ignore_ascii_case(self.name()))
@@ -77,6 +55,7 @@ impl fmt::Display for LocalMod {
             write!(f, "{} (v{})", self.name(), self.version())?;
         } else {
             let filename = self
+                .file()
                 .path()
                 .file_name()
                 .map(|name| name.to_string_lossy())
@@ -85,20 +64,5 @@ impl fmt::Display for LocalMod {
             write!(f, "*{} (v{}) [{}]", self.name(), self.version(), filename)?;
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_local_mod_creation() {
-        let result = LocalMod::new(
-            Path::new("./SpeedrunTool.zip"),
-            "SpeedrunTool".into(),
-            "1.0.1".into(),
-        );
-        assert!(result.is_err_and(|e| e.to_string().contains("should be absolute")))
     }
 }

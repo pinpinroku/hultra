@@ -17,7 +17,7 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     config::CARGO_PKG_NAME,
-    core::{registry::Entry, update::UpdateTask},
+    core::update::UpdateTask,
     log::anonymize,
     mirror::{self, DomainMirror},
     ui::create_download_progress_bar,
@@ -27,10 +27,10 @@ use crate::{
 /// Metadata of target mod to be downloaded.
 #[derive(Debug)]
 pub struct DownloadTask {
-    url: String,      // TODO define DownloadUrl to validate the value
-    filename: String, // TODO sanitize when convert from (String, Entry)
-    filesize: u64,
-    checksums: Checksums,
+    pub url: String,      // TODO define DownloadUrl to validate the value
+    pub filename: String, // TODO sanitize when convert from (String, Entry)
+    pub filesize: u64,
+    pub checksums: Checksums,
 }
 
 impl From<UpdateTask> for DownloadTask {
@@ -116,25 +116,6 @@ impl TryFrom<String> for Checksum {
             source: err,
         })?;
         Ok(Self(i))
-    }
-}
-// TODO Write tests
-impl TryFrom<(String, Entry)> for DownloadTask {
-    type Error = ChecksumError;
-
-    fn try_from((filename, e): (String, Entry)) -> Result<Self, Self::Error> {
-        let checksums = e
-            .checksums
-            .into_iter()
-            .map(Checksum::try_from)
-            .collect::<Result<Checksums, _>>()?;
-
-        Ok(Self {
-            url: e.url,
-            filename,
-            filesize: e.file_size,
-            checksums,
-        })
     }
 }
 
