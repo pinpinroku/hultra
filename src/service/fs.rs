@@ -1,8 +1,16 @@
-use std::{collections::HashSet, fs, io, path::Path};
+use std::{
+    collections::HashSet,
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use tracing::instrument;
 
-use crate::{core::mod_file::ModFile, log::anonymize};
+use crate::{
+    config::AppConfig,
+    core::{everest::version::InstalledVersionProvider, mod_file::ModFile},
+    log::anonymize,
+};
 
 /// Returns blacklisted mods for update.
 #[instrument(skip_all, fields(mods_dir = %anonymize(mods_dir)), ret(Debug))]
@@ -38,5 +46,23 @@ impl ModsDirectoryScanner {
             .filter_map(|e| ModFile::try_from_path(e.path()))
             .collect();
         Ok(found_paths)
+    }
+}
+
+/// Represents version file of Everest.
+pub struct FileVersionRepository {
+    path: PathBuf,
+}
+
+impl FileVersionRepository {
+    pub fn new(config: &AppConfig) -> Self {
+        let path = config.root_dir().join("update-build.txt");
+        Self { path }
+    }
+}
+
+impl InstalledVersionProvider for FileVersionRepository {
+    fn fetch(&self) -> Result<String, io::Error> {
+        fs::read_to_string(&self.path)
     }
 }

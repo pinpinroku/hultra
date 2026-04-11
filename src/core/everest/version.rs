@@ -1,11 +1,9 @@
-//! Core logic and infrastructure for `everest version` command.
-use std::{fs, io, path::PathBuf};
-
-use crate::config::AppConfig;
+//! Domain model of version number for the `everest version` command.
+use std::{io, str::FromStr};
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("failed to read version file")]
+pub enum VersionParseError {
+    #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("invalid version string '{version}' in the `update-build.txt`: {source}")]
     InvalidVersion {
@@ -25,20 +23,30 @@ impl VersionNumber {
     const MIN_VERSION: u32 = 3960;
     const MAX_VERSION: u32 = 9999;
 
-    fn parse(raw: &str) -> Result<Self, Error> {
+    pub fn value(&self) -> u32 {
+        self.0
+    }
+}
+
+impl FromStr for VersionNumber {
+    type Err = VersionParseError;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
         let trimmed = raw.trim();
 
         if trimmed.is_empty() {
-            return Err(Error::VersionTextNotFound);
+            return Err(VersionParseError::VersionTextNotFound);
         }
 
-        let version = trimmed.parse::<u32>().map_err(|e| Error::InvalidVersion {
-            source: e,
-            version: trimmed.to_string(),
-        })?;
+        let version = trimmed
+            .parse::<u32>()
+            .map_err(|e| VersionParseError::InvalidVersion {
+                source: e,
+                version: trimmed.to_string(),
+            })?;
 
         if !(Self::MIN_VERSION..=Self::MAX_VERSION).contains(&version) {
-            return Err(Error::InvalidVersionRange {
+            return Err(VersionParseError::InvalidVersionRange {
                 actual: version,
                 expected: format!("{}-{}", Self::MIN_VERSION, Self::MAX_VERSION),
             });
@@ -46,39 +54,8 @@ impl VersionNumber {
 
         Ok(Self(version))
     }
-
-    pub fn value(&self) -> u32 {
-        self.0
-    }
 }
 
 pub trait InstalledVersionProvider {
     fn fetch(&self) -> Result<String, io::Error>;
-}
-
-/// Fetches version number and returns it if it is valid, otherwise returns error.
-pub fn fetch_installed_version(
-    repo: &impl InstalledVersionProvider,
-) -> Result<VersionNumber, Error> {
-    let content = repo.fetch()?;
-    let number = VersionNumber::parse(&content)?;
-    Ok(number)
-}
-
-/// Represents file format version repository.
-pub struct FileVersionRepository {
-    path: PathBuf,
-}
-
-impl FileVersionRepository {
-    pub fn new(config: &AppConfig) -> Self {
-        let path = config.root_dir().join("update-build.txt");
-        Self { path }
-    }
-}
-
-impl InstalledVersionProvider for FileVersionRepository {
-    fn fetch(&self) -> Result<String, io::Error> {
-        fs::read_to_string(&self.path)
-    }
 }
