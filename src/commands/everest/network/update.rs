@@ -2,6 +2,7 @@ use anyhow::Context;
 use tracing::debug;
 
 use crate::{
+    commands::everest::fetch_installed_version,
     config::AppConfig,
     core::everest::{
         EverestBuild, EverestBuildExt,
@@ -9,8 +10,8 @@ use crate::{
             self, EverestHttpClient,
             downloader::{DownloadTask, EverestDownloader},
         },
-        version::{self, FileVersionRepository},
     },
+    service::fs::FileVersionRepository,
 };
 
 pub async fn run(
@@ -19,7 +20,7 @@ pub async fn run(
     client: &EverestHttpClient,
 ) -> anyhow::Result<()> {
     let repo = FileVersionRepository::new(config);
-    let current_v = version::fetch_installed_version(&repo)?.value();
+    let current_v = fetch_installed_version(&repo)?.value();
     let current_b = builds
         .get_installed_branch(current_v)
         .context("Installed version not found on the database")?;
@@ -38,6 +39,12 @@ pub async fn run(
     let downloader = EverestDownloader::new(client.inner.clone(), config.root_dir());
     let task = DownloadTask::from(target_build);
 
-    network::install(&downloader, &task).await
-    // FIXME `update-build.txt` is not created when update completed
+    network::install(&downloader, &task).await?;
+
+    // update current build version
+    std::fs::write(
+        config.root_dir().join("update-build.txt"),
+        target_build.version.to_string(),
+    )?;
+    Ok(())
 }
