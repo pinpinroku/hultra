@@ -7,7 +7,6 @@ use crate::{
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
 };
 
-mod archive;
 mod cache;
 mod cli;
 mod commands;

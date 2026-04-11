@@ -17,7 +17,7 @@ pub enum ExtractError {
 
 /// Extracts ZIP archive to the specified directory.
 #[instrument]
-pub fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), ExtractError> {
+pub fn extract(temp_zip: &Path, dest_dir: &Path) -> Result<(), ExtractError> {
     info!("extracting ZIP archive");
     let file = File::open(temp_zip)?;
     let mut archive = ZipArchive::new(file)?;
@@ -54,11 +54,15 @@ pub fn extract_zip_archive(temp_zip: &Path, dest_dir: &Path) -> Result<(), Extra
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::fs::{self, File};
-    use std::io::Write;
+    use std::{
+        fs::{self, File},
+        io::Write,
+    };
+
     use tempfile::tempdir;
     use zip::write::SimpleFileOptions;
+
+    use super::*;
 
     #[test]
     fn test_extract_zip_archive_strips_root() -> anyhow::Result<()> {
@@ -91,7 +95,7 @@ mod tests {
             zip.finish()?;
         }
 
-        extract_zip_archive(&zip_path, &dest_dir).expect("Extraction failed");
+        extract(&zip_path, &dest_dir).expect("Extraction failed");
 
         let extracted_root_file = dest_dir.join("root_file.txt");
         assert!(

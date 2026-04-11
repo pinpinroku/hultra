@@ -23,7 +23,7 @@ pub enum Error {
     #[error("failed to parse string as valid URL of Everest API")]
     UrlParse(#[from] url::ParseError),
     #[error("failed to extract Everest file: `main.zip`")]
-    Extract(#[from] crate::archive::ExtractError),
+    Extract(#[from] crate::service::archive::ExtractError),
 }
 
 impl EverestApiClient {

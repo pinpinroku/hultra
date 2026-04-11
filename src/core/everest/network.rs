@@ -4,6 +4,8 @@ use downloader::{DownloadTask, EverestDownloader};
 use tempfile::NamedTempFile;
 use tracing::error;
 
+use crate::service::archive;
+
 pub mod api;
 pub mod downloader;
 
@@ -29,7 +31,7 @@ pub async fn install(downloader: &EverestDownloader, task: &DownloadTask) -> any
         .inspect_err(|err| error!(?err, "failed to download Everest"))?;
     debug_assert_eq!(downloaded, task.filesize());
 
-    crate::archive::extract_zip_archive(temp_zip.path(), downloader.output_dir())
+    archive::extract(temp_zip.path(), downloader.output_dir())
         .inspect_err(|err| error!(?err, "failed to extract ZIP archive"))?;
     drop(temp_zip);
 
