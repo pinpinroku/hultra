@@ -1,9 +1,16 @@
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, fmt, str::FromStr};
 
 use crate::utils;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Checksums(HashSet<Checksum>);
+
+impl Checksums {
+    /// Checks if given hash is already calculated.
+    pub fn contains(&self, hash: &u64) -> bool {
+        self.0.contains(&Checksum(*hash))
+    }
+}
 
 impl FromIterator<Checksum> for Checksums {
     fn from_iter<T: IntoIterator<Item = Checksum>>(iter: T) -> Self {
@@ -11,14 +18,8 @@ impl FromIterator<Checksum> for Checksums {
     }
 }
 
-impl Checksums {
-    pub fn contains(&self, hash: &u64) -> bool {
-        self.0.contains(&Checksum(*hash))
-    }
-}
-
-impl std::fmt::Display for Checksums {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Checksums {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, checksum) in self.0.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
@@ -32,12 +33,6 @@ impl std::fmt::Display for Checksums {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Checksum(pub u64);
 
-impl std::fmt::Display for Checksum {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{:016x}", self.0)
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 #[error("Hash mismatch: computed: {computed}, expected: {expected}")]
 pub struct ChecksumVerificationError {
@@ -45,13 +40,9 @@ pub struct ChecksumVerificationError {
     expected: Checksums,
 }
 
-pub trait ChecksumVerifier {
-    fn verify(&self, target: &u64) -> Result<(), ChecksumVerificationError>;
-}
-
-impl ChecksumVerifier for Checksums {
+impl Checksums {
     /// Verifies given checksums are equal.
-    fn verify(&self, digest: &u64) -> Result<(), ChecksumVerificationError> {
+    pub fn verify(&self, digest: &u64) -> Result<(), ChecksumVerificationError> {
         if self.0.contains(&Checksum(*digest)) {
             Ok(())
         } else {
@@ -60,6 +51,12 @@ impl ChecksumVerifier for Checksums {
                 expected: self.clone(),
             })
         }
+    }
+}
+
+impl fmt::Display for Checksum {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:016x}", self.0)
     }
 }
 
@@ -75,11 +72,11 @@ impl FromStr for Checksum {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let i = utils::from_str_digest(s).map_err(|err| ParseError {
+        let digest = utils::from_str_digest(s).map_err(|err| ParseError {
             input: s.to_string(),
             source: err,
         })?;
-        Ok(Self(i))
+        Ok(Self(digest))
     }
 }
 

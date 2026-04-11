@@ -17,7 +17,7 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     config::CARGO_PKG_NAME,
-    core::{ChecksumVerificationError, ChecksumVerifier, Checksums, update::UpdateTask},
+    core::{ChecksumVerificationError, Checksums, update::UpdateTask},
     log::anonymize,
     mirror::{self, DomainMirror},
     ui::create_download_progress_bar,

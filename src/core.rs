@@ -8,6 +8,6 @@ pub mod registry;
 pub mod resolver;
 pub mod update;
 
-pub use checksum::{Checksum, ChecksumVerificationError, ChecksumVerifier, Checksums, ParseError};
+pub use checksum::{Checksum, ChecksumVerificationError, Checksums, ParseError};
 pub use local::LocalMod;
 pub use mod_file::ModFile;
