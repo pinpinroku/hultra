@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr};
 
 use crate::utils;
 
@@ -65,17 +65,17 @@ impl ChecksumVerifier for Checksums {
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid checksum: could not parse the '{input}' with digits in base 16")]
-pub struct ChecksumError {
+pub struct ParseError {
     pub(crate) input: String,
     #[source]
     pub(crate) source: std::num::ParseIntError,
 }
 
-impl TryFrom<String> for Checksum {
-    type Error = ChecksumError;
+impl FromStr for Checksum {
+    type Err = ParseError;
 
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        let i = utils::from_str_digest(&s).map_err(|err| ChecksumError {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let i = utils::from_str_digest(s).map_err(|err| ParseError {
             input: s.to_string(),
             source: err,
         })?;

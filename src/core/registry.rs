@@ -1,9 +1,12 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use serde::Deserialize;
 
 use crate::core::{
-    Checksum, ChecksumError, Checksums, network::downloader::DownloadTask, update::UpdateTask,
+    Checksum, Checksums, ParseError, network::downloader::DownloadTask, update::UpdateTask,
 };
 
 /// Mod database. The key of main map is the mod name.
@@ -47,7 +50,7 @@ impl EverestUpdateYaml {
     pub fn create_download_tasks(
         mut self,
         names: HashSet<String>,
-    ) -> Result<Vec<DownloadTask>, ChecksumError> {
+    ) -> Result<Vec<DownloadTask>, ParseError> {
         names
             .into_iter()
             .filter_map(|name| {
@@ -58,19 +61,19 @@ impl EverestUpdateYaml {
             .collect()
     }
 
-    pub fn create_update_task(&mut self, name: &str) -> Option<Result<UpdateTask, ChecksumError>> {
+    pub fn create_update_task(&mut self, name: &str) -> Option<Result<UpdateTask, ParseError>> {
         self.entries.remove_entry(name).map(UpdateTask::try_from)
     }
 }
 
 impl TryFrom<(String, Entry)> for UpdateTask {
-    type Error = ChecksumError;
+    type Error = ParseError;
 
     fn try_from((name, entry): (String, Entry)) -> Result<UpdateTask, Self::Error> {
         let checksums = entry
             .checksums
             .into_iter()
-            .map(Checksum::try_from)
+            .map(|s| Checksum::from_str(&s))
             .collect::<Result<Checksums, _>>()?;
         Ok(Self {
             name,
@@ -83,13 +86,13 @@ impl TryFrom<(String, Entry)> for UpdateTask {
 }
 
 impl TryFrom<(String, Entry)> for DownloadTask {
-    type Error = ChecksumError;
+    type Error = ParseError;
 
     fn try_from((filename, entry): (String, Entry)) -> Result<Self, Self::Error> {
         let checksums = entry
             .checksums
             .into_iter()
-            .map(Checksum::try_from)
+            .map(|s| Checksum::from_str(&s))
             .collect::<Result<Checksums, _>>()?;
         Ok(Self {
             url: entry.url,

@@ -2,7 +2,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    core::{ChecksumError, network::downloader::DownloadTask, registry::EverestUpdateYaml},
+    core::{ParseError, network::downloader::DownloadTask, registry::EverestUpdateYaml},
     dependency::DependencyGraph,
 };
 
@@ -30,7 +30,7 @@ pub fn create_download_tasks(
     required_names: HashSet<String>,
     installed_names: HashSet<String>,
     registry: EverestUpdateYaml,
-) -> Result<Vec<DownloadTask>, ChecksumError> {
+) -> Result<Vec<DownloadTask>, ParseError> {
     // 5. Filter out mods that are already present locally
     let missing_names: HashSet<String> = required_names
         .into_iter()

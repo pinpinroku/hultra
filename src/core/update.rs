@@ -2,12 +2,11 @@ use std::fmt::Display;
 
 use tracing::{instrument, warn};
 
-use crate::core::ChecksumError;
 use crate::{
     cache::FileCacheDb,
     core::{
-        Checksums, LocalMod, mod_file::ModIdentityService, network::downloader::DownloadTask,
-        registry::EverestUpdateYaml,
+        Checksums, LocalMod, ParseError, mod_file::ModIdentityService,
+        network::downloader::DownloadTask, registry::EverestUpdateYaml,
     },
     service::os::LocalFileSystemService,
 };
@@ -46,7 +45,7 @@ impl UpdateScanner {
 
     /// Identifies required updates by comparing local mods with the remote registry.
     #[instrument(skip_all)]
-    pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ChecksumError> {
+    pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ParseError> {
         let mut available_mods = Vec::with_capacity(local_mods.len());
         let mut available_info = Vec::with_capacity(local_mods.len());
         let service = LocalFileSystemService;
