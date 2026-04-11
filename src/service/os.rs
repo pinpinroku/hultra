@@ -10,6 +10,7 @@ impl ModIdentityService for LocalFileSystemService {
     }
 }
 
+#[allow(dead_code)]
 pub struct MockFileSystemService;
 impl ModIdentityService for MockFileSystemService {
     fn fetch_id(&self, _path: &Path) -> io::Result<u64> {

@@ -2,10 +2,7 @@
 use std::collections::HashSet;
 
 use crate::{
-    core::{
-        network::downloader::{ChecksumError, DownloadTask},
-        registry::EverestUpdateYaml,
-    },
+    core::{ChecksumError, network::downloader::DownloadTask, registry::EverestUpdateYaml},
     dependency::DependencyGraph,
 };
 

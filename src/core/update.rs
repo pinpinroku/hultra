@@ -1,13 +1,12 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::fmt::Display;
 
 use tracing::{instrument, warn};
 
+use crate::core::ChecksumError;
 use crate::{
-    cache::CacheEntry,
+    cache::FileCacheDb,
     core::{
-        LocalMod,
-        mod_file::ModIdentityService,
-        network::downloader::{ChecksumError, ChecksumVerifier, Checksums, DownloadTask},
+        Checksums, LocalMod, mod_file::ModIdentityService, network::downloader::DownloadTask,
         registry::EverestUpdateYaml,
     },
     service::os::LocalFileSystemService,
@@ -35,13 +34,13 @@ pub struct UpdateReport {
 /// Mod scanner for update.
 pub struct UpdateScanner {
     /// Represents cache for file hash.
-    cache_db: BTreeMap<u64, CacheEntry>,
+    cache_db: FileCacheDb,
     /// Database of all mods.
     registry: EverestUpdateYaml,
 }
 
 impl UpdateScanner {
-    pub fn new(cache_db: BTreeMap<u64, CacheEntry>, registry: EverestUpdateYaml) -> Self {
+    pub fn new(cache_db: FileCacheDb, registry: EverestUpdateYaml) -> Self {
         Self { cache_db, registry }
     }
 
@@ -68,11 +67,7 @@ impl UpdateScanner {
             };
 
             // check if an update is required
-            let is_update_needed = self
-                .cache_db
-                .get(&inode)
-                .map(|entry| task.checksums.verify(entry.hash()).is_ok())
-                .unwrap_or(false);
+            let is_update_needed = !self.cache_db.is_cache_valid(&inode, &task.checksums);
 
             // extract the metadata from the remote registry if an update is required
             if is_update_needed {

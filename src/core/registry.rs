@@ -3,8 +3,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Deserialize;
 
 use crate::core::{
-    network::downloader::{Checksum, ChecksumError, Checksums, DownloadTask},
-    update::UpdateTask,
+    Checksum, ChecksumError, Checksums, network::downloader::DownloadTask, update::UpdateTask,
 };
 
 /// Mod database. The key of main map is the mod name.

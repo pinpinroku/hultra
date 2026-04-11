@@ -1,6 +1,6 @@
 //! Business logic to download mods.
+
 use std::{
-    collections::HashSet,
     path::{Path, PathBuf},
     str,
     sync::Arc,
@@ -17,7 +17,7 @@ use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     config::CARGO_PKG_NAME,
-    core::update::UpdateTask,
+    core::{ChecksumVerificationError, ChecksumVerifier, Checksums, update::UpdateTask},
     log::anonymize,
     mirror::{self, DomainMirror},
     ui::create_download_progress_bar,
@@ -41,81 +41,6 @@ impl From<UpdateTask> for DownloadTask {
             filesize: value.size,
             checksums: value.checksums,
         }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Checksums(HashSet<Checksum>);
-
-impl FromIterator<Checksum> for Checksums {
-    fn from_iter<T: IntoIterator<Item = Checksum>>(iter: T) -> Self {
-        Checksums(iter.into_iter().collect::<HashSet<Checksum>>())
-    }
-}
-
-impl std::fmt::Display for Checksums {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, checksum) in self.0.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", checksum)?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Checksum(u64);
-
-impl std::fmt::Display for Checksum {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{:016x}", self.0)
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("Hash mismatch: computed: {computed}, expected: {expected}")]
-pub struct ChecksumVerificationError {
-    computed: String,
-    expected: Checksums,
-}
-
-pub trait ChecksumVerifier {
-    fn verify(&self, target: &u64) -> Result<(), ChecksumVerificationError>;
-}
-
-impl ChecksumVerifier for Checksums {
-    /// Verifies given checksums are equal.
-    fn verify(&self, digest: &u64) -> Result<(), ChecksumVerificationError> {
-        if self.0.contains(&Checksum(*digest)) {
-            Ok(())
-        } else {
-            Err(ChecksumVerificationError {
-                computed: format!("0x{:016x}", digest),
-                expected: self.clone(),
-            })
-        }
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("invalid checksum: could not parse the '{input}' with digits in base 16")]
-pub struct ChecksumError {
-    pub(crate) input: String,
-    #[source]
-    pub(crate) source: std::num::ParseIntError,
-}
-
-impl TryFrom<String> for Checksum {
-    type Error = ChecksumError;
-
-    fn try_from(s: String) -> Result<Self, Self::Error> {
-        let i = utils::from_str_digest(&s).map_err(|err| ChecksumError {
-            input: s.to_string(),
-            source: err,
-        })?;
-        Ok(Self(i))
     }
 }
 
@@ -285,89 +210,4 @@ async fn download(
     // Finalize the download by copying across filesystem boundaries.
     tokio::fs::copy(temp_path, dest).await?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests_checksum {
-    use super::*;
-
-    #[test]
-    fn test_checksums_display() {
-        let checksums = Checksums(HashSet::from_iter(vec![Checksum(123), Checksum(0xABCDEF)]));
-
-        let display_string = checksums.to_string();
-
-        let mut parts: Vec<_> = display_string.split(',').map(|s| s.trim()).collect();
-        parts.sort();
-
-        assert_eq!(parts, vec!["0x000000000000007b", "0x0000000000abcdef"]);
-    }
-
-    #[test]
-    fn test_single_checksum_display() {
-        let checksums = Checksums(HashSet::from_iter(vec![Checksum(0x123)]));
-        assert_eq!(checksums.to_string(), "0x0000000000000123");
-    }
-
-    #[test]
-    fn test_empty_checksums_display() {
-        let checksums = Checksums(HashSet::new());
-        assert_eq!(checksums.to_string(), "");
-    }
-
-    #[test]
-    fn test_checksums_deduplication() {
-        let raw = vec![Checksum(0xA), Checksum(0xB), Checksum(0xA)];
-        let checksums: Checksums = raw.into_iter().collect();
-        assert_eq!(checksums.0.len(), 2);
-    }
-
-    #[test]
-    fn test_checksum_try_from_invalid_string() {
-        let invalid = "not_a_hex_string".to_string();
-        let result = Checksum::try_from(invalid);
-        assert!(result.is_err());
-    }
-}
-
-#[cfg(test)]
-mod tests_checksum_verification {
-    use super::*;
-
-    fn setup_checksums(values: Vec<u64>) -> Checksums {
-        Checksums(values.into_iter().map(Checksum).collect())
-    }
-
-    #[test]
-    fn test_verify_success() {
-        let checksums = setup_checksums(vec![0x123, 0xABC]);
-
-        assert!(checksums.verify(&0x123).is_ok());
-        assert!(checksums.verify(&0xABC).is_ok());
-    }
-
-    #[test]
-    fn test_verify_mismatch() {
-        let checksums = setup_checksums(vec![0x111]);
-        let computed_val = 0x222;
-
-        let result = checksums.verify(&computed_val);
-
-        assert!(result.is_err());
-
-        if let Err(e) = result {
-            assert_eq!(e.computed, "0x0000000000000222");
-            assert!(e.expected.0.contains(&Checksum(0x111)));
-
-            let err_msg = e.to_string();
-            assert!(err_msg.contains("computed: 0x0000000000000222"));
-            assert!(err_msg.contains("expected: 0x0000000000000111"));
-        }
-    }
-
-    #[test]
-    fn test_verify_empty() {
-        let checksums = setup_checksums(vec![]);
-        assert!(checksums.verify(&0x123).is_err());
-    }
 }
