@@ -1,16 +1,8 @@
-//! Dependency graph to resolve dependency efficiently.
+//! Domain model of dependency graph to resolve missing dependency of mods.
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use serde::Deserialize;
 use tracing::{debug, instrument, warn};
-
-/// Each entry of the `mod_dependency_graph.yaml`.
-#[derive(Debug, Default, Deserialize)]
-struct DependencyNode {
-    /// List of dependencies.
-    #[serde(rename = "Dependencies")]
-    dependencies: Vec<Dependency>,
-}
 
 /// Represents `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
@@ -21,8 +13,6 @@ pub struct DependencyGraph {
 }
 
 impl DependencyGraph {
-    // TODO implement resolve() here, instead of resolver.rs
-
     /// Traverses the dependency graph using BFS from multiple starting mods.
     ///
     /// # Returns
@@ -64,6 +54,14 @@ impl DependencyGraph {
     fn get_node_by_key(&self, key: &str) -> Option<&DependencyNode> {
         self.nodes.get(key)
     }
+}
+
+/// Each entry of the `mod_dependency_graph.yaml`.
+#[derive(Debug, Default, Deserialize)]
+struct DependencyNode {
+    /// List of dependencies.
+    #[serde(rename = "Dependencies")]
+    dependencies: Vec<Dependency>,
 }
 
 /// Dependency of the mod.
