@@ -8,16 +8,29 @@ use reqwest::{
 use tracing::{debug, instrument};
 use url::Url;
 
-use crate::everest::build::EverestBuild;
+use crate::{commands::everest::network::NetworkOption, everest::build::EverestBuild};
+
+pub async fn fetch(client: Client, opts: &NetworkOption) -> anyhow::Result<Vec<EverestBuild>> {
+    let pb = ProgressBar::new_spinner();
+    pb.enable_steady_tick(Duration::from_millis(120));
+    pb.set_message("Fetching database...");
+
+    let fetcher = EverestApiClient::new(client);
+    let endpoint = fetcher.get_url(opts.use_api_mirror).await?;
+    let builds = fetcher.fetch_update_list(endpoint).await?;
+
+    pb.finish_and_clear();
+    Ok(builds)
+}
 
 /// API client for Everest.
 #[derive(Debug, Clone)]
-pub struct EverestApiClient {
+struct EverestApiClient {
     client: Client,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+enum Error {
     #[error("failed to fetch database of Everest builds")]
     Network(#[from] reqwest::Error),
     #[error("failed to parse string as valid URL of Everest API")]
@@ -33,18 +46,6 @@ impl EverestApiClient {
 
     pub fn new(client: Client) -> Self {
         Self { client }
-    }
-
-    pub async fn fetch_database(&self, is_mirror: bool) -> Result<Vec<EverestBuild>, Error> {
-        let pb = ProgressBar::new_spinner();
-        pb.enable_steady_tick(Duration::from_millis(120));
-        pb.set_message("Fetching database...");
-
-        let endpoint = self.get_url(is_mirror).await?;
-        let builds = self.fetch_update_list(endpoint).await?;
-
-        pb.finish_and_clear();
-        Ok(builds)
     }
 
     /// Returns API endpoint.

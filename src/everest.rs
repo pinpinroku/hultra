@@ -1,4 +1,4 @@
-pub mod api;
+mod api;
 pub mod build;
 mod downloader;
 mod error;
@@ -7,6 +7,7 @@ pub mod version;
 
 use std::str::FromStr;
 
+pub use api::fetch;
 pub use downloader::download;
 pub use installer::install;
 use reqwest::Client;

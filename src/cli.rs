@@ -10,7 +10,7 @@ use crate::{
         install::InstallArgs,
     },
     config::AppConfig,
-    everest::{EverestHttpClient, api::EverestApiClient},
+    everest::{self, EverestHttpClient},
 };
 
 /// Command line interface.
@@ -56,8 +56,7 @@ pub async fn dispatch(args: Cli, config: AppConfig) -> anyhow::Result<()> {
             EverestSubCommand::NetworkRequired(action) => {
                 let option = action.network_option();
                 let shared_client = EverestHttpClient::new()?;
-                let api_client = EverestApiClient::new(shared_client.inner.clone());
-                let builds = api_client.fetch_database(option.use_api_mirror).await?;
+                let builds = everest::fetch(shared_client.inner.clone(), option).await?;
 
                 match action {
                     NetworkCommand::List(args) => {
