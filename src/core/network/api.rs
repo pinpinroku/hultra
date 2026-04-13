@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use tracing::instrument;
 
-use crate::{core::registry::EverestUpdateYaml, dependency::DependencyGraph};
+use crate::{
+    commands::DownloadOption, core::registry::EverestUpdateYaml, dependency::DependencyGraph,
+};
 
 /// Client for API.
 #[derive(Debug, Clone)]
@@ -20,9 +22,9 @@ pub enum ApiSource {
     Mirror,
 }
 
-impl From<bool> for ApiSource {
-    fn from(is_mirror: bool) -> Self {
-        if is_mirror {
+impl From<&DownloadOption> for ApiSource {
+    fn from(value: &DownloadOption) -> Self {
+        if value.use_api_mirror {
             Self::Mirror
         } else {
             Self::Primary

@@ -95,7 +95,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .collect();
 
     let api_client = ApiClient::new(client.clone());
-    let source = ApiSource::from(args.option.use_api_mirror);
+    let source = ApiSource::from(&args.option);
 
     info!("fetching database");
     let spinner = create_spinner();

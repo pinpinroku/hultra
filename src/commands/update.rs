@@ -51,7 +51,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
         .unwrap_or_default();
 
     let fetcher = ApiClient::new(client.clone());
-    let source = ApiSource::from(args.use_api_mirror);
+    let source = ApiSource::from(&args);
 
     let spinner = create_spinner();
     let registry = fetcher.fetch_everest_update_yaml(source).await?;
