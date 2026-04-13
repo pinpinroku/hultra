@@ -3,6 +3,8 @@
 //! All of the command arguments are defined in this module.
 //! Each modules have `run(args: Args)` function for CLI output.
 //! Actual business logic like `install`, or `update` are defined in the upper modules (src/lib.rs, or core/network/download.rs).
+use std::collections::HashSet;
+
 use clap::{Args, ValueEnum};
 use tracing::warn;
 
@@ -92,10 +94,13 @@ impl Mirrors {
     pub fn resolve(&self, url: &str) -> Vec<String> {
         let Some(gbid) = url.strip_prefix("https://gamebanana.com/mmdl/") else {
             warn!("failed to extract Gamebanana ID from '{}'", url);
-            return Vec::new();
+            return vec![url.to_string()];
         };
+        // NOTE retains order while removing duplicates
+        let mut seen = HashSet::new();
         self.0
             .iter()
+            .filter(|x| seen.insert(*x))
             .map(|mirror| mirror.url_for_id(gbid))
             .collect()
     }
@@ -106,11 +111,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_generate() {
+    fn test_resolve() {
         let url = "https://gamebanana.com/mmdl/1298450";
         let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Gb, Mirror::Jade]);
         let result = mirrors.resolve(url);
         assert_eq!(result.len(), 3, "should return three URLs");
+        assert_eq!(
+            result.first().unwrap(),
+            &"https://banana-mirror-mods.celestemods.com/1298450.zip".to_string()
+        )
+    }
+
+    #[test]
+    fn test_resolve_duplicate_entries() {
+        let url = "https://gamebanana.com/mmdl/1298450";
+        let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Otobot, Mirror::Jade]);
+        let result = mirrors.resolve(url);
+        assert_eq!(result.len(), 2, "should return only two URLs");
         assert_eq!(
             result.first().unwrap(),
             &"https://banana-mirror-mods.celestemods.com/1298450.zip".to_string()
