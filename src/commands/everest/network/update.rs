@@ -2,14 +2,12 @@ use anyhow::Context;
 use tracing::debug;
 
 use crate::{
-    commands::everest::fetch_installed_version,
     config::AppConfig,
-    core::everest::{
-        EverestBuild, EverestBuildExt,
-        network::{
-            self, EverestHttpClient,
-            downloader::{DownloadTask, EverestDownloader},
-        },
+    everest::EverestHttpClient,
+    everest::{
+        self,
+        build::{EverestBuild, EverestBuildExt},
+        fetch_installed_version,
     },
     service::fs::FileVersionRepository,
 };
@@ -19,6 +17,7 @@ pub async fn run(
     builds: &[EverestBuild],
     client: &EverestHttpClient,
 ) -> anyhow::Result<()> {
+    // Check if update is available
     let repo = FileVersionRepository::new(config);
     let current_v = fetch_installed_version(&repo)?.value();
     let current_b = builds
@@ -36,12 +35,13 @@ pub async fn run(
         return Ok(());
     }
 
-    let downloader = EverestDownloader::new(client.inner.clone(), config.root_dir());
-    let task = DownloadTask::from(target_build);
+    // Download Everest
+    everest::download(client.inner.clone(), target_build, config).await?;
 
-    network::install(&downloader, &task).await?;
+    // Install Everest
+    everest::install(config.root_dir())?;
 
-    // update current build version
+    // Update build version
     std::fs::write(
         config.root_dir().join("update-build.txt"),
         target_build.version.to_string(),

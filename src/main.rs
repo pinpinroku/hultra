@@ -14,6 +14,7 @@ mod config;
 mod core;
 mod dependency;
 mod download;
+mod everest;
 mod log;
 mod manifest;
 mod service;

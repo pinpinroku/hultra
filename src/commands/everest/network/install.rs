@@ -3,12 +3,10 @@ use clap::Args;
 
 use crate::{
     config::AppConfig,
-    core::everest::{
-        EverestBuild, EverestBuildExt,
-        network::{
-            self, EverestHttpClient,
-            downloader::{DownloadTask, EverestDownloader},
-        },
+    everest::EverestHttpClient,
+    everest::{
+        self,
+        build::{EverestBuild, EverestBuildExt},
     },
 };
 
@@ -32,10 +30,16 @@ pub async fn run(
         .get_build_for_version(args.version)
         .context("Specified version is not available")?;
 
-    let downloader = EverestDownloader::new(client.inner.clone(), config.root_dir());
+    // Download Everest
+    everest::download(client.inner.clone(), target_build, config).await?;
 
-    let task = DownloadTask::from(target_build);
+    // Install Everest
+    everest::install(config.root_dir())?;
 
-    network::install(&downloader, &task).await?;
+    // Cache build version
+    std::fs::write(
+        config.root_dir().join("update-build.txt"),
+        target_build.version.to_string(),
+    )?;
     Ok(())
 }

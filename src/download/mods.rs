@@ -1,28 +1,25 @@
 //! Business logic to download mods.
+//! TODO move this to core/network/downloader
 use std::{path::Path, sync::Arc, time::Duration};
 
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar};
 use reqwest::Client;
 use tempfile::{self, Builder, NamedTempFile};
-use tokio::{
-    io::AsyncWriteExt,
-    sync::{AcquireError, Semaphore},
-    task::JoinSet,
-};
-use tracing::{error, instrument};
+use tokio::{io::AsyncWriteExt, sync::Semaphore, task::JoinSet};
+use tracing::instrument;
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
     commands::{DownloadOption, Mirrors},
     config::CARGO_PKG_NAME,
-    core::{ChecksumVerificationError, Checksums, update::UpdateTask},
+    download::{DownloadError, DownloadFile},
     log::anonymize,
     ui::create_download_progress_bar,
     utils,
 };
 
-// public function to handle downloading multiple files concurrently.
+/// Downloads multiple files concurrently.
 pub async fn download_all(
     downloader: Arc<ModDownloader>,
     items: Vec<DownloadFile>,
@@ -46,35 +43,36 @@ pub async fn download_all(
     }
 
     while let Some(result) = set.join_next().await {
-        match result {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => error!("{:?}", e),
-            Err(e) => error!(?e, "failed to complete task, canceled or pacnicked"),
-        }
+        result??
     }
     Ok(())
 }
 
-/// Metadata of target mod to be downloaded.
-#[derive(Debug, Clone)]
-pub struct DownloadFile {
-    // NOTE this is called file since we will keep it in the disk
-    pub url: String, // TODO define DownloadUrl to validate the value
-    /// A name of the target. Just a stem instead of full path. FileStem
-    pub filename: String, // TODO sanitize when convert from (String, Entry)
-    pub filesize: u64, // this is for the progress bar
-    pub checksums: Checksums,
-}
+/// Retry downloading a file for given mirror urls until success or all mirrors are exhausted.
+async fn download_with_fallbacks(
+    client: &ModDownloader,
+    item: &DownloadFile,
+    dest: &Path,
+    pb: &ProgressBar,
+) -> Result<(), DownloadError> {
+    let mut errors = Vec::new();
 
-impl From<UpdateTask> for DownloadFile {
-    fn from(value: UpdateTask) -> Self {
-        Self {
-            url: value.url,
-            filename: value.name,
-            filesize: value.size,
-            checksums: value.checksums,
+    let urls = &client.mirror_priority.resolve(&item.url);
+
+    for url in urls {
+        match client.download(item, dest, pb).await {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                errors.push((url.clone(), e));
+                pb.reset();
+            }
         }
     }
+
+    Err(DownloadError::AllMirrorsFailedError {
+        name: item.filename.to_string(),
+        errors,
+    })
 }
 
 /// Context for downloading mods.
@@ -95,52 +93,6 @@ impl ModDownloader {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("All mirrors failed for '{name}'")]
-pub struct AllMirrorsFailedError {
-    name: String,
-    errors: Vec<(String, DownloadError)>,
-}
-
-/// Retry downloading a file for given mirror urls until success or all mirrors are exhausted.
-async fn download_with_fallbacks(
-    client: &ModDownloader,
-    item: &DownloadFile,
-    dest: &Path,
-    pb: &ProgressBar,
-) -> Result<(), AllMirrorsFailedError> {
-    let mut errors = Vec::new();
-
-    let urls = &client.mirror_priority.resolve(&item.url);
-
-    for url in urls {
-        match client.download(item, dest, pb).await {
-            Ok(_) => return Ok(()),
-            Err(e) => {
-                errors.push((url.clone(), e));
-                pb.reset();
-            }
-        }
-    }
-
-    Err(AllMirrorsFailedError {
-        name: item.filename.to_string(),
-        errors,
-    })
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum DownloadError {
-    #[error("failed to download the mod")]
-    Network(#[from] reqwest::Error),
-    #[error("failed to save the mod")]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Hash(#[from] ChecksumVerificationError),
-    #[error("failed to acquire semaphore")]
-    SemaphoreClosed(#[from] AcquireError),
-}
-
 impl ModDownloader {
     /// Downloads a file while hashing, verifying its integrity before final persistence.
     ///
@@ -149,14 +101,13 @@ impl ModDownloader {
     ///   with corrupt/partial data if verification fails.
     /// - Performs `tokio::fs::copy` instead of `tempfile::persist` because `temp_path` and `dest`
     ///   often reside on different filesystems (e.g., RAM vs. Disk).
-    #[instrument(skip_all, fields(path = %anonymize(path)))]
+    #[instrument(skip_all, fields(path = %anonymize(dest)))]
     async fn download(
         &self,
         item: &DownloadFile,
-        path: &Path,
+        dest: &Path,
         pb: &ProgressBar,
     ) -> Result<(), DownloadError> {
-        // ここでセマフォを獲得する
         let _permit = self.semaphore.acquire().await?;
 
         let response = self
@@ -196,8 +147,8 @@ impl ModDownloader {
         item.checksums.verify(&digest)?;
 
         // Finalize the download by copying across filesystem boundaries.
-        tokio::fs::copy(temp_path, path).await?;
-        pb.finish_with_message(format!("{} 🍓", item.filename)); // ここでプログレバーを処理する（完結させる）
+        tokio::fs::copy(temp_path, dest).await?;
+        pb.finish_with_message(format!("{} 🍓", item.filename));
         Ok(())
     }
 }

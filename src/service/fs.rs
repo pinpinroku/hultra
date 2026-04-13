@@ -7,8 +7,7 @@ use std::{
 use tracing::instrument;
 
 use crate::{
-    config::AppConfig,
-    core::{everest::version::InstalledVersionProvider, mod_file::ModFile},
+    config::AppConfig, core::mod_file::ModFile, everest::version::InstalledVersionProvider,
     log::anonymize,
 };
 

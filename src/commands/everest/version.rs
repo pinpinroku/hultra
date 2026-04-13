@@ -1,7 +1,6 @@
 //! Everest version command handler.
 use crate::{
-    commands::everest::fetch_installed_version, config::AppConfig,
-    service::fs::FileVersionRepository,
+    config::AppConfig, everest::fetch_installed_version, service::fs::FileVersionRepository,
 };
 
 pub fn run(config: &AppConfig) -> anyhow::Result<()> {

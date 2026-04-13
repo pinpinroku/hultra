@@ -4,10 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils;
 
-pub mod installer;
-pub mod network;
-pub mod version;
-
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct EverestBuild {

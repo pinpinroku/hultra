@@ -10,7 +10,7 @@ use crate::{
         install::InstallArgs,
     },
     config::AppConfig,
-    core::everest::network::{EverestHttpClient, api::EverestApiClient},
+    everest::{EverestHttpClient, api::EverestApiClient},
 };
 
 /// Command line interface.

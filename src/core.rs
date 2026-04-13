@@ -1,5 +1,4 @@
 pub mod checksum;
-pub mod everest;
 pub mod loader;
 pub mod local;
 pub mod mod_file;

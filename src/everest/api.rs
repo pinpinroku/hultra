@@ -8,7 +8,7 @@ use reqwest::{
 use tracing::{debug, instrument};
 use url::Url;
 
-use crate::core::everest::EverestBuild;
+use crate::everest::build::EverestBuild;
 
 /// API client for Everest.
 #[derive(Debug, Clone)]

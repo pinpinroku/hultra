@@ -2,7 +2,7 @@ use clap::Args;
 
 use super::NetworkOption;
 use crate::{
-    core::everest::{Branch, EverestBuild, EverestBuildExt},
+    everest::build::{Branch, EverestBuild, EverestBuildExt},
     utils,
 };
 
