@@ -50,7 +50,7 @@ pub async fn dispatch(args: Cli, config: AppConfig) -> anyhow::Result<()> {
     match args.commands {
         Command::List => commands::list::run(&config)?,
         Command::Install(args) => commands::install::run(&args, &config).await?,
-        Command::Update(args) => commands::update::run(&args, &config).await?,
+        Command::Update(args) => commands::update::run(args, &config).await?,
         Command::Everest(subcommand) => match subcommand {
             EverestSubCommand::Version => commands::everest::version::run(&config)?,
             EverestSubCommand::NetworkRequired(action) => {

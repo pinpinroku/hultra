@@ -16,10 +16,10 @@ use tracing::{error, instrument};
 use xxhash_rust::xxh64::Xxh64;
 
 use crate::{
+    commands::{DownloadOption, Mirrors},
     config::CARGO_PKG_NAME,
     core::{ChecksumVerificationError, Checksums, update::UpdateTask},
     log::anonymize,
-    mirror::{self, DomainMirror},
     ui::create_download_progress_bar,
     utils,
 };
@@ -50,27 +50,22 @@ pub struct ModDownloader {
     client: Client,
     semaphore: Arc<Semaphore>,
     mods_dir: PathBuf,
-    mirror_priority: Vec<DomainMirror>, // TODO create Vec<String> from DomainMirror when init this instance
+    mirror_priority: Mirrors,
 }
 
 impl ModDownloader {
-    pub fn new(
-        client: Client,
-        jobs: u8,
-        mods_dir: PathBuf,
-        mirror_priority: Vec<DomainMirror>,
-    ) -> Self {
+    pub fn new(client: Client, args: DownloadOption, mods_dir: PathBuf) -> Self {
         Self {
             client,
-            semaphore: Arc::new(Semaphore::new(jobs as usize)),
+            semaphore: Arc::new(Semaphore::new(args.jobs as usize)),
             mods_dir,
-            mirror_priority,
+            mirror_priority: args.mirror_priority,
         }
     }
 
     /// Download all mod files concurrently.
     #[instrument(skip(self))]
-    pub async fn download_all(&self, tasks: &[DownloadTask]) {
+    pub async fn download_all(&self, tasks: Vec<DownloadTask>) {
         let mut set = JoinSet::new();
         let mp = MultiProgress::new();
 
@@ -78,7 +73,7 @@ impl ModDownloader {
             let client = self.client.clone();
             let jobs = self.semaphore.clone();
 
-            let mirror_urls = mirror::generate(&task.url, &self.mirror_priority);
+            let mirror_urls = self.mirror_priority.resolve(&task.url);
 
             let name = task.filename.clone();
             let clean_name = utils::sanitize_stem(&name);

@@ -14,13 +14,12 @@ use crate::{
         },
         update,
     },
-    mirror::DomainMirror,
     service::{ModsDirectoryScanner, fs::fetch_updater_blacklist},
     ui::create_spinner,
 };
 
 /// Checks update for the mods and download the latest one if available.
-pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
+pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
     info!("updating mods");
 
     info!("loading installed mods");
@@ -76,13 +75,8 @@ pub async fn run(args: &DownloadOption, config: &AppConfig) -> anyhow::Result<()
 
     // Download updates
     info!("downloading mods");
-    let mirrors = args
-        .mirror_priority
-        .iter()
-        .map(DomainMirror::from)
-        .collect();
-    let downloader = ModDownloader::new(client.clone(), args.jobs, config.mods_dir(), mirrors);
-    downloader.download_all(&report.download_tasks).await;
+    let downloader = ModDownloader::new(client.clone(), args, config.mods_dir());
+    downloader.download_all(report.download_tasks).await;
 
     info!("updating completed");
     Ok(())

@@ -16,7 +16,6 @@ use crate::{
         },
         resolver,
     },
-    mirror::DomainMirror,
     service::ModsDirectoryScanner,
     ui::create_spinner,
 };
@@ -126,20 +125,13 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         resolver::create_download_tasks(targets, installed_names, registry)?;
 
     info!("generating mirror urls");
-    let mirrors: Vec<DomainMirror> = args
-        .option
-        .mirror_priority
-        .iter()
-        .map(DomainMirror::from)
-        .collect();
 
     // Construct download context
-    let downloader =
-        ModDownloader::new(client.clone(), args.option.jobs, config.mods_dir(), mirrors);
+    let downloader = ModDownloader::new(client.clone(), args.option.clone(), config.mods_dir());
 
     // Download all mods
     info!("downloading mods");
-    downloader.download_all(&tasks).await;
+    downloader.download_all(tasks).await;
 
     info!("installation completed");
     Ok(())
