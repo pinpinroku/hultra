@@ -32,7 +32,6 @@ pub struct DownloadOption {
     /// Comma-separated list of mirror priorities.
     #[arg(
         value_enum,
-        value_parser = clap::value_parser!(Mirror),
         short = 'p',
         long = "mirror-priority",
         value_name = "MIRROR",
@@ -42,7 +41,7 @@ pub struct DownloadOption {
         You can specify up to 4 mirrors, but providing fewer will restrict download attempts to only those mirrors.",
         default_value = "otobot,gb,jade,wegfan"
     )]
-    pub mirror_priority: Mirrors,
+    pub mirror_priority: Vec<Mirror>,
 
     /// Enables GitHub mirror for database retrieval.
     #[arg(short = 'm', long)]
@@ -80,7 +79,7 @@ impl Mirror {
 }
 
 #[derive(Debug, Clone)]
-pub struct Mirrors(Vec<Mirror>);
+pub struct Mirrors(pub Vec<Mirror>);
 
 impl Mirrors {
     /// ### Example
