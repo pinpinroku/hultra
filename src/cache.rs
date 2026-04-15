@@ -98,8 +98,6 @@ pub fn sync(config: &AppConfig) -> Result<FileCacheDb, CacheError> {
     Ok(cache)
 }
 
-// --- TODO This might be a application layer ---
-
 /// Updates cache entries based on current filesystem state.
 fn update_cache(cache: &mut FileCacheDb, mods_dir: &Path) -> io::Result<bool> {
     let mut current_keys = HashSet::new();
@@ -148,8 +146,6 @@ fn update_cache(cache: &mut FileCacheDb, mods_dir: &Path) -> io::Result<bool> {
 
     Ok(updated)
 }
-
-// --- TODO From here are the services/infrastrucure ---
 
 /// Loads cache database from disk using rkyv.
 fn load_cache_db(cache_path: &Path) -> Result<FileCacheDb, CacheError> {

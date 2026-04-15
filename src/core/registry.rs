@@ -47,11 +47,17 @@ impl EverestUpdateYaml {
     }
 
     /// Converts Entry to the context for downloads.
-    pub fn create_download_tasks(
+    pub fn into_download_tasks(
         mut self,
-        names: HashSet<String>,
+        required_names: HashSet<String>,
+        installed_names: HashSet<String>,
     ) -> Result<Vec<DownloadTask>, ParseError> {
-        names
+        let missing_names: HashSet<String> = required_names
+            .into_iter()
+            .filter(|name| !installed_names.contains(name))
+            .collect();
+
+        missing_names
             .into_iter()
             .filter_map(|name| {
                 self.entries

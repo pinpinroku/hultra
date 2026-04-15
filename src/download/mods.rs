@@ -54,11 +54,10 @@ pub async fn download_all(
 /// Metadata of target mod to be downloaded.
 #[derive(Debug, Clone)]
 pub struct DownloadFile {
-    // NOTE this is called file since we will keep it in the disk
     pub url: String, // TODO define DownloadUrl to validate the value
     /// A name of the target. Just a stem instead of full path. FileStem
     pub filename: String, // TODO sanitize when convert from (String, Entry)
-    pub filesize: u64, // this is for the progress bar
+    pub filesize: u64, // for the progress bar
     pub checksums: Checksums,
 }
 
@@ -86,7 +85,7 @@ pub enum Error {
     #[error("failed to acquire semaphore")]
     SemaphoreClosed(#[from] AcquireError),
     #[error("all mirrors failed for '{name}'")]
-    AllMirrorsFailedError {
+    AllMirrorsFailed {
         name: String,
         errors: Vec<(String, Error)>,
     },
@@ -105,7 +104,7 @@ impl ModDownloader {
         Self {
             client,
             semaphore: Arc::new(Semaphore::new(args.jobs as usize)),
-            mirror_priority: args.mirror_priority,
+            mirror_priority: Mirrors(args.mirror_priority),
         }
     }
 }
@@ -134,7 +133,7 @@ impl ModDownloader {
             }
         }
 
-        Err(Error::AllMirrorsFailedError {
+        Err(Error::AllMirrorsFailed {
             name: item.filename.to_string(),
             errors,
         })

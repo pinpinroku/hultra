@@ -120,9 +120,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     }
 
     // Convert targets into tasks
-    // TODO this method should be `downloader::create_tasks()`
-    let tasks: Vec<DownloadTask> =
-        resolver::create_download_tasks(targets, installed_names, registry)?;
+    let tasks: Vec<DownloadTask> = registry.into_download_tasks(targets, installed_names)?;
 
     info!("generating mirror urls");
 
