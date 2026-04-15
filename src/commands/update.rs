@@ -1,5 +1,4 @@
 //! Handle update command.
-use reqwest::Client;
 use tracing::info;
 
 use crate::{
@@ -9,6 +8,7 @@ use crate::{
     core::{
         loader::ModResolver,
         network::{
+            SharedHttpClient,
             api::{ApiClient, ApiSource},
             downloader,
         },
@@ -44,13 +44,10 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     info!("syncing file cache");
     let cache_db = cache::sync(config)?;
 
-    let client = Client::builder()
-        .https_only(true)
-        .gzip(true)
-        .build()
-        .unwrap_or_default();
+    // Initialize client
+    let shared_client = SharedHttpClient::new();
 
-    let fetcher = ApiClient::new(client.clone());
+    let fetcher = ApiClient::new(shared_client.inner().clone());
     let source = ApiSource::from(&args);
 
     let spinner = create_spinner();
@@ -75,7 +72,13 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
 
     // Download updates
     info!("downloading mods");
-    downloader::download_all(client, args, report.download_files, &config.mods_dir()).await?;
+    downloader::download_all(
+        shared_client.inner().clone(),
+        args,
+        report.download_files,
+        &config.mods_dir(),
+    )
+    .await?;
 
     info!("updating completed");
     Ok(())

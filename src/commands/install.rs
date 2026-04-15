@@ -2,7 +2,6 @@
 use std::{collections::HashSet, ops::Deref, str::FromStr};
 
 use clap::Args;
-use reqwest::Client;
 use tokio::try_join;
 use tracing::info;
 
@@ -11,6 +10,7 @@ use crate::{
     core::{
         loader::ModResolver,
         network::{
+            SharedHttpClient,
             api::{ApiClient, ApiSource},
             downloader::{self, DownloadFile},
         },
@@ -79,13 +79,8 @@ impl GamebananaUrl {
 pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");
 
-    // TODO should be SharedHttpClient like Everest does
     // Initialize client
-    let client = Client::builder()
-        .https_only(true)
-        .gzip(true)
-        .build()
-        .unwrap_or_default();
+    let shared_client = SharedHttpClient::new();
 
     // Parse mod page URLs to get mod IDs
     let ids: HashSet<u32> = args
@@ -94,7 +89,7 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .filter_map(|url| url.extract_id().ok())
         .collect();
 
-    let api_client = ApiClient::new(client.clone());
+    let api_client = ApiClient::new(shared_client.inner().clone());
     let source = ApiSource::from(&args.option);
 
     // TODO encapsulate the logic
@@ -125,7 +120,13 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
 
     // Download all mods
     info!("downloading mods");
-    downloader::download_all(client, args.option, tasks, &config.mods_dir()).await?;
+    downloader::download_all(
+        shared_client.inner().clone(),
+        args.option,
+        tasks,
+        &config.mods_dir(),
+    )
+    .await?;
 
     info!("installation completed");
     Ok(())
