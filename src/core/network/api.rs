@@ -3,11 +3,31 @@
 //! Fetches mod registry and dependency graph from server.
 use std::time::Duration;
 
+use reqwest::Client;
+use tokio::try_join;
 use tracing::instrument;
 
 use crate::{
     commands::DownloadOption, core::registry::EverestUpdateYaml, dependency::DependencyGraph,
+    ui::create_spinner,
 };
+
+/// Fetches registry and graph at once.
+pub async fn fetch(
+    client: Client,
+    opt: &DownloadOption,
+) -> anyhow::Result<(EverestUpdateYaml, DependencyGraph)> {
+    let api_client = ApiClient::new(client);
+    let source = ApiSource::from(opt);
+
+    let spinner = create_spinner();
+    let (registry, graph) = try_join!(
+        api_client.fetch_everest_update_yaml(source),
+        api_client.fetch_graph(source)
+    )?;
+    spinner.finish_and_clear();
+    Ok((registry, graph))
+}
 
 /// Client for API.
 #[derive(Debug, Clone)]

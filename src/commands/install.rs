@@ -2,7 +2,6 @@
 use std::{collections::HashSet, ops::Deref, str::FromStr};
 
 use clap::Args;
-use tokio::try_join;
 use tracing::info;
 
 use crate::{
@@ -10,14 +9,12 @@ use crate::{
     core::{
         loader::ModResolver,
         network::{
-            SharedHttpClient,
-            api::{ApiClient, ApiSource},
+            SharedHttpClient, api,
             downloader::{self, DownloadFile},
         },
         resolver,
     },
     service::ModsDirectoryScanner,
-    ui::create_spinner,
 };
 
 use super::DownloadOption;
@@ -89,17 +86,8 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .filter_map(|url| url.extract_id().ok())
         .collect();
 
-    let api_client = ApiClient::new(shared_client.inner().clone());
-    let source = ApiSource::from(&args.option);
-
-    // TODO encapsulate the logic
-    info!("fetching database");
-    let spinner = create_spinner();
-    let (registry, graph) = try_join!(
-        api_client.fetch_everest_update_yaml(source),
-        api_client.fetch_graph(source)
-    )?;
-    spinner.finish_and_clear();
+    info!("fetching databases...");
+    let (registry, graph) = api::fetch(shared_client.inner().clone(), &args.option).await?;
 
     info!("extracting installed mod names");
     let files = ModsDirectoryScanner::scan(&config.mods_dir())?;
