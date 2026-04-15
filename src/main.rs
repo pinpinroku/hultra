@@ -36,5 +36,5 @@ async fn main() -> anyhow::Result<()> {
 
     let config = AppConfig::new(args.directory.as_deref())?;
 
-    cli::dispatch(args, config).await
+    cli::dispatch(args.commands, config).await
 }

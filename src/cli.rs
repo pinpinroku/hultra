@@ -46,8 +46,8 @@ pub enum Command {
     Everest(EverestSubCommand),
 }
 
-pub async fn dispatch(args: Cli, config: AppConfig) -> anyhow::Result<()> {
-    match args.commands {
+pub async fn dispatch(cmd: Command, config: AppConfig) -> anyhow::Result<()> {
+    match cmd {
         Command::List => commands::list::run(&config)?,
         Command::Install(args) => commands::install::run(args, &config).await?,
         Command::Update(args) => commands::update::run(args, &config).await?,
