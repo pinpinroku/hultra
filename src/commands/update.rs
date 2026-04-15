@@ -10,7 +10,7 @@ use crate::{
         loader::ModResolver,
         network::{
             api::{ApiClient, ApiSource},
-            downloader::ModDownloader,
+            downloader,
         },
         update,
     },
@@ -75,8 +75,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
 
     // Download updates
     info!("downloading mods");
-    let downloader = ModDownloader::new(client.clone(), args, config.mods_dir());
-    downloader.download_all(report.download_tasks).await;
+    downloader::download_all(client, args, report.download_files, &config.mods_dir()).await?;
 
     info!("updating completed");
     Ok(())

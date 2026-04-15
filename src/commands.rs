@@ -6,7 +6,8 @@
 use std::collections::HashSet;
 
 use clap::{Args, ValueEnum};
-use tracing::warn;
+
+use crate::core::network::downloader::DownloadUrl;
 
 pub mod everest;
 pub mod install;
@@ -55,7 +56,7 @@ pub enum Mirror {
 
 impl Mirror {
     /// Generates the full mirror URL for a given GameBanana ID.
-    fn url_for_id(&self, gbid: &str) -> String {
+    fn url_for_id(&self, gbid: u32) -> String {
         match *self {
             Mirror::Gb => {
                 format!("https://gamebanana.com/mmdl/{}", gbid)
@@ -91,7 +92,7 @@ impl From<Vec<Mirror>> for Mirrors {
 }
 
 impl Mirrors {
-    /// Converts Mirrors into URLs.
+    /// Resolves Mirrors into actual list of mirror URLs.
     ///
     /// ### Example
     ///
@@ -102,31 +103,29 @@ impl Mirrors {
     ///     println!("URL: {}", url)
     /// }
     /// ```
-    pub fn resolve(&self, url: &str) -> Vec<String> {
-        let Some(gbid) = url.strip_prefix("https://gamebanana.com/mmdl/") else {
-            warn!("failed to extract Gamebanana ID from '{}'", url);
-            return vec![url.to_string()];
-        };
-
+    pub fn resolve(&self, url: &DownloadUrl) -> Vec<String> {
         // NOTE retains order while removing duplicates
         let mut seen = HashSet::new();
         self.0
             .iter()
             .filter(|x| seen.insert(*x))
-            .map(|mirror| mirror.url_for_id(gbid))
+            .map(|mirror| mirror.url_for_id(url.gbid()))
             .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     #[test]
     fn test_resolve() {
-        let url = "https://gamebanana.com/mmdl/1298450";
+        let url = DownloadUrl::from_str("https://gamebanana.com/mmdl/1298450")
+            .expect("should be parsed as this type");
         let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Gb, Mirror::Jade]);
-        let result = mirrors.resolve(url);
+        let result = mirrors.resolve(&url);
         assert_eq!(result.len(), 3, "should return three URLs");
         assert_eq!(
             result.first().unwrap(),
@@ -136,25 +135,14 @@ mod tests {
 
     #[test]
     fn test_resolve_duplicate_entries() {
-        let url = "https://gamebanana.com/mmdl/1298450";
+        let url = DownloadUrl::from_str("https://gamebanana.com/mmdl/1298450")
+            .expect("should be parsed as this type");
         let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Otobot, Mirror::Jade]);
-        let result = mirrors.resolve(url);
+        let result = mirrors.resolve(&url);
         assert_eq!(result.len(), 2, "should return only two URLs");
         assert_eq!(
             result.first().unwrap(),
             &"https://banana-mirror-mods.celestemods.com/1298450.zip".to_string()
-        )
-    }
-
-    #[test]
-    fn test_resolve_fallback() {
-        let url = "https://gamebanana.com/mmdl/some_mod";
-        let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Otobot, Mirror::Jade]);
-        let result = mirrors.resolve(url);
-        assert_eq!(result.len(), 1, "should return original URL");
-        assert_eq!(
-            result.first().unwrap(),
-            &"https://gamebanana.com/mmdl/some_mod".to_string()
         )
     }
 }

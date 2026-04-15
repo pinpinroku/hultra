@@ -12,7 +12,7 @@ use crate::{
         loader::ModResolver,
         network::{
             api::{ApiClient, ApiSource},
-            downloader::{DownloadTask, ModDownloader},
+            downloader::{self, DownloadFile},
         },
         resolver,
     },
@@ -76,9 +76,10 @@ impl GamebananaUrl {
     }
 }
 
-pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
+pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     info!("installing mods");
 
+    // TODO should be SharedHttpClient like Everest does
     // Initialize client
     let client = Client::builder()
         .https_only(true)
@@ -96,6 +97,7 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     let api_client = ApiClient::new(client.clone());
     let source = ApiSource::from(&args.option);
 
+    // TODO encapsulate the logic
     info!("fetching database");
     let spinner = create_spinner();
     let (registry, graph) = try_join!(
@@ -119,16 +121,11 @@ pub async fn run(args: &InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     }
 
     // Convert targets into tasks
-    let tasks: Vec<DownloadTask> = registry.into_download_tasks(targets, installed_names)?;
-
-    info!("generating mirror urls");
-
-    // Construct download context
-    let downloader = ModDownloader::new(client.clone(), args.option.clone(), config.mods_dir());
+    let tasks: Vec<DownloadFile> = registry.into_download_files(targets, installed_names)?;
 
     // Download all mods
     info!("downloading mods");
-    downloader.download_all(tasks).await;
+    downloader::download_all(client, args.option, tasks, &config.mods_dir()).await?;
 
     info!("installation completed");
     Ok(())

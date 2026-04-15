@@ -5,8 +5,9 @@ use std::{
 
 use serde::Deserialize;
 
-use crate::core::{
-    Checksum, Checksums, ParseError, network::downloader::DownloadTask, update::UpdateTask,
+use crate::{
+    core::network::downloader::{DownloadFile, ParseDownloadFileError},
+    core::{Checksum, Checksums, ParseChecksumError, update::UpdateTask},
 };
 
 /// Mod database. The key of main map is the mod name.
@@ -18,7 +19,7 @@ pub struct EverestUpdateYaml {
 
 /// Metadata of the mod.
 #[derive(Debug, Clone, Default, Deserialize)]
-struct Entry {
+pub struct Entry {
     /// This is a group ID of the map. It is unique but shared with assets.
     #[serde(rename = "GameBananaId")]
     id: u32,
@@ -36,8 +37,23 @@ struct Entry {
     checksums: Vec<String>,
 }
 
+impl Entry {
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+    pub fn checksums(&self) -> &[String] {
+        &self.checksums
+    }
+}
+
 impl EverestUpdateYaml {
-    // Lenear search. `O(n)`
+    /// Returns names corresponding to the given IDs using a linear search.
+    ///
+    /// Note: While this has O(n) complexity, it is more performant than
+    /// building an inverted index for the expected workload.
     pub fn get_names_by_ids(&self, ids: &HashSet<u32>) -> HashSet<String> {
         self.entries
             .iter()
@@ -46,12 +62,12 @@ impl EverestUpdateYaml {
             .collect()
     }
 
-    /// Converts Entry to the context for downloads.
-    pub fn into_download_tasks(
+    /// Converts Entry to the items for downloads.
+    pub fn into_download_files(
         mut self,
         required_names: HashSet<String>,
         installed_names: HashSet<String>,
-    ) -> Result<Vec<DownloadTask>, ParseError> {
+    ) -> Result<Vec<DownloadFile>, ParseDownloadFileError> {
         let missing_names: HashSet<String> = required_names
             .into_iter()
             .filter(|name| !installed_names.contains(name))
@@ -62,18 +78,21 @@ impl EverestUpdateYaml {
             .filter_map(|name| {
                 self.entries
                     .remove(&name)
-                    .map(|entry| DownloadTask::try_from((name, entry)))
+                    .map(|entry| DownloadFile::try_from((name, entry)))
             })
             .collect()
     }
 
-    pub fn create_update_task(&mut self, name: &str) -> Option<Result<UpdateTask, ParseError>> {
+    pub fn create_update_task(
+        &mut self,
+        name: &str,
+    ) -> Option<Result<UpdateTask, ParseChecksumError>> {
         self.entries.remove_entry(name).map(UpdateTask::try_from)
     }
 }
 
 impl TryFrom<(String, Entry)> for UpdateTask {
-    type Error = ParseError;
+    type Error = ParseChecksumError;
 
     fn try_from((name, entry): (String, Entry)) -> Result<UpdateTask, Self::Error> {
         let checksums = entry
@@ -86,24 +105,6 @@ impl TryFrom<(String, Entry)> for UpdateTask {
             version: entry.version,
             url: entry.url,
             size: entry.file_size,
-            checksums,
-        })
-    }
-}
-
-impl TryFrom<(String, Entry)> for DownloadTask {
-    type Error = ParseError;
-
-    fn try_from((filename, entry): (String, Entry)) -> Result<Self, Self::Error> {
-        let checksums = entry
-            .checksums
-            .into_iter()
-            .map(|s| Checksum::from_str(&s))
-            .collect::<Result<Checksums, _>>()?;
-        Ok(Self {
-            url: entry.url,
-            filename,
-            filesize: entry.file_size,
             checksums,
         })
     }

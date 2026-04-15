@@ -5,18 +5,20 @@ use tracing::{instrument, warn};
 use crate::{
     cache::FileCacheDb,
     core::{
-        Checksums, LocalMod, ParseError, mod_file::ModIdentityService,
-        network::downloader::DownloadTask, registry::EverestUpdateYaml,
+        Checksums, LocalMod,
+        mod_file::ModIdentityService,
+        network::downloader::{DownloadFile, ParseDownloadFileError},
+        registry::EverestUpdateYaml,
     },
     service::os::LocalFileSystemService,
 };
 
 pub struct UpdateTask {
-    /// Key of HashMap
-    pub name: String, // used for UpdateInfo
+    pub version: String, // Used for UpdateInfo
 
-    /// Used for DownloadTask
-    pub version: String,
+    // Used for DownloadFile
+    /// Key of HashMap
+    pub name: String,
     pub url: String,
     pub size: u64,
     pub checksums: Checksums,
@@ -24,8 +26,8 @@ pub struct UpdateTask {
 
 /// Result of scanning mods for update.
 pub struct UpdateReport {
-    /// Tasks to download mods.
-    pub download_tasks: Vec<DownloadTask>,
+    /// Files to download.
+    pub download_files: Vec<DownloadFile>,
     /// A list of mod information to display.
     pub updates: Vec<UpdateInfo>,
 }
@@ -45,7 +47,7 @@ impl UpdateScanner {
 
     /// Identifies required updates by comparing local mods with the remote registry.
     #[instrument(skip_all)]
-    pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ParseError> {
+    pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ParseDownloadFileError> {
         let mut available_mods = Vec::with_capacity(local_mods.len());
         let mut available_info = Vec::with_capacity(local_mods.len());
         let service = LocalFileSystemService;
@@ -71,7 +73,7 @@ impl UpdateScanner {
             // extract the metadata from the remote registry if an update is required
             if is_update_needed {
                 let update_info = UpdateInfo::new(&task.name, local_mod.version(), &task.version);
-                let download_task = DownloadTask::from(task);
+                let download_task = DownloadFile::try_from(task)?;
 
                 available_info.push(update_info);
                 available_mods.push(download_task);
@@ -79,7 +81,7 @@ impl UpdateScanner {
         }
 
         Ok(UpdateReport {
-            download_tasks: available_mods,
+            download_files: available_mods,
             updates: available_info,
         })
     }
