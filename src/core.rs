@@ -4,7 +4,6 @@ pub mod local;
 pub mod mod_file;
 pub mod network;
 pub mod registry;
-pub mod resolver;
 pub mod update;
 
 pub use checksum::{Checksum, ChecksumVerificationError, Checksums, ParseChecksumError};

@@ -8,11 +8,7 @@ use crate::{
     config::AppConfig,
     core::{
         loader::ModResolver,
-        network::{
-            SharedHttpClient, api,
-            downloader::{self, DownloadFile},
-        },
-        resolver,
+        network::{SharedHttpClient, api, downloader},
     },
     service::ModsDirectoryScanner,
 };
@@ -95,8 +91,7 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
 
     // Resolve missing deps
     info!("resolving missing dependencies");
-    // TODO this method should be `graph::traverse()`
-    let targets = resolver::resolve_missing_mods(&ids, &registry, &graph, &installed_names);
+    let targets = graph.resolve_missing_mods(&ids, &registry, &installed_names);
 
     if targets.is_empty() {
         println!("You have already installed the mod and its dependencies");
@@ -104,7 +99,7 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     }
 
     // Convert targets into tasks
-    let tasks: Vec<DownloadFile> = registry.into_download_files(targets, installed_names)?;
+    let tasks = registry.into_download_files(targets, installed_names)?;
 
     // Download all mods
     info!("downloading mods");

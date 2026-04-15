@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use serde::Deserialize;
 use tracing::{debug, instrument, warn};
 
+use crate::core::registry::EverestUpdateYaml;
+
 /// Represents `mod_dependency_graph.yaml`.
 #[derive(Debug, Default, Deserialize)]
 #[serde(transparent)]
@@ -13,6 +15,31 @@ pub struct DependencyGraph {
 }
 
 impl DependencyGraph {
+    /// Resolves which mods need to be downloaded by checking the target IDs against
+    /// the registry and filtering out already installed mods, including dependencies.
+    ///
+    /// This implementation assumes that if the target mods are already installed,
+    /// all of their dependencies are also guaranteed to be installed.
+    pub fn resolve_missing_mods(
+        &self,
+        target_ids: &HashSet<u32>,
+        registry: &EverestUpdateYaml,
+        installed_names: &HashSet<String>,
+    ) -> HashSet<String> {
+        // 1. Retrieve mod names associated with the provided IDs
+        let target_names = registry.get_names_by_ids(target_ids);
+
+        // 2. Check if all target mods are already installed.
+        // If they are, we assume dependencies are already satisfied.
+        if installed_names.is_superset(&target_names) {
+            return HashSet::new();
+        }
+
+        // 3. Traverse the dependency graph to list all required mods (BFS)
+        // This is only executed if at least one target or its dependency is missing.
+        self.bfs_traversal(target_names)
+    }
+
     /// Traverses the dependency graph using BFS from multiple starting mods.
     ///
     /// # Returns
@@ -21,7 +48,7 @@ impl DependencyGraph {
     /// - The starting mods themselves
     /// - All direct and transitive dependencies
     #[instrument(skip(self))]
-    pub fn bfs_traversal(&self, start_mods: HashSet<String>) -> HashSet<String> {
+    fn bfs_traversal(&self, start_mods: HashSet<String>) -> HashSet<String> {
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
 
