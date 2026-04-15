@@ -28,7 +28,6 @@ pub struct InstallArgs {
     #[arg(required = true, num_args = 1..20)]
     pub urls: Vec<GamebananaUrl>,
 
-    /// Options specific to downloading.
     #[command(flatten)]
     pub option: DownloadOption,
 }

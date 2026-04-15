@@ -13,20 +13,7 @@ pub mod install;
 pub mod list;
 pub mod update;
 
-/// Supported mirrors.
-#[derive(Debug, Clone, PartialEq, Eq, ValueEnum, Hash)]
-#[value(rename_all = "lower")]
-pub enum Mirror {
-    /// Default GameBanana Server (United States). US
-    Gb,
-    /// Germany. DE
-    Jade,
-    /// China. CN
-    Wegfan,
-    /// North America. NA
-    Otobot,
-}
-
+/// Options specific to downloading.
 #[derive(Debug, Clone, Args)]
 pub struct DownloadOption {
     /// Comma-separated list of mirror priorities.
@@ -50,6 +37,20 @@ pub struct DownloadOption {
     /// Maximum number of concurrent downloads [range: 1-6]
     #[arg(short, long, default_value_t = 4, value_parser = clap::value_parser!(u8).range(1..=6))]
     pub jobs: u8,
+}
+
+/// Supported mirrors.
+#[derive(Debug, Clone, PartialEq, Eq, ValueEnum, Hash)]
+#[value(rename_all = "lower")]
+pub enum Mirror {
+    /// Default GameBanana Server (United States).
+    Gb,
+    /// Germany.
+    Jade,
+    /// China.
+    Wegfan,
+    /// North America.
+    Otobot,
 }
 
 impl Mirror {
@@ -78,16 +79,27 @@ impl Mirror {
     }
 }
 
+/// Represents mirror priority.
 #[derive(Debug, Clone)]
-pub struct Mirrors(pub Vec<Mirror>);
+pub struct Mirrors(Vec<Mirror>);
+
+impl From<Vec<Mirror>> for Mirrors {
+    /// Converts to this type from user input.
+    fn from(value: Vec<Mirror>) -> Self {
+        Self(value)
+    }
+}
 
 impl Mirrors {
+    /// Converts Mirrors into URLs.
+    ///
     /// ### Example
+    ///
     /// ```
-    /// let mirrors = vec![Mirror::Gb, Mirror::Jade];
+    /// let mirrors = vec![Mirror::Gb, Mirror::Jade, Mirror::Wegfan];
     /// let urls = mirrors.resolve("https://gamebanan.com/mmdl/123456");
     /// for url in urls {
-    ///     println!("{}", url)
+    ///     println!("URL: {}", url)
     /// }
     /// ```
     pub fn resolve(&self, url: &str) -> Vec<String> {
@@ -95,6 +107,7 @@ impl Mirrors {
             warn!("failed to extract Gamebanana ID from '{}'", url);
             return vec![url.to_string()];
         };
+
         // NOTE retains order while removing duplicates
         let mut seen = HashSet::new();
         self.0
@@ -130,6 +143,18 @@ mod tests {
         assert_eq!(
             result.first().unwrap(),
             &"https://banana-mirror-mods.celestemods.com/1298450.zip".to_string()
+        )
+    }
+
+    #[test]
+    fn test_resolve_fallback() {
+        let url = "https://gamebanana.com/mmdl/some_mod";
+        let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Otobot, Mirror::Jade]);
+        let result = mirrors.resolve(url);
+        assert_eq!(result.len(), 1, "should return original URL");
+        assert_eq!(
+            result.first().unwrap(),
+            &"https://gamebanana.com/mmdl/some_mod".to_string()
         )
     }
 }

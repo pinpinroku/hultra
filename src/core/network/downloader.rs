@@ -59,7 +59,7 @@ impl ModDownloader {
             client,
             semaphore: Arc::new(Semaphore::new(args.jobs as usize)),
             mods_dir,
-            mirror_priority: Mirrors(args.mirror_priority),
+            mirror_priority: Mirrors::from(args.mirror_priority),
         }
     }
 
