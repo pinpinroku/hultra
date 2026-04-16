@@ -55,7 +55,7 @@ pub struct FileVersionRepository {
 
 impl FileVersionRepository {
     pub fn new(config: &AppConfig) -> Self {
-        let path = config.root_dir().join("update-build.txt");
+        let path = config.update_build_path();
         Self { path }
     }
 }

@@ -38,7 +38,7 @@ pub async fn run(
 
     // Cache build version
     std::fs::write(
-        config.root_dir().join("update-build.txt"),
+        config.update_build_path(),
         target_build.version.to_string(),
     )?;
     Ok(())

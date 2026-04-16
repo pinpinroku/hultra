@@ -59,6 +59,11 @@ impl AppConfig {
         self.root_dir.join("Mods")
     }
 
+    /// Returns path to `update-build.txt` which is used for caching Everest version.
+    pub fn update_build_path(&self) -> PathBuf {
+        self.root_dir().join("update-build.txt")
+    }
+
     pub fn cache_db_path(&self) -> &Path {
         &self.cache_db_path
     }
