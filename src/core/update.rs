@@ -1,110 +1,114 @@
-use std::fmt::Display;
-
-use tracing::{instrument, warn};
+use std::{fmt::Display, str::FromStr};
 
 use crate::{
     cache::FileCacheDb,
     core::{
-        Checksums, LocalMod,
-        mod_file::ModIdentityService,
+        Checksum, Checksums, ParseChecksumError,
         network::downloader::{DownloadFile, ParseDownloadFileError},
-        registry::EverestUpdateYaml,
+        registry::Entry,
     },
-    service::os::LocalFileSystemService,
 };
 
-pub struct UpdateTask {
-    pub version: String, // Used for UpdateInfo
+/// Identifies required updates by comparing file checksums.
+pub fn scan_updates<'a>(
+    cache_db: &FileCacheDb,
+    contexts: &'a [UpdateContext],
+) -> Result<UpdateReport<'a>, ParseDownloadFileError> {
+    let mut updates = Vec::new();
+    let mut download_files = Vec::new();
 
-    // Used for DownloadFile
-    /// Key of HashMap
-    pub name: String,
-    pub url: String,
-    pub size: u64,
-    pub checksums: Checksums,
-}
+    for ctx in contexts {
+        if !cache_db.is_cache_valid(&ctx.inode, &ctx.checksums) {
+            let update_info =
+                UpdateInfo::new(&ctx.name, &ctx.current_version, &ctx.available_version);
+            let download_task = DownloadFile::try_from(ctx)?;
 
-/// Result of scanning mods for update.
-pub struct UpdateReport {
-    /// Files to download.
-    pub download_files: Vec<DownloadFile>,
-    /// A list of mod information to display.
-    pub updates: Vec<UpdateInfo>,
-}
-
-/// Mod scanner for update.
-pub struct UpdateScanner {
-    /// Represents cache for file hash.
-    cache_db: FileCacheDb,
-    /// Database of all mods.
-    registry: EverestUpdateYaml,
-}
-
-impl UpdateScanner {
-    pub fn new(cache_db: FileCacheDb, registry: EverestUpdateYaml) -> Self {
-        Self { cache_db, registry }
-    }
-
-    /// Identifies required updates by comparing local mods with the remote registry.
-    #[instrument(skip_all)]
-    pub fn scan(mut self, local_mods: &[LocalMod]) -> Result<UpdateReport, ParseDownloadFileError> {
-        let mut available_mods = Vec::with_capacity(local_mods.len());
-        let mut available_info = Vec::with_capacity(local_mods.len());
-        let service = LocalFileSystemService;
-
-        for local_mod in local_mods {
-            // verify if the local mod exist in the remote registry
-            let Some(result) = self.registry.create_update_task(local_mod.name()) else {
-                continue;
-            };
-
-            let Ok(task) = result else {
-                continue;
-            };
-
-            // attempts to retrieve the mod's inode
-            let Ok(inode) = service.fetch_id(local_mod.file().path()) else {
-                continue;
-            };
-
-            // check if an update is required
-            let is_update_needed = !self.cache_db.is_cache_valid(&inode, &task.checksums);
-
-            // extract the metadata from the remote registry if an update is required
-            if is_update_needed {
-                let update_info = UpdateInfo::new(&task.name, local_mod.version(), &task.version);
-                let download_task = DownloadFile::try_from(task)?;
-
-                available_info.push(update_info);
-                available_mods.push(download_task);
-            }
+            updates.push(update_info);
+            download_files.push(download_task);
         }
-
-        Ok(UpdateReport {
-            download_files: available_mods,
-            updates: available_info,
-        })
     }
+    Ok(UpdateReport {
+        download_files,
+        updates,
+    })
 }
 
 #[derive(Debug)]
-pub struct UpdateInfo {
-    name: String,
+pub struct UpdateContext {
     current_version: String,
     available_version: String,
+    inode: u64,
+    name: String,
+    url: String,
+    size: u64,
+    checksums: Checksums,
 }
 
-impl UpdateInfo {
-    fn new(name: &str, current_v: &str, available_v: &str) -> Self {
+impl UpdateContext {
+    pub fn new(
+        current_version: &str,
+        inode: u64,
+        name: String,
+        entry: Entry,
+    ) -> Result<Self, ParseChecksumError> {
+        let checksums = entry
+            .checksums()
+            .into_iter()
+            .map(|s| Checksum::from_str(&s))
+            .collect::<Result<Checksums, _>>()?;
+
+        Ok(Self {
+            current_version: current_version.to_string(),
+            available_version: entry.version().to_string(),
+            inode,
+            name,
+            url: entry.url().to_string(),
+            size: entry.file_size(),
+            checksums,
+        })
+    }
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn size(&self) -> u64 {
+        self.size
+    }
+    pub fn checksums(&self) -> &Checksums {
+        &self.checksums
+    }
+}
+
+/// Result of scanning mods for update.
+#[derive(Debug)]
+pub struct UpdateReport<'a> {
+    /// Files to download.
+    pub download_files: Vec<DownloadFile>,
+    /// A list of mod information to display.
+    pub updates: Vec<UpdateInfo<'a>>,
+}
+
+/// Update information to display.
+#[derive(Debug)]
+pub struct UpdateInfo<'a> {
+    name: &'a str,
+    current_version: &'a str,
+    available_version: &'a str,
+}
+
+impl<'a> UpdateInfo<'a> {
+    fn new(name: &'a str, current_version: &'a str, available_version: &'a str) -> Self {
         Self {
-            name: name.to_string(),
-            current_version: current_v.to_string(),
-            available_version: available_v.to_string(),
+            name,
+            current_version,
+            available_version,
         }
     }
 }
 
-impl Display for UpdateInfo {
+impl<'a> Display for UpdateInfo<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

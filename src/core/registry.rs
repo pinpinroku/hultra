@@ -1,13 +1,12 @@
-use std::{
-    collections::{HashMap, HashSet},
-    str::FromStr,
-};
+use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
 
-use crate::{
-    core::network::downloader::{DownloadFile, ParseDownloadFileError},
-    core::{Checksum, Checksums, ParseChecksumError, update::UpdateTask},
+use crate::core::{
+    LocalMod,
+    mod_file::ModIdentityService,
+    network::downloader::{DownloadFile, ParseDownloadFileError},
+    update::UpdateContext,
 };
 
 /// Mod database. The key of main map is the mod name.
@@ -38,6 +37,9 @@ pub struct Entry {
 }
 
 impl Entry {
+    pub fn version(&self) -> &str {
+        &self.version
+    }
     pub fn url(&self) -> &str {
         &self.url
     }
@@ -83,30 +85,20 @@ impl EverestUpdateYaml {
             .collect()
     }
 
-    pub fn create_update_task(
+    pub fn into_update_context(
         &mut self,
-        name: &str,
-    ) -> Option<Result<UpdateTask, ParseChecksumError>> {
-        self.entries.remove_entry(name).map(UpdateTask::try_from)
-    }
-}
-
-impl TryFrom<(String, Entry)> for UpdateTask {
-    type Error = ParseChecksumError;
-
-    fn try_from((name, entry): (String, Entry)) -> Result<UpdateTask, Self::Error> {
-        let checksums = entry
-            .checksums
-            .into_iter()
-            .map(|s| Checksum::from_str(&s))
-            .collect::<Result<Checksums, _>>()?;
-        Ok(Self {
-            name,
-            version: entry.version,
-            url: entry.url,
-            size: entry.file_size,
-            checksums,
-        })
+        local_mods: &[LocalMod],
+        service: impl ModIdentityService,
+    ) -> Vec<UpdateContext> {
+        local_mods
+            .iter()
+            .filter_map(|m| {
+                let (n, e) = self.entries.remove_entry(m.name())?;
+                let inode = service.fetch_id(m.file().path()).ok()?;
+                let task = UpdateContext::new(m.version(), inode, n, e).ok()?;
+                Some(task)
+            })
+            .collect()
     }
 }
 

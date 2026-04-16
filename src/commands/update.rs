@@ -7,15 +7,10 @@ use crate::{
     config::AppConfig,
     core::{
         loader::ModResolver,
-        network::{
-            SharedHttpClient,
-            api::{ApiClient, ApiSource},
-            downloader,
-        },
+        network::{SharedHttpClient, api, downloader},
         update,
     },
-    service::{ModsDirectoryScanner, fs::fetch_updater_blacklist},
-    ui::create_spinner,
+    service::{ModsDirectoryScanner, fs::fetch_updater_blacklist, os::LocalFileSystemService},
 };
 
 /// Checks update for the mods and download the latest one if available.
@@ -44,21 +39,16 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     info!("syncing file cache");
     let cache_db = cache::sync(config)?;
 
-    // Initialize client
+    // Initialize shared client
     let shared_client = SharedHttpClient::new();
 
-    let fetcher = ApiClient::new(shared_client.inner().clone());
-    let source = ApiSource::from(&args);
+    info!("fetching database...");
+    let mut registry = api::fetch_registry(shared_client.inner().clone(), &args).await?;
 
-    let spinner = create_spinner();
-    let registry = fetcher.fetch_everest_update_yaml(source).await?;
-    spinner.finish_and_clear();
-
-    // check updates
     info!("checking updates");
-    let report = update::UpdateScanner::new(cache_db, registry).scan(&local_mods)?;
+    let contexts = registry.into_update_context(&local_mods, LocalFileSystemService);
+    let report = update::scan_updates(&cache_db, &contexts)?;
 
-    // TODO make `display_updates()` function
     if report.updates.is_empty() {
         info!("all mods are up-to-date");
         return Ok(());

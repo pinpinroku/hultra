@@ -29,6 +29,20 @@ pub async fn fetch(
     Ok((registry, graph))
 }
 
+/// Fetches registry.
+pub async fn fetch_registry(
+    client: Client,
+    opt: &DownloadOption,
+) -> anyhow::Result<EverestUpdateYaml> {
+    let api_client = ApiClient::new(client);
+    let source = ApiSource::from(opt);
+
+    let spinner = create_spinner();
+    let registry = api_client.fetch_everest_update_yaml(source).await?;
+    spinner.finish_and_clear();
+    Ok(registry)
+}
+
 /// Client for API.
 #[derive(Debug, Clone)]
 pub struct ApiClient {
