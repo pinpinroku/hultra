@@ -19,7 +19,7 @@ pub struct MockFileSystemService {
 impl ModIdentityService for MockFileSystemService {
     fn fetch_id(&self, _path: &Path) -> io::Result<u64> {
         if self.should_fail {
-            Err(io::Error::new(io::ErrorKind::Other, "intentional error"))
+            Err(io::Error::other("intentional error"))
         } else {
             Ok(12345)
         }
