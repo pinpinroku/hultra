@@ -113,7 +113,7 @@ impl EverestUpdateYaml {
 mod tests_registry {
     use std::path::PathBuf;
 
-    use crate::{core::ModFile, service::os::MockFileSystemService};
+    use crate::{core::ModFile, service::MockFileSystemService};
 
     use super::*;
 

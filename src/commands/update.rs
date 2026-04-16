@@ -10,7 +10,7 @@ use crate::{
         network::{SharedHttpClient, api, downloader},
         update,
     },
-    service::{ModsDirectoryScanner, fs::fetch_updater_blacklist, os::LocalFileSystemService},
+    service::{LocalFileSystemService, ModsDirectoryScanner, fs::fetch_updater_blacklist},
 };
 
 /// Checks update for the mods and download the latest one if available.
