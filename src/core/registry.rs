@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use serde::Deserialize;
+use tracing::debug;
 
 use crate::core::{
     LocalMod,
@@ -93,8 +94,14 @@ impl EverestUpdateYaml {
         local_mods
             .iter()
             .filter_map(|m| {
-                let (n, e) = self.entries.remove_entry(m.name())?;
-                let inode = service.fetch_id(m.file().path()).ok()?;
+                let (n, e) = self.entries.remove_entry(m.name()).or_else(|| {
+                    debug!("mod not found in registry: {}", m.name());
+                    None
+                })?;
+                let inode = service
+                    .fetch_id(m.file().path())
+                    .inspect_err(|e| debug!(?e, "failed to fetch inode for {}", m.name()))
+                    .ok()?;
                 let task = UpdateContext::new(m.version(), inode, n, e).ok()?;
                 Some(task)
             })

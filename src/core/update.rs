@@ -1,5 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
+use tracing::debug;
+
 use crate::{
     cache::FileCacheDb,
     core::{
@@ -18,7 +20,16 @@ pub fn scan_updates<'a>(
     let mut download_files = Vec::new();
 
     for ctx in contexts {
-        if !cache_db.is_cache_valid(&ctx.inode, &ctx.checksums) {
+        let is_valid = cache_db.is_cache_valid(&ctx.inode, &ctx.checksums);
+
+        debug!(
+            mod=ctx.name,
+            cache_valid=is_valid,
+            current_version=ctx.current_version,
+            available_version=ctx.available_version
+        );
+
+        if !is_valid {
             let update_info =
                 UpdateInfo::new(&ctx.name, &ctx.current_version, &ctx.available_version);
             let download_task = DownloadFile::try_from(ctx)?;
