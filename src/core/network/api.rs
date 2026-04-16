@@ -8,7 +8,8 @@ use tokio::try_join;
 use tracing::instrument;
 
 use crate::{
-    commands::DownloadOption, core::registry::EverestUpdateYaml, dependency::DependencyGraph,
+    commands::DownloadOption,
+    core::{dependency::DependencyGraph, registry::EverestUpdateYaml},
     ui::create_spinner,
 };
 

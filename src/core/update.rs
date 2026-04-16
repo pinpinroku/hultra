@@ -2,13 +2,11 @@ use std::{fmt::Display, str::FromStr};
 
 use tracing::debug;
 
-use crate::{
+use crate::core::{
+    Checksum, Checksums, ParseChecksumError,
     cache::FileCacheDb,
-    core::{
-        Checksum, Checksums, ParseChecksumError,
-        network::downloader::{DownloadFile, ParseDownloadFileError},
-        registry::Entry,
-    },
+    network::downloader::{DownloadFile, ParseDownloadFileError},
+    registry::Entry,
 };
 
 /// Identifies required updates by comparing file checksums.

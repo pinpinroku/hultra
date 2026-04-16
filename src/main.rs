@@ -7,15 +7,12 @@ use crate::{
     config::{AppConfig, CARGO_PKG_NAME, CARGO_PKG_VERSION},
 };
 
-mod cache;
 mod cli;
 mod commands;
 mod config;
 mod core;
-mod dependency;
 mod everest;
 mod log;
-mod manifest;
 mod service;
 mod ui;
 mod utils;

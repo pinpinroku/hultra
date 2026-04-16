@@ -2,10 +2,10 @@
 use tracing::info;
 
 use crate::{
-    cache,
     commands::DownloadOption,
     config::AppConfig,
     core::{
+        cache,
         loader::ModResolver,
         network::{SharedHttpClient, api, downloader},
         update,

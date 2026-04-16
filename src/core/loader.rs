@@ -4,10 +4,7 @@ use std::{collections::HashSet, io, path::Path};
 use rayon::prelude::*;
 use tracing::instrument;
 
-use crate::{
-    core::{LocalMod, ModFile},
-    manifest::Manifest,
-};
+use crate::core::{LocalMod, ModFile, manifest::Manifest};
 
 pub struct ModResolver;
 
