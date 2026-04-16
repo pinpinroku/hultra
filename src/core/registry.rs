@@ -87,7 +87,7 @@ impl EverestUpdateYaml {
     }
 
     pub fn into_update_context(
-        &mut self,
+        mut self,
         local_mods: &[LocalMod],
         service: impl ModIdentityService,
     ) -> Vec<UpdateContext> {

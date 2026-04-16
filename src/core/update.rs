@@ -64,8 +64,8 @@ impl UpdateContext {
     ) -> Result<Self, ParseChecksumError> {
         let checksums = entry
             .checksums()
-            .into_iter()
-            .map(|s| Checksum::from_str(&s))
+            .iter()
+            .map(|s| Checksum::from_str(s))
             .collect::<Result<Checksums, _>>()?;
 
         Ok(Self {

@@ -43,7 +43,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     let shared_client = SharedHttpClient::new();
 
     info!("fetching database...");
-    let mut registry = api::fetch_registry(shared_client.inner().clone(), &args).await?;
+    let registry = api::fetch_registry(shared_client.inner().clone(), &args).await?;
 
     info!("checking updates");
     let contexts = registry.into_update_context(&local_mods, LocalFileSystemService);

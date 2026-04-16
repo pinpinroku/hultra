@@ -95,8 +95,8 @@ impl TryFrom<&UpdateContext> for DownloadFile {
     type Error = ParseDownloadFileError;
 
     fn try_from(value: &UpdateContext) -> Result<Self, Self::Error> {
-        let url = DownloadUrl::from_str(&value.url())?;
-        let name = FileStem::from_str(&value.name())?;
+        let url = DownloadUrl::from_str(value.url())?;
+        let name = FileStem::from_str(value.name())?;
 
         Ok(Self {
             url,
