@@ -10,11 +10,19 @@ impl ModIdentityService for LocalFileSystemService {
     }
 }
 
-#[allow(dead_code)]
-pub struct MockFileSystemService;
+#[cfg(test)]
+pub struct MockFileSystemService {
+    pub should_fail: bool,
+}
+
+#[cfg(test)]
 impl ModIdentityService for MockFileSystemService {
     fn fetch_id(&self, _path: &Path) -> io::Result<u64> {
-        Ok(12345)
+        if self.should_fail {
+            Err(io::Error::new(io::ErrorKind::Other, "intentional error"))
+        } else {
+            Ok(12345)
+        }
     }
 }
 
@@ -24,7 +32,7 @@ mod test {
 
     #[test]
     fn test_fs_service() {
-        let mock = MockFileSystemService;
+        let mock = MockFileSystemService { should_fail: false };
         let result = mock.fetch_id(Path::new("."));
         assert!(result.is_ok_and(|value| value == 12345))
     }

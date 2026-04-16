@@ -23,6 +23,11 @@ impl ModFile {
     pub fn path(&self) -> &Path {
         &self.0
     }
+
+    #[cfg(test)]
+    pub fn new_unchecked(path: PathBuf) -> Self {
+        Self(path)
+    }
 }
 
 impl ModFile {

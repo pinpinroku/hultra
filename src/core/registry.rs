@@ -111,6 +111,10 @@ impl EverestUpdateYaml {
 
 #[cfg(test)]
 mod tests_registry {
+    use std::path::PathBuf;
+
+    use crate::{core::ModFile, service::os::MockFileSystemService};
+
     use super::*;
 
     const YAML_BYTES: &[u8; 670] = br#"
@@ -179,5 +183,42 @@ BreezeContestAudio:
                 && result.contains("BreezeContest")
                 && result.contains("BreezeContestAudio")
         );
+    }
+
+    #[test]
+    fn test_into_update_context_success() {
+        let registry = load_registry_from_yaml();
+        let file = ModFile::new_unchecked(PathBuf::from("puppyposting.zip"));
+        let local_mods = vec![LocalMod::new(file, "puppyposting".into(), "1.1.0".into())];
+
+        let mock_service = MockFileSystemService { should_fail: false };
+        let results = registry.into_update_context(&local_mods, mock_service);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].inode(), 12345);
+    }
+
+    #[test]
+    fn test_into_update_context_failed_for_inode() {
+        let registry = load_registry_from_yaml();
+        let file = ModFile::new_unchecked(PathBuf::from("puppyposting.zip"));
+        let local_mods = vec![LocalMod::new(file, "puppyposting".into(), "1.1.0".into())];
+
+        let mock_service = MockFileSystemService { should_fail: true };
+        let results = registry.into_update_context(&local_mods, mock_service);
+
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_into_update_context_failed_with_no_match() {
+        let registry = load_registry_from_yaml();
+        let file = ModFile::new_unchecked(PathBuf::from("SpeedrunTool.zip"));
+        let local_mods = vec![LocalMod::new(file, "SpeedrunTool".into(), "3.2.1".into())];
+
+        let mock_service = MockFileSystemService { should_fail: false };
+        let results = registry.into_update_context(&local_mods, mock_service);
+
+        assert_eq!(results.len(), 0);
     }
 }

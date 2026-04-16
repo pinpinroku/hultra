@@ -78,6 +78,10 @@ impl UpdateContext {
             checksums,
         })
     }
+    #[cfg(test)]
+    pub fn inode(&self) -> u64 {
+        self.inode
+    }
     pub fn url(&self) -> &str {
         &self.url
     }
