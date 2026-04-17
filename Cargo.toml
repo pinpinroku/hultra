@@ -15,13 +15,13 @@ clap = { version = "4.6.0", features = ["derive"] }
 futures-util = "0.3.31" # for `StreamExt` trait
 indicatif = "0.18.4"
 rayon = "1.11.0"
-reqwest = { version = "0.13.1", features = ["stream", "gzip", "json"] }
+reqwest = { version = "0.13.2", features = ["stream", "gzip", "json"] }
 rkyv = "0.8.15"
 serde = { version = "1.0.225", features = ["derive"] }
 serde_yaml_ng = "0.10.0"
 tempfile = "3.27.0"
 thiserror = "2.0.16"
-tokio = { version = "1.50.0", features = ["rt", "rt-multi-thread", "fs", "io-util", "sync", "time", "macros"] }
+tokio = { version = "1.52.1", features = ["rt", "rt-multi-thread", "fs", "io-util", "sync", "time", "macros"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 url = "2.5.8"
