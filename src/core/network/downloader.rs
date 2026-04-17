@@ -292,7 +292,7 @@ impl ModDownloader {
         let urls = &self.mirror_priority.resolve(item.url());
 
         for url in urls {
-            match self.download(item, dest, pb).await {
+            match self.download(url, item, dest, pb).await {
                 Ok(_) => return Ok(()),
                 Err(e) => {
                     errors.push((url.clone(), e));
@@ -314,16 +314,17 @@ impl ModDownloader {
     ///   with corrupt/partial data if verification fails.
     /// - Performs `tokio::fs::copy` instead of `tempfile::persist` because `temp_path` and `dest`
     ///   often reside on different filesystems (e.g., RAM vs. Disk).
-    #[instrument(skip_all, fields(path = %anonymize(dest)))]
+    #[instrument(skip_all, fields(%url, ?item, path = %anonymize(dest)))]
     async fn download(
         &self,
+        url: &str,
         item: &DownloadFile,
         dest: &Path,
         pb: &ProgressBar,
     ) -> Result<(), Error> {
         let response = self
             .client
-            .get(item.url().raw())
+            .get(url)
             .timeout(Duration::from_secs(120))
             .send()
             .await?
