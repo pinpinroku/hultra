@@ -1,12 +1,14 @@
 use tracing::info;
 
-use crate::{config::AppConfig, core::loader::ModResolver, service::ModsDirectoryScanner};
+use crate::{
+    config::AppConfig,
+    core::{LocalFileSystemScanner, loader},
+};
 
 /// Lists currently installed mods.
 pub fn run(config: &AppConfig) -> anyhow::Result<()> {
     info!("loading installed mods");
-    let files = ModsDirectoryScanner::scan(&config.mods_dir())?;
-    let mods = ModResolver::resolve(&files)?;
+    let mods = loader::scan_mods(&LocalFileSystemScanner, &config.mods_dir())?;
 
     info!("listing installed mods");
     for installed in mods {

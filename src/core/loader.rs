@@ -1,12 +1,25 @@
 //! Service for resolving installed mods.
-use std::{collections::HashSet, io, path::Path};
+use std::{io, path::Path};
 
 use rayon::prelude::*;
 use tracing::instrument;
 
-use crate::core::{LocalMod, ModFile, manifest::Manifest};
+use crate::{
+    core::{LocalMod, ModFile, ModsDirectoryScanner, manifest::Manifest},
+    log::anonymize,
+};
 
-pub struct ModResolver;
+/// Scans installed mods.
+#[instrument(skip_all, fields(mods_dir = %anonymize(mods_dir)))]
+pub fn scan_mods(
+    scanner: &impl ModsDirectoryScanner,
+    mods_dir: &Path,
+) -> io::Result<Vec<LocalMod>> {
+    let files = scanner.scan(mods_dir)?;
+    Ok(ModResolver::resolve(&files))
+}
+
+struct ModResolver;
 
 impl ModResolver {
     fn resolve_manifest(path: &Path) -> anyhow::Result<Manifest> {
@@ -17,27 +30,13 @@ impl ModResolver {
 
     /// Resolves a list of installed mods.
     #[instrument(skip_all)]
-    pub fn resolve(files: &[ModFile]) -> io::Result<Vec<LocalMod>> {
-        let mods = files
+    fn resolve(files: &[ModFile]) -> Vec<LocalMod> {
+        files
             .into_par_iter()
             .filter_map(|file| {
                 let manifest = Self::resolve_manifest(file.path()).ok()?;
                 Some(LocalMod::new(file.clone(), manifest.name, manifest.version))
             })
-            .collect();
-        Ok(mods)
-    }
-
-    /// Resolves a list of installed mod names.
-    #[instrument(skip_all)]
-    pub fn resolve_names(files: &[ModFile]) -> io::Result<HashSet<String>> {
-        let names = files
-            .into_par_iter()
-            .filter_map(|file| {
-                let manifest = Self::resolve_manifest(file.path()).ok()?;
-                Some(manifest.name)
-            })
-            .collect();
-        Ok(names)
+            .collect()
     }
 }

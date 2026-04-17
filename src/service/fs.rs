@@ -3,13 +3,9 @@ use std::{
     fs, io,
     path::{Path, PathBuf},
 };
-
 use tracing::instrument;
 
-use crate::{
-    config::AppConfig, core::mod_file::ModFile, everest::version::InstalledVersionProvider,
-    log::anonymize,
-};
+use crate::{config::AppConfig, everest::version::InstalledVersionProvider, log::anonymize};
 
 /// Returns blacklisted mods for update.
 #[instrument(skip_all, fields(mods_dir = %anonymize(mods_dir)), ret(Debug))]
@@ -33,19 +29,6 @@ fn parse_blacklist(content: &str) -> HashSet<String> {
         .filter(|l| !l.starts_with('#') && !l.is_empty())
         .map(String::from)
         .collect()
-}
-
-pub struct ModsDirectoryScanner;
-
-impl ModsDirectoryScanner {
-    /// Scans mods directory to collect the path of ZIP archives.
-    pub fn scan(mods_dir: &Path) -> io::Result<Vec<ModFile>> {
-        let found_paths: Vec<_> = fs::read_dir(mods_dir)?
-            .filter_map(|res| res.ok())
-            .filter_map(|e| ModFile::try_from_path(e.path()))
-            .collect();
-        Ok(found_paths)
-    }
 }
 
 /// Represents version file of Everest.

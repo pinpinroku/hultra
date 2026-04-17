@@ -5,12 +5,11 @@ use crate::{
     commands::DownloadOption,
     config::AppConfig,
     core::{
-        cache,
-        loader::ModResolver,
+        LocalFileSystemScanner, cache, loader,
         network::{SharedHttpClient, api, downloader},
         update,
     },
-    service::{LocalFileSystemService, ModsDirectoryScanner, fs::fetch_updater_blacklist},
+    service::{LocalFileSystemService, fs::fetch_updater_blacklist},
 };
 
 /// Checks update for the mods and download the latest one if available.
@@ -18,8 +17,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     info!("updating mods");
 
     info!("loading installed mods");
-    let files = ModsDirectoryScanner::scan(&config.mods_dir())?;
-    let mut local_mods = ModResolver::resolve(&files)?;
+    let mut local_mods = loader::scan_mods(&LocalFileSystemScanner, &config.mods_dir())?;
 
     let initial_count = local_mods.len();
     info!("loaded {} mods", initial_count);

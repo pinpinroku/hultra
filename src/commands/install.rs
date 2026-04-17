@@ -7,10 +7,9 @@ use tracing::info;
 use crate::{
     config::AppConfig,
     core::{
-        loader::ModResolver,
+        LocalFileSystemScanner, loader,
         network::{SharedHttpClient, api, downloader},
     },
-    service::ModsDirectoryScanner,
 };
 
 use super::DownloadOption;
@@ -86,8 +85,11 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     let (registry, graph) = api::fetch(shared_client.inner().clone(), &args.option).await?;
 
     info!("extracting installed mod names");
-    let files = ModsDirectoryScanner::scan(&config.mods_dir())?;
-    let installed_names = ModResolver::resolve_names(&files)?;
+    let installed_names: HashSet<String> =
+        loader::scan_mods(&LocalFileSystemScanner, &config.mods_dir())?
+            .iter()
+            .map(|m| m.name().to_string())
+            .collect();
 
     // Resolve missing deps
     info!("resolving missing dependencies");
