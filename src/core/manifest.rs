@@ -20,11 +20,12 @@ pub enum ManifestParseError {
     InvalidYamlStructure(#[from] serde_yaml_ng::Error),
 }
 
-impl Manifest {
-    /// Deserializes an instance of Manifest from bytes of YAML text.
-    pub fn parse(buffer: &[u8]) -> Result<Self, ManifestParseError> {
+impl TryFrom<Vec<u8>> for Manifest {
+    type Error = ManifestParseError;
+
+    fn try_from(buffer: Vec<u8>) -> Result<Self, Self::Error> {
         // Remove UTF-8 BOM if present
-        let clean_slice = buffer.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(buffer);
+        let clean_slice = buffer.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&buffer);
 
         // NOTE Use `VecDeque` for efficient `pop_front` operation (`O(1)` vs `Vec::remove(0)` which is `O(n)`)
         let mut manifests: VecDeque<Manifest> = serde_yaml_ng::from_slice(clean_slice)?;
@@ -52,7 +53,7 @@ mod tests_manifest_parsing {
     - Name: CollabUtils2
       Version: 1.6.13
 "#;
-        let manifest = Manifest::parse(bytes);
+        let manifest = Manifest::try_from(bytes.to_vec());
         assert!(manifest.is_ok());
 
         let manifest = manifest.context("failed to parse manifest from YAML")?;
@@ -80,7 +81,7 @@ pub struct LocalMetadataReader;
 impl MetadataReader for LocalMetadataReader {
     fn read_metadata(&self, path: &Path) -> Result<Manifest, MetadataReadError> {
         let bytes = zip_finder::extract_file_from_zip(path, b"everest.yaml", Some(b"everest.yml"))?;
-        let manifest = Manifest::parse(&bytes)?;
+        let manifest = bytes.try_into()?;
         Ok(manifest)
     }
 }
