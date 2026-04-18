@@ -1,5 +1,5 @@
 //! Raw data of `everest.yaml`.
-use std::collections::VecDeque;
+use std::{collections::VecDeque, path::Path};
 
 use serde::Deserialize;
 
@@ -13,7 +13,7 @@ pub struct Manifest {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum ManifestParseError {
     #[error("manifest is parsed successfully but no entries found on the file")]
     NoEntry,
     #[error("failed to parse `everest.yaml`")]
@@ -22,14 +22,14 @@ pub enum Error {
 
 impl Manifest {
     /// Deserializes an instance of Manifest from bytes of YAML text.
-    pub fn parse(buffer: &[u8]) -> Result<Self, Error> {
+    pub fn parse(buffer: &[u8]) -> Result<Self, ManifestParseError> {
         // Remove UTF-8 BOM if present
         let clean_slice = buffer.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(buffer);
 
         // NOTE Use `VecDeque` for efficient `pop_front` operation (`O(1)` vs `Vec::remove(0)` which is `O(n)`)
         let mut manifests: VecDeque<Manifest> = serde_yaml_ng::from_slice(clean_slice)?;
 
-        manifests.pop_front().ok_or(Error::NoEntry)
+        manifests.pop_front().ok_or(ManifestParseError::NoEntry)
     }
 }
 
@@ -59,5 +59,30 @@ mod tests_manifest_parsing {
         assert_eq!(manifest.name, "darkmoonruins");
         assert_eq!(manifest.version, "1.1.4");
         Ok(())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MetadataReadError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Archive(#[from] zip_finder::Error),
+    #[error(transparent)]
+    Parse(#[from] ManifestParseError),
+}
+
+pub trait MetadataReader {
+    fn read_metadata(&self, path: &Path) -> Result<Manifest, MetadataReadError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct LocalMetadataReader;
+
+impl MetadataReader for LocalMetadataReader {
+    fn read_metadata(&self, path: &Path) -> Result<Manifest, MetadataReadError> {
+        let bytes = zip_finder::extract_file_from_zip(path, b"everest.yaml", Some(b"everest.yml"))?;
+        let manifest = Manifest::parse(&bytes)?;
+        Ok(manifest)
     }
 }
