@@ -38,19 +38,19 @@ pub trait ModIdentityService {
 }
 
 /// A service for discovering mod files within a directory.
-pub trait ModFileSource {
+pub(super) trait ModFileSource {
     /// Returns a list of valid mod files.
     fn fetch_all(&self) -> io::Result<Vec<ModFile>>;
 }
 
 /// A standard implementation of [`ModFileSource`] that interacts with the local file system.
 #[derive(Debug)]
-pub struct LocalModFileSource {
+pub(super) struct LocalModFileSource {
     mods_dir: PathBuf,
 }
 
 impl LocalModFileSource {
-    pub fn new(mods_dir: impl Into<PathBuf>) -> Self {
+    pub(super) fn new(mods_dir: impl Into<PathBuf>) -> Self {
         Self {
             mods_dir: mods_dir.into(),
         }

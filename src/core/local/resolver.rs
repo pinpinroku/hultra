@@ -6,8 +6,11 @@ use tracing::instrument;
 
 use crate::{
     core::{
-        LocalMod, LocalModFileSource, ModFileSource,
-        manifest::{LocalMetadataReader, MetadataReader},
+        LocalMod,
+        local::{
+            manifest::{LocalMetadataReader, MetadataReader},
+            mod_file::{LocalModFileSource, ModFileSource},
+        },
     },
     log::anonymize,
 };

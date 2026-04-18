@@ -5,11 +5,11 @@ use serde::Deserialize;
 
 /// Represents the metadata of mod.
 #[derive(Debug, Default, Deserialize)]
-pub struct Manifest {
+pub(super) struct Manifest {
     #[serde(rename = "Name")]
-    pub name: String,
+    pub(super) name: String,
     #[serde(rename = "Version")]
-    pub version: String,
+    pub(super) version: String,
 }
 
 #[derive(Debug, thiserror::Error)]

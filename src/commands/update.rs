@@ -5,7 +5,7 @@ use crate::{
     commands::DownloadOption,
     config::AppConfig,
     core::{
-        cache, loader,
+        cache, local,
         network::{SharedHttpClient, api, downloader},
         update,
     },
@@ -17,7 +17,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     info!("updating mods");
 
     info!("loading installed mods");
-    let mut local_mods = loader::scan_mods(&config.mods_dir())?;
+    let mut local_mods = local::scan_mods(&config.mods_dir())?;
 
     let initial_count = local_mods.len();
     info!("loaded {} mods", initial_count);

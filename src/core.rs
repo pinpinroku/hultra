@@ -21,14 +21,13 @@
 pub mod cache;
 pub mod checksum;
 pub mod dependency;
-pub mod loader;
 pub mod local;
-pub mod manifest;
-pub mod mod_file;
 pub mod network;
 pub mod registry;
 pub mod update;
 
 pub use checksum::{Checksum, ChecksumVerificationError, Checksums, ParseChecksumError};
 pub use local::LocalMod;
-pub use mod_file::{LocalModFileSource, ModFile, ModFileSource};
+
+#[cfg(test)]
+pub use local::mod_file::ModFile;

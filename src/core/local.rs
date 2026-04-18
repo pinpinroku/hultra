@@ -1,6 +1,12 @@
 use std::{borrow::Cow, fmt};
 
-use crate::core::ModFile;
+use mod_file::ModFile;
+
+mod manifest;
+pub mod mod_file;
+mod resolver;
+
+pub use resolver::scan_mods;
 
 /// Information of installed mod.
 #[derive(Debug, Clone)]

@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::core::{
     LocalMod,
-    mod_file::ModIdentityService,
+    local::mod_file::ModIdentityService,
     network::downloader::{DownloadFile, ParseDownloadFileError},
     update::UpdateContext,
 };
