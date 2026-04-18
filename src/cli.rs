@@ -56,7 +56,7 @@ pub async fn dispatch(cmd: Command, config: AppConfig) -> anyhow::Result<()> {
             EverestSubCommand::NetworkRequired(action) => {
                 let option = action.network_option();
                 let shared_client = EverestHttpClient::new()?;
-                let builds = everest::fetch(shared_client.inner.clone(), option).await?;
+                let builds = everest::fetch(shared_client.inner().clone(), option).await?;
 
                 match action {
                     NetworkCommand::List(args) => {

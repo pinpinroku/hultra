@@ -16,13 +16,17 @@ use crate::everest::version::{InstalledVersionProvider, VersionNumber, VersionPa
 
 #[derive(Debug, Clone)]
 pub struct EverestHttpClient {
-    pub inner: Client,
+    inner: Client,
 }
 
 impl EverestHttpClient {
     pub fn new() -> reqwest::Result<Self> {
         let client = Client::builder().https_only(true).gzip(true).build()?;
         Ok(Self { inner: client })
+    }
+
+    pub fn inner(&self) -> &Client {
+        &self.inner
     }
 }
 

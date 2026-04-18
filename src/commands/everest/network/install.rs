@@ -31,15 +31,12 @@ pub async fn run(
         .context("Specified version is not available")?;
 
     // Download Everest
-    everest::download(client.inner.clone(), target_build, config).await?;
+    everest::download(client.inner().clone(), target_build, config).await?;
 
     // Install Everest
     everest::install(config.root_dir())?;
 
     // Cache build version
-    std::fs::write(
-        config.update_build_path(),
-        target_build.version.to_string(),
-    )?;
+    std::fs::write(config.update_build_path(), target_build.version.to_string())?;
     Ok(())
 }
