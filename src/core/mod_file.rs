@@ -38,17 +38,28 @@ pub trait ModIdentityService {
 }
 
 /// A service for discovering mod files within a directory.
-pub trait ModsDirectoryScanner {
-    fn scan(&self, mods_dir: &Path) -> io::Result<Vec<ModFile>>;
+pub trait ModFileSource {
+    /// Returns a list of valid mod files.
+    fn fetch_all(&self) -> io::Result<Vec<ModFile>>;
 }
 
-/// A standard implementation of [`ModsDirectoryScanner`] that interacts with the local file system.
-pub struct LocalFileSystemScanner;
+/// A standard implementation of [`ModFileSource`] that interacts with the local file system.
+#[derive(Debug)]
+pub struct LocalModFileSource {
+    mods_dir: PathBuf,
+}
 
-impl ModsDirectoryScanner for LocalFileSystemScanner {
-    /// Scans the specified directory and returns a list of valid mod files.
-    fn scan(&self, mods_dir: &Path) -> io::Result<Vec<ModFile>> {
-        let found_paths = fs::read_dir(mods_dir)?
+impl LocalModFileSource {
+    pub fn new(mods_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            mods_dir: mods_dir.into(),
+        }
+    }
+}
+
+impl ModFileSource for LocalModFileSource {
+    fn fetch_all(&self) -> io::Result<Vec<ModFile>> {
+        let found_paths = fs::read_dir(&self.mods_dir)?
             .flatten()
             .filter(|e| {
                 e.file_type().is_ok_and(|ft| ft.is_file())

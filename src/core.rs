@@ -31,4 +31,4 @@ pub mod update;
 
 pub use checksum::{Checksum, ChecksumVerificationError, Checksums, ParseChecksumError};
 pub use local::LocalMod;
-pub use mod_file::{LocalFileSystemScanner, ModFile, ModsDirectoryScanner};
+pub use mod_file::{LocalModFileSource, ModFile, ModFileSource};
