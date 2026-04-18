@@ -16,8 +16,8 @@ pub struct Manifest {
 pub enum ManifestParseError {
     #[error("manifest is parsed successfully but no entries found on the file")]
     NoEntry,
-    #[error("failed to parse `everest.yaml`")]
-    ParseYaml(#[from] serde_yaml_ng::Error),
+    #[error("failed to deserialize bytes as `everest.yaml`")]
+    InvalidYamlStructure(#[from] serde_yaml_ng::Error),
 }
 
 impl Manifest {
@@ -64,8 +64,6 @@ mod tests_manifest_parsing {
 
 #[derive(Debug, thiserror::Error)]
 pub enum MetadataReadError {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
     #[error(transparent)]
     Archive(#[from] zip_finder::Error),
     #[error(transparent)]
