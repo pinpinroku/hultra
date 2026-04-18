@@ -76,7 +76,7 @@ pub trait MetadataReader {
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalMetadataReader;
+pub(super) struct LocalMetadataReader;
 
 impl MetadataReader for LocalMetadataReader {
     fn read_metadata(&self, path: &Path) -> Result<Manifest, MetadataReadError> {

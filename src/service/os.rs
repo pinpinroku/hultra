@@ -1,6 +1,6 @@
 use std::{io, os::unix::fs::MetadataExt, path::Path};
 
-use crate::core::local::mod_file::ModIdentityService;
+use crate::core::local::ModIdentityService;
 
 pub struct LocalFileSystemService;
 

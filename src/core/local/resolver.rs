@@ -9,7 +9,7 @@ use crate::{
         LocalMod,
         local::{
             manifest::{LocalMetadataReader, MetadataReader},
-            mod_file::{LocalModFileSource, ModFileSource},
+            {LocalModFileSource, ModFileSource},
         },
     },
     log::anonymize,

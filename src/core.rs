@@ -30,4 +30,4 @@ pub use checksum::{Checksum, ChecksumVerificationError, Checksums, ParseChecksum
 pub use local::LocalMod;
 
 #[cfg(test)]
-pub use local::mod_file::ModFile;
+pub use local::ModFile;
