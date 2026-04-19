@@ -5,11 +5,12 @@ use crate::{
     commands::DownloadOption,
     config::AppConfig,
     core::{
-        cache, local,
+        cache,
+        local::{self, LocalFileSystemService},
         network::{SharedHttpClient, api, downloader},
         update,
     },
-    service::{LocalFileSystemService, fs::fetch_updater_blacklist},
+    service::fs::fetch_updater_blacklist,
 };
 
 /// Checks update for the mods and download the latest one if available.

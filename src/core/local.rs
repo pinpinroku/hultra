@@ -2,6 +2,7 @@ use std::{
     borrow::Cow,
     collections::HashSet,
     fmt, fs, io,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 
@@ -107,6 +108,30 @@ impl ModFile {
 pub trait ModIdentityService {
     /// Fetches inode of the file.
     fn fetch_id(&self, path: &Path) -> io::Result<u64>;
+}
+
+pub struct LocalFileSystemService;
+
+impl ModIdentityService for LocalFileSystemService {
+    fn fetch_id(&self, path: &Path) -> io::Result<u64> {
+        path.metadata().map(|m| m.ino())
+    }
+}
+
+#[cfg(test)]
+pub struct MockFileSystemService {
+    pub should_fail: bool,
+}
+
+#[cfg(test)]
+impl ModIdentityService for MockFileSystemService {
+    fn fetch_id(&self, _path: &Path) -> io::Result<u64> {
+        if self.should_fail {
+            Err(io::Error::other("intentional error"))
+        } else {
+            Ok(12345)
+        }
+    }
 }
 
 /// A service for discovering mod files within a directory.

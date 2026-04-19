@@ -3,13 +3,12 @@ use tracing::debug;
 
 use crate::{
     config::AppConfig,
-    everest::EverestHttpClient,
     everest::{
         self,
         build::{EverestBuild, EverestBuildExt},
         fetch_installed_version,
     },
-    service::fs::FileVersionRepository,
+    everest::{EverestHttpClient, FileVersionRepository},
 };
 
 pub async fn run(

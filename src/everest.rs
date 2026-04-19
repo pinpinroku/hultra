@@ -12,7 +12,9 @@ pub use downloader::download;
 pub use installer::install;
 use reqwest::Client;
 
-use crate::everest::version::{InstalledVersionProvider, VersionNumber, VersionParseError};
+pub use version::{
+    FileVersionRepository, InstalledVersionProvider, VersionNumber, VersionParseError,
+};
 
 #[derive(Debug, Clone)]
 pub struct EverestHttpClient {

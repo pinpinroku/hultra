@@ -1,5 +1,7 @@
 //! Domain model of version number for the `everest version` command.
-use std::{io, str::FromStr};
+use std::{fs, io, path::PathBuf, str::FromStr};
+
+use crate::config::AppConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum VersionParseError {
@@ -58,4 +60,22 @@ impl FromStr for VersionNumber {
 
 pub trait InstalledVersionProvider {
     fn fetch(&self) -> Result<String, io::Error>;
+}
+
+/// Represents version file of Everest.
+pub struct FileVersionRepository {
+    path: PathBuf,
+}
+
+impl FileVersionRepository {
+    pub fn new(config: &AppConfig) -> Self {
+        let path = config.update_build_path();
+        Self { path }
+    }
+}
+
+impl InstalledVersionProvider for FileVersionRepository {
+    fn fetch(&self) -> Result<String, io::Error> {
+        fs::read_to_string(&self.path)
+    }
 }

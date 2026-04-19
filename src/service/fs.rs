@@ -1,11 +1,7 @@
-use std::{
-    collections::HashSet,
-    fs, io,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, fs, io, path::Path};
 use tracing::instrument;
 
-use crate::{config::AppConfig, everest::version::InstalledVersionProvider, log::anonymize};
+use crate::log::anonymize;
 
 /// Returns blacklisted mods for update.
 #[instrument(skip_all, fields(mods_dir = %anonymize(mods_dir)), ret(Debug))]
@@ -29,22 +25,4 @@ fn parse_blacklist(content: &str) -> HashSet<String> {
         .filter(|l| !l.starts_with('#') && !l.is_empty())
         .map(String::from)
         .collect()
-}
-
-/// Represents version file of Everest.
-pub struct FileVersionRepository {
-    path: PathBuf,
-}
-
-impl FileVersionRepository {
-    pub fn new(config: &AppConfig) -> Self {
-        let path = config.update_build_path();
-        Self { path }
-    }
-}
-
-impl InstalledVersionProvider for FileVersionRepository {
-    fn fetch(&self) -> Result<String, io::Error> {
-        fs::read_to_string(&self.path)
-    }
 }
