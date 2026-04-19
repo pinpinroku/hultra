@@ -27,7 +27,7 @@ pub fn run(args: &ListArgs, builds: &[EverestBuild]) {
     print_builds(builds, display_n)
 }
 
-/// Prints the `n` most recent Everest build vesrions.
+/// Prints the `n` most recent Everest build versions.
 fn print_builds(builds: &[EverestBuild], n: u8) {
     let mut groups = builds.get_latest_builds(n);
 

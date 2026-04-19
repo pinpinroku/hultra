@@ -43,7 +43,7 @@ pub fn init_logger(log_file: Option<&Path>) -> Result<(), io::Error> {
     Ok(())
 }
 
-/// Swaps user's home direcotry path with tilde.
+/// Swaps user's home directory path with tilde.
 pub fn anonymize(path: &Path) -> String {
     // 1. trying to detect home dir from env var
     if let Some(home) = std::env::home_dir()

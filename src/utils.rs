@@ -96,7 +96,7 @@ mod test_sanitize_name {
     }
 }
 
-/// Gets first 19 charcters from "2026-03-07T19:48:53.0343351Z", replace 'T' with ' '
+/// Gets first 19 characters from "2026-03-07T19:48:53.0343351Z", replace 'T' with ' '
 pub fn format_date(date: &str) -> String {
     date.get(0..19)
         .map(|s| s.replace('T', " "))

@@ -65,7 +65,7 @@ impl EverestApiClient {
         Ok(url)
     }
 
-    /// Fetches URL from GitHub endopint.
+    /// Fetches URL from GitHub endpoint.
     #[instrument(skip_all)]
     async fn fetch_url(&self) -> reqwest::Result<String> {
         self.client

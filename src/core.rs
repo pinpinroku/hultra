@@ -3,7 +3,7 @@
 //! --- Raw Data From YAML File ---
 //! * manifest.rs: `everest.yaml`, metadata file in ZIP archive
 //! * registry.rs: `everest_update.yaml`, database for check updates, also used for installing mods
-//! * dependency.rs: `depencency_graph.yaml`, database for resolving mod dependencies
+//! * dependency.rs: `dependency_graph.yaml`, database for resolving mod dependencies
 //!
 //! --- Core Domain Logic ---
 //! * checksum.rs: xxhash64 of mod file, used for checking updates

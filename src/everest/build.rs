@@ -9,7 +9,7 @@ use crate::utils;
 pub struct EverestBuild {
     /// ISO 8601 format date string.
     date: String,
-    /// Four digits number of version. This value does not follows semantic versiong.
+    /// Four digits number of version. This value does not follows semantic version.
     pub version: u32,
     /// Commit hash.
     pub commit: String,

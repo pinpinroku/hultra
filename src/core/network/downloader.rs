@@ -62,7 +62,7 @@ pub struct DownloadFile {
     name: FileStem,
     /// File size used for the progress bar.
     size: u64,
-    /// A exepcted list of XxHash64.
+    /// A expected list of XxHash64.
     checksums: Checksums,
 }
 
@@ -248,7 +248,7 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Hash(#[from] ChecksumVerificationError),
-    #[error("failed to complete the concurrent tasks, canceld or panicked")]
+    #[error("failed to complete the concurrent tasks, canceled or panicked")]
     Join(#[from] JoinError),
     #[error("failed to acquire semaphore")]
     SemaphoreClosed(#[from] AcquireError),

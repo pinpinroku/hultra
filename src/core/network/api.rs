@@ -67,7 +67,7 @@ impl From<&DownloadOption> for ApiSource {
     }
 }
 
-/// API Resouces.
+/// API Resources.
 #[derive(Debug, Clone, Copy)]
 enum ApiResource {
     Registry,
