@@ -31,6 +31,7 @@ impl FromStr for UpdaterBlacklist {
         let files = s
             .lines()
             .map(|l| l.trim())
+            // NOTE "SomeMod.zip" is an example entry, so we should ignore it
             .filter(|l| !l.is_empty() && !l.starts_with('#') && *l != "SomeMod.zip")
             .map(String::from)
             .collect();
@@ -68,7 +69,7 @@ impl UpdaterBlacklistSource for LocalUpdaterBlacklistSource {
 }
 
 #[cfg(test)]
-mod tests {
+mod parse_tests {
     use super::*;
 
     #[test]
@@ -93,5 +94,100 @@ GravityHelper.zip
 
         let blacklist: UpdaterBlacklist = content.parse().expect("should be parsed");
         assert_eq!(blacklist.filenames().len(), 3)
+    }
+}
+
+#[cfg(test)]
+mod fetch_tests {
+    use super::*;
+
+    /// Mock source for controlled input
+    struct MockSource {
+        content: Option<String>,
+        error: Option<io::ErrorKind>,
+    }
+
+    impl UpdaterBlacklistSource for MockSource {
+        fn fetch_content(&self) -> io::Result<String> {
+            if let Some(kind) = self.error {
+                Err(io::Error::new(kind, "mock error"))
+            } else {
+                Ok(self.content.clone().unwrap_or_default())
+            }
+        }
+    }
+
+    #[test]
+    fn test_fetch_empty_content() {
+        // Empty content should result in empty blacklist
+        let source = MockSource {
+            content: Some(String::new()),
+            error: None,
+        };
+
+        let blacklist = fetch(&source).expect("fetch should succeed");
+
+        assert!(blacklist.filenames().is_empty());
+    }
+
+    #[test]
+    fn test_fetch_valid_content() {
+        // Valid blacklist entries
+        let source = MockSource {
+            content: Some(
+                r#"
+SpeedrunTool.zip
+Another Farewell Map CC-Side.zip
+GravityHelper.zip
+"#
+                .to_string(),
+            ),
+            error: None,
+        };
+
+        let blacklist = fetch(&source).expect("fetch should succeed");
+
+        assert_eq!(blacklist.filenames().len(), 3);
+        assert!(blacklist.filenames().contains("SpeedrunTool.zip"));
+        assert!(
+            blacklist
+                .filenames()
+                .contains("Another Farewell Map CC-Side.zip")
+        );
+        assert!(blacklist.filenames().contains("GravityHelper.zip"));
+    }
+
+    #[test]
+    fn test_fetch_ignores_comments_and_default_entry() {
+        // Should ignore comments and "SomeMod.zip"
+        let source = MockSource {
+            content: Some(
+                r#"
+# comment
+SomeMod.zip
+ValidMod.zip
+"#
+                .to_string(),
+            ),
+            error: None,
+        };
+
+        let blacklist = fetch(&source).expect("fetch should succeed");
+
+        assert_eq!(blacklist.filenames().len(), 1);
+        assert!(blacklist.filenames().contains("ValidMod.zip"));
+    }
+
+    #[test]
+    fn test_fetch_propagates_error() {
+        // Simulate IO error
+        let source = MockSource {
+            content: None,
+            error: Some(io::ErrorKind::Other),
+        };
+
+        let result = fetch(&source);
+
+        assert!(result.is_err());
     }
 }
