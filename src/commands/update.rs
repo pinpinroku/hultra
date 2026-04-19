@@ -5,12 +5,12 @@ use crate::{
     commands::DownloadOption,
     config::AppConfig,
     core::{
+        blacklist::{self, LocalUpdaterBlacklistSource},
         cache,
         local::{self, LocalFileSystemService},
         network::{SharedHttpClient, api, downloader},
         update,
     },
-    service::fs::fetch_updater_blacklist,
 };
 
 /// Checks update for the mods and download the latest one if available.
@@ -24,8 +24,11 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     info!("loaded {} mods", initial_count);
 
     info!("checking updater blacklist");
-    let blacklist = fetch_updater_blacklist(&config.mods_dir())?;
-    local_mods.retain(|local_mod| !local_mod.file().is_blacklisted(&blacklist));
+    let source = LocalUpdaterBlacklistSource::new(config.mods_dir());
+    let blacklist = blacklist::fetch(&source)?;
+    if !blacklist.filenames().is_empty() {
+        local_mods.retain(|local_mod| !local_mod.file().is_blacklisted(&blacklist));
+    }
 
     let ignored_count = initial_count - local_mods.len();
     if ignored_count > 0 {

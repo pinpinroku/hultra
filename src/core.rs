@@ -15,9 +15,8 @@
 //! * network/downloader.rs: download mods
 //!
 //! --- Local File ---
-//! * loader.rs: scan installed mods
 //! * local.rs: represents installed mod
-//! * mod_file.rs: file path to the mod
+pub mod blacklist;
 pub mod cache;
 pub mod checksum;
 pub mod dependency;

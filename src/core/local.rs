@@ -1,6 +1,5 @@
 use std::{
     borrow::Cow,
-    collections::HashSet,
     fmt, fs, io,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
@@ -10,6 +9,8 @@ mod manifest;
 mod resolver;
 
 pub use resolver::scan_mods;
+
+use crate::core::blacklist::UpdaterBlacklist;
 
 /// Information of installed mod.
 #[derive(Debug, Clone)]
@@ -96,11 +97,11 @@ impl ModFile {
 }
 
 impl ModFile {
-    pub fn is_blacklisted(&self, blacklist: &HashSet<String>) -> bool {
+    pub fn is_blacklisted(&self, blacklist: &UpdaterBlacklist) -> bool {
         self.0
             .file_name()
             .and_then(|n| n.to_str())
-            .map(|name| blacklist.contains(name))
+            .map(|name| blacklist.filenames().contains(name))
             .unwrap_or(false)
     }
 }
