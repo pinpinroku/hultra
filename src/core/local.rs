@@ -186,7 +186,7 @@ impl LocalModExt for Vec<LocalMod> {
             return Ok(());
         }
 
-        self.retain(|local_mod| !local_mod.file().is_blacklisted(&ublist));
+        self.retain(|local_mod| !local_mod.file().is_blacklisted(ublist));
 
         let ignored_count = initial_count - self.len();
         if ignored_count > 0 {
