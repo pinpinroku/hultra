@@ -5,12 +5,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-mod manifest;
-mod resolver;
+use tracing::info;
 
 pub use resolver::scan_mods;
 
 use crate::core::blacklist::UpdaterBlacklist;
+
+mod manifest;
+mod resolver;
 
 /// Information of installed mod.
 #[derive(Debug, Clone)]
@@ -168,5 +170,29 @@ impl ModFileSource for LocalModFileSource {
             .map(|e| ModFile::from(e.path()))
             .collect();
         Ok(found_paths)
+    }
+}
+
+pub trait LocalModExt {
+    fn apply_blacklist(&mut self, ublist: &UpdaterBlacklist) -> io::Result<()>;
+}
+
+impl LocalModExt for Vec<LocalMod> {
+    fn apply_blacklist(&mut self, ublist: &UpdaterBlacklist) -> io::Result<()> {
+        let initial_count = self.len();
+        info!("loaded {} mods", initial_count);
+
+        if ublist.filenames().is_empty() {
+            return Ok(());
+        }
+
+        self.retain(|local_mod| !local_mod.file().is_blacklisted(&ublist));
+
+        let ignored_count = initial_count - self.len();
+        if ignored_count > 0 {
+            info!("{} mods were ignored due to blacklist", ignored_count)
+        }
+
+        Ok(())
     }
 }

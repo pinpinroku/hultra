@@ -7,7 +7,7 @@ use crate::{
     core::{
         blacklist::{self, LocalUpdaterBlacklistSource},
         cache,
-        local::{self, LocalFileSystemService},
+        local::{self, LocalFileSystemService, LocalModExt},
         network::{SharedHttpClient, api, downloader},
         update,
     },
@@ -17,23 +17,16 @@ use crate::{
 pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
     info!("updating mods");
 
+    let mods_dir = config.mods_dir();
+
     info!("loading installed mods");
-    let mut local_mods = local::scan_mods(&config.mods_dir())?;
+    let mut local_mods = local::scan_mods(&mods_dir)?;
 
-    let initial_count = local_mods.len();
-    info!("loaded {} mods", initial_count);
+    let source = LocalUpdaterBlacklistSource::new(mods_dir.to_path_buf());
+    let ublist = blacklist::fetch(&source)?;
 
-    info!("checking updater blacklist");
-    let source = LocalUpdaterBlacklistSource::new(config.mods_dir());
-    let blacklist = blacklist::fetch(&source)?;
-    if !blacklist.filenames().is_empty() {
-        local_mods.retain(|local_mod| !local_mod.file().is_blacklisted(&blacklist));
-    }
+    local_mods.apply_blacklist(&ublist)?;
 
-    let ignored_count = initial_count - local_mods.len();
-    if ignored_count > 0 {
-        info!("{} mods were ignored due to blacklist", ignored_count);
-    }
     if local_mods.is_empty() {
         println!("All mods are blacklisted")
     }
@@ -68,7 +61,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
         shared_client.inner().clone(),
         args,
         report.download_files,
-        &config.mods_dir(),
+        &mods_dir,
     )
     .await?;
 
