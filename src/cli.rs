@@ -1,17 +1,17 @@
-mod everest;
-mod gamebanana;
-mod mirror;
-mod network;
-
-pub use everest::{EverestSubCommand, NetworkCommand};
-pub use mirror::Mirror;
-pub use network::DownloadOption;
-
-use gamebanana::GamebananaUrl;
-
+//! Command list and global options.
 use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
+
+use crate::{
+    commands::{
+        self, DownloadOption,
+        everest::{EverestSubCommand, network::NetworkCommand},
+        install::InstallArgs,
+    },
+    config::AppConfig,
+    everest::{self, EverestHttpClient},
+};
 
 /// Command line interface.
 #[derive(Debug, Clone, Parser)]
@@ -36,15 +36,7 @@ pub enum Command {
     List,
 
     /// Install mods from the GameBanana URLs.
-    Install {
-        /// URL(s) of mod page on GameBanana.
-        #[arg(required = true, num_args = 1..20)]
-        urls: Vec<GamebananaUrl>,
-
-        /// Options specific to downloading.
-        #[command(flatten)]
-        option: DownloadOption,
-    },
+    Install(InstallArgs),
 
     /// Update mods.
     Update(DownloadOption),
@@ -52,4 +44,40 @@ pub enum Command {
     /// Manage Everest.
     #[command(subcommand)]
     Everest(EverestSubCommand),
+}
+
+pub async fn dispatch(cmd: Command, config: AppConfig) -> anyhow::Result<()> {
+    match cmd {
+        Command::List => commands::list::run(&config)?,
+        Command::Install(args) => commands::install::run(args, &config).await?,
+        Command::Update(args) => commands::update::run(args, &config).await?,
+        Command::Everest(subcommand) => match subcommand {
+            EverestSubCommand::Version => commands::everest::version::run(&config)?,
+            EverestSubCommand::NetworkRequired(action) => {
+                let option = action.network_option();
+                let shared_client = EverestHttpClient::new()?;
+                let builds = everest::fetch(shared_client.inner().clone(), option).await?;
+
+                match action {
+                    NetworkCommand::List(args) => {
+                        commands::everest::network::list::run(&args, &builds)
+                    }
+                    NetworkCommand::Update(_) => {
+                        commands::everest::network::update::run(&config, &builds, &shared_client)
+                            .await?
+                    }
+                    NetworkCommand::Install(args) => {
+                        commands::everest::network::install::run(
+                            &args,
+                            &builds,
+                            &shared_client,
+                            &config,
+                        )
+                        .await?
+                    }
+                }
+            }
+        },
+    }
+    Ok(())
 }

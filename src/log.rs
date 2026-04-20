@@ -13,13 +13,12 @@ use tracing_subscriber::{
 
 pub fn init_logger(log_file: Option<&Path>) -> Result<(), io::Error> {
     // if the variable `$RUST_LOG` is not set, do not display any logs to the console
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("off"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let console_layer = fmt::layer()
         .with_writer(std::io::stderr)
         .with_target(false)
         .without_time()
-        .pretty()
         .with_filter(env_filter);
 
     let file_layer = if let Some(p) = log_file {
@@ -44,7 +43,7 @@ pub fn init_logger(log_file: Option<&Path>) -> Result<(), io::Error> {
     Ok(())
 }
 
-/// Swaps user's home direcotry path with tilde.
+/// Swaps user's home directory path with tilde.
 pub fn anonymize(path: &Path) -> String {
     // 1. trying to detect home dir from env var
     if let Some(home) = std::env::home_dir()
@@ -74,4 +73,12 @@ pub fn anonymize(path: &Path) -> String {
         // 3. last resort: fallback to original
         _ => path.to_string_lossy().into_owned(),
     }
+}
+
+/// Shows progress only if the effective level is `INFO` or quieter (no debug spam)
+pub fn should_show_progress() -> bool {
+    let filter = EnvFilter::from_default_env();
+    filter
+        .max_level_hint()
+        .is_some_and(|lvl| lvl < tracing::Level::DEBUG)
 }

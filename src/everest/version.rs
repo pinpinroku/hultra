@@ -1,9 +1,10 @@
-use std::{fs, io, path::Path};
+//! Domain model of version number for the `everest version` command.
+use std::{fs, io, path::PathBuf, str::FromStr};
 
-use super::{Branch, EverestBuild};
+use crate::config::AppConfig;
 
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum VersionParseError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("invalid version string '{version}' in the `update-build.txt`: {source}")]
@@ -11,56 +12,70 @@ pub enum Error {
         source: std::num::ParseIntError,
         version: String,
     },
-    #[error("version text not found in the root directory")]
-    VersionNotFound,
+    #[error("version file does not contain any strings")]
+    VersionTextNotFound,
+    #[error("version number '{actual}' is not in the range within {expected}")]
+    InvalidVersionRange { actual: u32, expected: String },
 }
 
-/// Ensures installed version.
-pub fn ensure_installed_version(root_dir: &Path) -> Result<u32, Error> {
-    get_installed_version(root_dir)?.ok_or(Error::VersionNotFound)
-}
+/// Represents version number of Everest.
+pub struct VersionNumber(u32);
 
-/// Returns currently installed Everst version number if the file is found.
-///
-/// This function will returns None if the file is empty or not found on the path.
-/// Returns InvalidVersion error when the version number cannot be parsed as unsigned 32 bit integer.
-fn get_installed_version(root_dir: &Path) -> Result<Option<u32>, Error> {
-    let path = root_dir.join("update-build.txt");
+impl VersionNumber {
+    const MIN_VERSION: u32 = 3960;
+    const MAX_VERSION: u32 = 9999;
 
-    let content = match fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.into()),
-    };
-
-    let trimmed = content.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
+    pub fn value(&self) -> u32 {
+        self.0
     }
-
-    trimmed
-        .parse::<u32>()
-        .map(Some)
-        .map_err(|e| Error::InvalidVersion {
-            source: e,
-            version: trimmed.to_string(),
-        })
 }
 
-pub fn get_installed_branch<'a>(builds: &'a [EverestBuild], version: &u32) -> Option<&'a Branch> {
-    builds
-        .iter()
-        .find(|b| &b.version == version)
-        .map(|b| &b.branch)
+impl FromStr for VersionNumber {
+    type Err = VersionParseError;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        let trimmed = raw.trim();
+
+        if trimmed.is_empty() {
+            return Err(VersionParseError::VersionTextNotFound);
+        }
+
+        let version = trimmed
+            .parse::<u32>()
+            .map_err(|e| VersionParseError::InvalidVersion {
+                source: e,
+                version: trimmed.to_string(),
+            })?;
+
+        if !(Self::MIN_VERSION..=Self::MAX_VERSION).contains(&version) {
+            return Err(VersionParseError::InvalidVersionRange {
+                actual: version,
+                expected: format!("{}-{}", Self::MIN_VERSION, Self::MAX_VERSION),
+            });
+        }
+
+        Ok(Self(version))
+    }
 }
 
-/// Returns latest build on given branch.
-pub fn get_latest_build_on_branch<'a>(
-    builds: &'a [EverestBuild],
-    branch: &Branch,
-) -> Option<&'a EverestBuild> {
-    builds
-        .iter()
-        .filter(|b| &b.branch == branch)
-        .max_by_key(|b| b.version)
+pub trait InstalledVersionProvider {
+    fn fetch(&self) -> Result<String, io::Error>;
+}
+
+/// Represents version file of Everest.
+pub struct FileVersionRepository {
+    path: PathBuf,
+}
+
+impl FileVersionRepository {
+    pub fn new(config: &AppConfig) -> Self {
+        let path = config.update_build_path();
+        Self { path }
+    }
+}
+
+impl InstalledVersionProvider for FileVersionRepository {
+    fn fetch(&self) -> Result<String, io::Error> {
+        fs::read_to_string(&self.path)
+    }
 }

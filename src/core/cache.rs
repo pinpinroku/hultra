@@ -10,7 +10,7 @@ use rkyv::{Archive, Deserialize, Serialize, deserialize, rancor};
 use tracing::{debug, instrument};
 use xxhash_rust::xxh64::Xxh64;
 
-use crate::{config::AppConfig, log::anonymize};
+use crate::{config::AppConfig, core::Checksums, log::anonymize};
 
 #[derive(thiserror::Error, Debug)]
 pub enum CacheError {
@@ -23,8 +23,30 @@ pub enum CacheError {
 /// Represents database of file cache.
 #[derive(Archive, Deserialize, Serialize, Debug, Default)]
 #[rkyv(compare(PartialEq), derive(Debug))]
-pub struct FileCacheDB {
-    pub entries: BTreeMap<u64, CacheEntry>,
+pub struct FileCacheDb {
+    entries: BTreeMap<u64, CacheEntry>,
+}
+
+impl FileCacheDb {
+    /// Checks if the given key is exist and the value contains given value.
+    pub fn is_cache_valid(&self, inode: &u64, checksums: &Checksums) -> bool {
+        self.entries
+            .get(inode)
+            .map(|entry| checksums.contains(entry.hash()))
+            .unwrap_or(false)
+    }
+
+    /// Checks if cache entry exists and is still valid.
+    ///
+    /// ### Returns
+    /// * `true`: It means no cache (new record), or contents are modified.
+    /// * `false`: It means the entry is still valid, no need to rehash them.
+    pub fn should_rehash(&self, inode: &u64, mtime: i64, size: u64) -> bool {
+        self.entries
+            .get(inode)
+            .map(|entry| !entry.is_unchanged(mtime, size))
+            .unwrap_or(true)
+    }
 }
 
 /// Snapshot of the file when it was last hashed.
@@ -56,9 +78,16 @@ impl CacheEntry {
     }
 }
 
+impl CacheEntry {
+    /// Checks if the metadata is unchanged.
+    pub fn is_unchanged(&self, mtime: i64, size: u64) -> bool {
+        self.mtime == mtime && self.size == size
+    }
+}
+
 /// Gets up-to-date file cache.
 #[instrument(skip(config), fields(path = %anonymize(config.cache_db_path())))]
-pub fn sync(config: &AppConfig) -> Result<BTreeMap<u64, CacheEntry>, CacheError> {
+pub fn sync(config: &AppConfig) -> Result<FileCacheDb, CacheError> {
     // Load existing cache database
     let mut cache = load_cache_db(config.cache_db_path()).unwrap_or_default();
 
@@ -66,11 +95,11 @@ pub fn sync(config: &AppConfig) -> Result<BTreeMap<u64, CacheEntry>, CacheError>
         save_cache_db(&cache, config.cache_db_path())?;
     }
 
-    Ok(cache.entries)
+    Ok(cache)
 }
 
 /// Updates cache entries based on current filesystem state.
-fn update_cache(cache: &mut FileCacheDB, mods_dir: &Path) -> io::Result<bool> {
+fn update_cache(cache: &mut FileCacheDb, mods_dir: &Path) -> io::Result<bool> {
     let mut current_keys = HashSet::new();
     let mut updated = false;
 
@@ -92,7 +121,7 @@ fn update_cache(cache: &mut FileCacheDB, mods_dir: &Path) -> io::Result<bool> {
 
             let (path, mtime, size) = (entry.path(), meta.mtime(), meta.size());
 
-            if should_rehash(&cache.entries, &key, mtime, size) {
+            if cache.should_rehash(&key, mtime, size) {
                 let hash = hash_file(&path)?;
 
                 // NOTE Extracting only filename; mods directory is constant
@@ -118,27 +147,16 @@ fn update_cache(cache: &mut FileCacheDB, mods_dir: &Path) -> io::Result<bool> {
     Ok(updated)
 }
 
-/// Checks if cache entry exists and is still valid.
-///
-/// * `true` means no cache, or contents are modified
-/// * `false` means the entry is still valid
-#[inline]
-fn should_rehash(entries: &BTreeMap<u64, CacheEntry>, key: &u64, mtime: i64, size: u64) -> bool {
-    entries
-        .get(key)
-        .is_none_or(|cached| cached.mtime != mtime || cached.size != size)
-}
-
 /// Loads cache database from disk using rkyv.
-fn load_cache_db(cache_path: &Path) -> Result<FileCacheDB, CacheError> {
+fn load_cache_db(cache_path: &Path) -> Result<FileCacheDb, CacheError> {
     let bytes = fs::read(cache_path)?;
-    let archived = rkyv::access::<ArchivedFileCacheDB, rancor::Error>(&bytes)?;
-    let cache = deserialize::<FileCacheDB, rancor::Error>(archived)?;
+    let archived = rkyv::access::<ArchivedFileCacheDb, rancor::Error>(&bytes)?;
+    let cache = deserialize::<FileCacheDb, rancor::Error>(archived)?;
     Ok(cache)
 }
 
 /// Saves cache database to disk using rkyv.
-fn save_cache_db(cache: &FileCacheDB, cache_path: &Path) -> Result<(), CacheError> {
+fn save_cache_db(cache: &FileCacheDb, cache_path: &Path) -> Result<(), CacheError> {
     let bytes = rkyv::to_bytes::<rancor::Error>(cache)?;
     let mut file = fs::OpenOptions::new()
         .create(true)

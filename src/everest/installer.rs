@@ -6,11 +6,9 @@ use std::{
     process::{Command, Stdio},
 };
 
-use crate::config::AppConfig;
-
-/// Runs MiniInstaller.
-pub fn run(config: &AppConfig) -> io::Result<()> {
-    let installer = MiniInstaller::new(config.root_dir());
+/// Install Everest by running MiniInstaller.
+pub fn install(root_dir: &Path) -> io::Result<()> {
+    let installer = MiniInstaller::new(root_dir);
     installer.grant_execute_permission()?;
     installer.execute()
 }
