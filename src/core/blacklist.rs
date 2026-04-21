@@ -1,6 +1,13 @@
-use std::{collections::HashSet, fs, io, path::PathBuf, str::FromStr};
+use std::{
+    collections::HashSet,
+    fs, io,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use tracing::instrument;
+
+use crate::log::anonymize;
 
 #[instrument(skip_all)]
 pub fn fetch(source: &impl UpdaterBlacklistSource) -> io::Result<UpdaterBlacklist> {
@@ -39,25 +46,30 @@ impl FromStr for UpdaterBlacklist {
     }
 }
 
+/// A source that provides content for the updater's blacklist.
 pub trait UpdaterBlacklistSource {
     fn fetch_content(&self) -> io::Result<String>;
 }
 
+/// A blacklist source that reads from a local file.
 #[derive(Debug, Clone)]
 pub struct LocalUpdaterBlacklistSource {
-    base_directory: PathBuf,
+    /// A path to the updater's blacklist.
+    path: PathBuf,
 }
 
 impl LocalUpdaterBlacklistSource {
-    pub fn new(base_directory: PathBuf) -> Self {
-        Self { base_directory }
+    pub fn new(mods_dir: &Path) -> Self {
+        Self {
+            path: mods_dir.join("updaterblacklist.txt"),
+        }
     }
 }
 
 impl UpdaterBlacklistSource for LocalUpdaterBlacklistSource {
+    #[instrument(skip_all, fields(path = %anonymize(&self.path)))]
     fn fetch_content(&self) -> io::Result<String> {
-        let path = self.base_directory.join("updaterblacklist.txt");
-        let content = fs::read_to_string(&path).or_else(|e| {
+        let content = fs::read_to_string(&self.path).or_else(|e| {
             if e.kind() == io::ErrorKind::NotFound {
                 Ok(String::new())
             } else {
