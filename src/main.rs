@@ -13,7 +13,6 @@ mod config;
 mod core;
 mod everest;
 mod log;
-mod service;
 mod ui;
 mod utils;
 
