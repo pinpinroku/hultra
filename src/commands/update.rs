@@ -22,7 +22,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     info!("loading installed mods");
     let mut local_mods = local::scan_mods(&mods_dir)?;
 
-    let source = LocalUpdaterBlacklistSource::new(mods_dir.to_path_buf());
+    let source = LocalUpdaterBlacklistSource::new(&mods_dir);
     let ublist = blacklist::fetch(&source)?;
 
     local_mods.apply_blacklist(&ublist)?;
