@@ -55,17 +55,17 @@ impl Display for EverestDownloadUrl {
     }
 }
 
-// TODO make it enum and add more variants
-// URL must contains either github or azure
 #[derive(Debug, thiserror::Error)]
-#[error("failed to convert given string to EversestDownloadUrl")]
+#[error("invalid domain as Everest download URL")]
 struct ParseError;
 
 impl FromStr for EverestDownloadUrl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.ends_with("main.zip") {
+        if s.starts_with("https://github.com/EverestAPI/Everest/")
+            || s.starts_with("https://dev.azure.com/EverestAPI/Everest/")
+        {
             Ok(Self(s.to_string()))
         } else {
             Err(ParseError)
@@ -82,6 +82,24 @@ impl TryFrom<&EverestBuild> for DownloadResource {
             url,
             size: build.main_file_size,
         })
+    }
+}
+
+#[cfg(test)]
+mod download_url_test {
+    use super::*;
+
+    #[test]
+    fn test_url_conversion() {
+        let result = EverestDownloadUrl::from_str(
+            "https://dev.azure.com/EverestAPI/Everest/_apis/build/builds/5503/artifacts?artifactName=main&api-version=5.0&%24format=zip",
+        );
+        assert!(result.is_ok());
+
+        let result = EverestDownloadUrl::from_str(
+            "https://github.com/EverestAPI/Everest/releases/download/stable-1.6194.0/main.zip",
+        );
+        assert!(result.is_ok())
     }
 }
 
