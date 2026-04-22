@@ -16,6 +16,7 @@ A commandline installer and updater for Celeste mods.
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Shell Completions](#shell-completions)
 - [Global Options](#global-options)
 - [Download Options](#download-options)
 - [Technical Details](#technical-details)
@@ -114,6 +115,46 @@ hultra install https://gamebanana.com/mods/123456
 
 # install multiple mods at once
 hultra install https://gamebanana.com/mods/123456 https://gamebanana.com/mods/456789
+```
+
+## Shell Completions
+
+You can generate shell completion scripts for bash, zsh, and fish using the `generate-completion` subcommand.
+
+### Generate completions
+```bash
+# For Bash
+$ hultra generate-completion bash > hultra.bash
+
+# For Zsh
+$ hultra generate-completion zsh > _hultra
+
+# For Fish
+$ hultra generate-completion fish > hultra.fish
+```
+
+### Installtion
+To enable completions, move the generated file to the appropriate directory or source it in your shell configuration.
+
+**Bash**
+```bash
+$ hultra generate-completion bash | sudo tee /usr/share/bash-completion/completions/hultra
+```
+
+**Zsh**
+```bash
+# Create a directory for completions if it doesn't exist
+$ mkdir -p ~/.zfunc
+$ my_app completion zsh > ~/.zfunc/_my_app
+
+# Add the following to your .zshrc:
+fpath+=~/.zfunc
+autoload -U compinit && compinit
+```
+
+**Fish**
+```fish
+$ hultra generate-completion fish > ~/.config/fish/completions/hultra.fish
 ```
 
 ## Global Options
