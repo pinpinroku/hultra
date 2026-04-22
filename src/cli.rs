@@ -1,7 +1,8 @@
 //! Command list and global options.
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
 
 use crate::{
     commands::{
@@ -9,7 +10,7 @@ use crate::{
         everest::{EverestSubCommand, network::NetworkCommand},
         install::InstallArgs,
     },
-    config::AppConfig,
+    config::{AppConfig, CARGO_PKG_NAME},
     everest::{self, EverestHttpClient},
 };
 
@@ -32,6 +33,12 @@ pub struct Cli {
 /// Subcommands of the CLI.
 #[derive(Debug, Clone, Subcommand)]
 pub enum Command {
+    /// Generate shell completion.
+    GenerateCompletion {
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
     /// List installed mods.
     List,
 
@@ -48,6 +55,10 @@ pub enum Command {
 
 pub async fn dispatch(cmd: Command, config: AppConfig) -> anyhow::Result<()> {
     match cmd {
+        Command::GenerateCompletion { shell } => {
+            let mut cmd = Cli::command();
+            generate(shell, &mut cmd, CARGO_PKG_NAME, &mut std::io::stdout());
+        }
         Command::List => commands::list::run(&config)?,
         Command::Install(args) => commands::install::run(args, &config).await?,
         Command::Update(args) => commands::update::run(args, &config).await?,
