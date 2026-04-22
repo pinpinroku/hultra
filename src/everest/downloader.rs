@@ -120,6 +120,10 @@ enum Error {
     Io(#[from] std::io::Error),
     #[error("failed to extract Everest to the root directory")]
     Archive(#[from] archive::ExtractError),
+    #[error(
+        "downloaded file does not have exepected file size: expected: {expected}, actual: {actual} "
+    )]
+    FileSizeMisMatch { expected: u64, actual: u64 },
 }
 
 /// Download client for Everest update.
@@ -172,8 +176,13 @@ impl EverestDownloader {
             downloaded += chunk.len() as u64;
         }
         file.flush().await?;
-        // TODO implement actucal validation
-        debug_assert_eq!(downloaded, resource.filesize());
+
+        if downloaded != resource.filesize() {
+            return Err(Error::FileSizeMisMatch {
+                expected: resource.filesize(),
+                actual: downloaded,
+            });
+        }
 
         archive::extract(temp_path, extract_dir)?;
         spinner.finish_and_clear();
