@@ -4,13 +4,13 @@ use crate::{config::AppConfig, core::local};
 
 /// Lists currently installed mods.
 pub fn run(config: &AppConfig) -> anyhow::Result<()> {
-    info!("loading installed mods");
+    info!("scanning installed mods");
     let mods = local::scan_mods(&config.mods_dir())?;
 
-    info!("listing installed mods");
-    for installed in mods {
+    for installed in &mods {
         println!("{}", installed)
     }
 
+    info!("found {} mods", mods.len());
     Ok(())
 }

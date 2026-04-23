@@ -15,13 +15,13 @@ use crate::{
 
 /// Checks update for the mods and download the latest one if available.
 pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()> {
-    info!("updating mods");
-
     let mods_dir = config.mods_dir();
 
-    info!("loading installed mods");
+    info!("scanning installed mods");
     let mut local_mods = local::scan_mods(&mods_dir)?;
+    info!("found {} mods", local_mods.len());
 
+    info!("checking updater's blacklist");
     let source = LocalUpdaterBlacklistSource::new(&mods_dir);
     let ublist = blacklist::fetch(&source)?;
 
@@ -37,7 +37,7 @@ pub async fn run(args: DownloadOption, config: &AppConfig) -> anyhow::Result<()>
     // Initialize shared client
     let shared_client = SharedHttpClient::new();
 
-    info!("fetching database...");
+    info!("fetching database");
     let registry = api::fetch_registry(shared_client.inner().clone(), &args).await?;
 
     info!("checking updates");

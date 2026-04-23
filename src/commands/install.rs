@@ -69,8 +69,6 @@ impl GamebananaUrl {
 }
 
 pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
-    info!("installing mods");
-
     // Initialize client
     let shared_client = SharedHttpClient::new();
 
@@ -81,10 +79,10 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
         .filter_map(|url| url.extract_id().ok())
         .collect();
 
-    info!("fetching databases...");
+    info!("fetching databases");
     let (registry, graph) = api::fetch(shared_client.inner().clone(), &args.option).await?;
 
-    info!("extracting installed mod names");
+    info!("scanning installed mods");
     let installed_names: HashSet<String> = local::scan_mods(&config.mods_dir())?
         .iter()
         .map(|m| m.name().to_string())
