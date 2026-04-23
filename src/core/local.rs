@@ -180,7 +180,6 @@ pub trait LocalModExt {
 impl LocalModExt for Vec<LocalMod> {
     fn apply_blacklist(&mut self, ublist: &UpdaterBlacklist) -> io::Result<()> {
         let initial_count = self.len();
-        info!("loaded {} mods", initial_count);
 
         if ublist.filenames().is_empty() {
             return Ok(());

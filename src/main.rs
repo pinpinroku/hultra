@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::{
     cli::Cli,
@@ -27,10 +27,11 @@ async fn main() -> anyhow::Result<()> {
         )
     })?;
 
-    info!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
+    debug!("{} version {}", CARGO_PKG_NAME, CARGO_PKG_VERSION);
     debug!(?args);
 
     let config = AppConfig::new(args.directory.as_deref())?;
+    debug!(%config);
 
     cli::dispatch(args.commands, config).await
 }

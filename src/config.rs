@@ -1,9 +1,12 @@
 use std::{
     env,
+    fmt::Display,
     path::{Path, PathBuf},
 };
 
 use tracing::warn;
+
+use crate::log::anonymize;
 
 pub const CARGO_PKG_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CARGO_PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -23,6 +26,18 @@ pub struct AppConfig {
 
     /// Path to the file hash cache.
     cache_db_path: PathBuf,
+}
+
+impl Display for AppConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let root_dir = anonymize(&self.root_dir);
+        let cache_dir = anonymize(&self.cache_db_path);
+        write!(
+            f,
+            "Root directory: {}, Cache directory: {}",
+            root_dir, cache_dir
+        )
+    }
 }
 
 impl AppConfig {
