@@ -1,5 +1,8 @@
 //! Everest version command handler.
-use crate::{config::AppConfig, everest::FileVersionRepository, everest::fetch_installed_version};
+use crate::{
+    config::AppConfig,
+    everest::version::{FileVersionRepository, fetch_installed_version},
+};
 
 pub fn run(config: &AppConfig) -> anyhow::Result<()> {
     let repo = FileVersionRepository::new(config);

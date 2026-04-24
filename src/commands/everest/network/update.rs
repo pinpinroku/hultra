@@ -4,11 +4,10 @@ use tracing::debug;
 use crate::{
     config::AppConfig,
     everest::{
-        self,
+        self, EverestHttpClient,
         build::{EverestBuild, EverestBuildExt},
-        fetch_installed_version,
+        version::{FileVersionRepository, fetch_installed_version},
     },
-    everest::{EverestHttpClient, FileVersionRepository},
 };
 
 pub async fn run(
