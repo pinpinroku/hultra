@@ -1,7 +1,6 @@
 mod api;
 pub mod build;
 mod downloader;
-mod error;
 mod installer;
 pub mod version;
 
