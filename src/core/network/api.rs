@@ -4,31 +4,9 @@
 use std::time::Duration;
 
 use reqwest::Client;
-use tokio::try_join;
 use tracing::instrument;
 
-use crate::{
-    commands::DownloadOption,
-    core::{dependency::DependencyGraph, registry::EverestUpdateYaml},
-    ui::create_spinner,
-};
-
-/// Fetches registry and graph at once.
-pub async fn fetch(
-    client: Client,
-    opt: &DownloadOption,
-) -> anyhow::Result<(EverestUpdateYaml, DependencyGraph)> {
-    let api_client = ApiClient::new(client);
-    let source = ApiSource::from(opt);
-
-    let spinner = create_spinner();
-    let (registry, graph) = try_join!(
-        api_client.fetch_everest_update_yaml(source),
-        api_client.fetch_graph(source)
-    )?;
-    spinner.finish_and_clear();
-    Ok((registry, graph))
-}
+use crate::{commands::DownloadOption, core::registry::EverestUpdateYaml, ui::create_spinner};
 
 /// Fetches registry.
 pub async fn fetch_registry(
@@ -71,7 +49,6 @@ impl From<&DownloadOption> for ApiSource {
 #[derive(Debug, Clone, Copy)]
 enum ApiResource {
     Registry,
-    DependencyGraph,
 }
 
 impl ApiSource {
@@ -80,14 +57,8 @@ impl ApiSource {
             (Self::Primary, ApiResource::Registry) => {
                 "https://maddie480.ovh/celeste/everest_update.yaml"
             }
-            (Self::Primary, ApiResource::DependencyGraph) => {
-                "https://maddie480.ovh/celeste/mod_dependency_graph.yaml"
-            }
             (Self::Mirror, ApiResource::Registry) => {
                 "https://everestapi.github.io/updatermirror/everest_update.yaml"
-            }
-            (Self::Mirror, ApiResource::DependencyGraph) => {
-                "https://everestapi.github.io/updatermirror/mod_dependency_graph.yaml"
             }
         }
     }
@@ -131,9 +102,5 @@ impl ApiClient {
         source: ApiSource,
     ) -> Result<EverestUpdateYaml, ApiError> {
         self.fetch_yaml(source, ApiResource::Registry).await
-    }
-
-    pub async fn fetch_graph(&self, source: ApiSource) -> Result<DependencyGraph, ApiError> {
-        self.fetch_yaml(source, ApiResource::DependencyGraph).await
     }
 }

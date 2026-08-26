@@ -10,7 +10,6 @@ use clap::{Args, ValueEnum};
 use crate::core::network::downloader::DownloadUrl;
 
 pub mod everest;
-pub mod install;
 pub mod list;
 pub mod update;
 

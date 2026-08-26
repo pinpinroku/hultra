@@ -19,7 +19,6 @@
 pub mod blacklist;
 pub mod cache;
 pub mod checksum;
-pub mod dependency;
 pub mod local;
 pub mod network;
 pub mod registry;

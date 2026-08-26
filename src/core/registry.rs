@@ -1,14 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde::Deserialize;
 use tracing::debug;
 
-use crate::core::{
-    LocalMod,
-    local::ModIdentityService,
-    network::downloader::{DownloadFile, ParseDownloadFileError},
-    update::UpdateContext,
-};
+use crate::core::{LocalMod, local::ModIdentityService, update::UpdateContext};
 
 /// Mod database. The key of main map is the mod name.
 #[derive(Debug, Clone, Deserialize)]
@@ -21,8 +16,8 @@ pub struct EverestUpdateYaml {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Entry {
     /// This is a group ID of the map. It is unique but shared with assets.
-    #[serde(rename = "GameBananaId")]
-    id: u32,
+    // #[serde(rename = "GameBananaId")]
+    // id: u32,
     /// Version string. This value may not follow any specific versioning scheme. Do not expect it to be SemVer.
     #[serde(rename = "Version")]
     version: String,
@@ -53,39 +48,6 @@ impl Entry {
 }
 
 impl EverestUpdateYaml {
-    /// Returns names corresponding to the given IDs using a linear search.
-    ///
-    /// Note: While this has O(n) complexity, it is more performant than
-    /// building an inverted index for the expected workload.
-    pub fn get_names_by_ids(&self, ids: &HashSet<u32>) -> HashSet<String> {
-        self.entries
-            .iter()
-            .filter(|(_, e)| ids.contains(&e.id))
-            .map(|(n, _)| n.to_owned())
-            .collect()
-    }
-
-    /// Converts Entry to the items for downloads.
-    pub fn into_download_files(
-        mut self,
-        required_names: HashSet<String>,
-        installed_names: HashSet<String>,
-    ) -> Result<Vec<DownloadFile>, ParseDownloadFileError> {
-        let missing_names: HashSet<String> = required_names
-            .into_iter()
-            .filter(|name| !installed_names.contains(name))
-            .collect();
-
-        missing_names
-            .into_iter()
-            .filter_map(|name| {
-                self.entries
-                    .remove(&name)
-                    .map(|entry| DownloadFile::try_from((name, entry)))
-            })
-            .collect()
-    }
-
     pub fn into_update_context(
         mut self,
         local_mods: &[LocalMod],
@@ -154,36 +116,36 @@ BreezeContestAudio:
         serde_yaml_ng::from_slice(YAML_BYTES).expect("YAML format should be parsed")
     }
 
-    #[test]
-    fn test_mod_registry_from_slice_and_mods() {
-        let registry = load_registry_from_yaml();
-        let mods = registry.entries;
-        let target = mods.get("puppyposting");
-        assert!(target.is_some_and(|mod_info| {
-            mod_info.id == 619550 && mod_info.url == "https://gamebanana.com/mmdl/1520739"
-        }));
-    }
+    // #[test]
+    // fn test_mod_registry_from_slice_and_mods() {
+    //     let registry = load_registry_from_yaml();
+    //     let mods = registry.entries;
+    //     let target = mods.get("puppyposting");
+    //     assert!(target.is_some_and(|mod_info| {
+    //         mod_info.id == 619550 && mod_info.url == "https://gamebanana.com/mmdl/1520739"
+    //     }));
+    // }
 
-    #[test]
-    fn test_get_mod_names_by_id() {
-        let registry = load_registry_from_yaml();
-        let ids: HashSet<u32> = HashSet::from_iter([619550]);
-        let names = registry.get_names_by_ids(&ids);
-        assert!(!names.is_empty());
-        assert!(names.contains("puppyposting"))
-    }
+    // #[test]
+    // fn test_get_mod_names_by_id() {
+    //     let registry = load_registry_from_yaml();
+    //     let ids: HashSet<u32> = HashSet::from_iter([619550]);
+    //     let names = registry.get_names_by_ids(&ids);
+    //     assert!(!names.is_empty());
+    //     assert!(names.contains("puppyposting"))
+    // }
 
-    #[test]
-    fn test_get_mod_names_by_id_multiple() {
-        let registry = load_registry_from_yaml();
-        let ids: HashSet<u32> = HashSet::from_iter([554453]);
-        let result = registry.get_names_by_ids(&ids);
-        assert!(
-            result.len() == 2
-                && result.contains("BreezeContest")
-                && result.contains("BreezeContestAudio")
-        );
-    }
+    // #[test]
+    // fn test_get_mod_names_by_id_multiple() {
+    //     let registry = load_registry_from_yaml();
+    //     let ids: HashSet<u32> = HashSet::from_iter([554453]);
+    //     let result = registry.get_names_by_ids(&ids);
+    //     assert!(
+    //         result.len() == 2
+    //             && result.contains("BreezeContest")
+    //             && result.contains("BreezeContestAudio")
+    //     );
+    // }
 
     #[test]
     fn test_into_update_context_success() {

@@ -6,9 +6,10 @@ use clap_complete::{Shell, generate};
 
 use crate::{
     commands::{
-        self, DownloadOption,
+        self,
+        DownloadOption,
         everest::{EverestSubCommand, network::NetworkCommand},
-        install::InstallArgs,
+        // install::InstallArgs,
     },
     config::{AppConfig, CARGO_PKG_NAME},
     everest::{self, EverestHttpClient},
@@ -43,7 +44,7 @@ pub enum Command {
     List,
 
     /// Install mods from the GameBanana URLs.
-    Install(InstallArgs),
+    // Install(InstallArgs),
 
     /// Update mods.
     Update(DownloadOption),
@@ -60,7 +61,7 @@ pub async fn dispatch(cmd: Command, config: AppConfig) -> anyhow::Result<()> {
             generate(shell, &mut cmd, CARGO_PKG_NAME, &mut std::io::stdout());
         }
         Command::List => commands::list::run(&config)?,
-        Command::Install(args) => commands::install::run(args, &config).await?,
+        // Command::Install(args) => commands::install::run(args, &config).await?,
         Command::Update(args) => commands::update::run(args, &config).await?,
         Command::Everest(subcommand) => match subcommand {
             EverestSubCommand::Version => commands::everest::version::run(&config)?,
