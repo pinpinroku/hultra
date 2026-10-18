@@ -5,7 +5,7 @@ version = "5.3.4"
 edition = "2024"
 readme = "README.md"
 license = "GPL-3.0-or-later"
-rust-version = "1.98"
+rust-version = "1.99"
 authors = ["pinpinroku <pinpinroku11600@tutanota.com>"]
 repository = "https://github.com/pinpinroku/hultra"
 
@@ -27,7 +27,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 url = "2.5.8"
 xxhash-rust = { version = "0.8.15", features = ["xxh64"] }
-zip = { version = "8.6.0", features = ["deflate"] }
+zip = { version = "9.0.0", features = ["deflate"] }
 zip-finder = { version = "1.0.0", path = "./zip-finder" }
 
 [workspace]
