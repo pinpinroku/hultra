@@ -20,9 +20,11 @@ pub struct EverestUpdateYaml {
 /// Metadata of the mod.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Entry {
-    /// This is a group ID of the map. It is unique but shared with assets.
-    #[serde(rename = "GameBananaId")]
-    id: u32,
+    /// The file identifier.
+    ///
+    /// Previously defined as `id`; renamed to `file_id` in new API.
+    #[serde(rename = "GameBananaFileId")]
+    file_id: String,
     /// Version string. This value may not follow any specific versioning scheme. Do not expect it to be SemVer.
     #[serde(rename = "Version")]
     version: String,
@@ -50,6 +52,10 @@ impl Entry {
     pub fn checksums(&self) -> &[String] {
         &self.checksums
     }
+    pub fn file_id(&self) -> u32 {
+        // FIXME: Remove `.unwrap()`
+        self.file_id.parse::<u32>().unwrap()
+    }
 }
 
 impl EverestUpdateYaml {
@@ -60,7 +66,7 @@ impl EverestUpdateYaml {
     pub fn get_names_by_ids(&self, ids: &HashSet<u32>) -> HashSet<String> {
         self.entries
             .iter()
-            .filter(|(_, e)| ids.contains(&e.id))
+            .filter(|(_, e)| ids.contains(&e.file_id()))
             .map(|(n, _)| n.to_owned())
             .collect()
     }
@@ -117,14 +123,13 @@ mod tests_registry {
 
     use super::*;
 
-    const YAML_BYTES: &[u8; 670] = br#"
+    const YAML_BYTES: &[u8; 607] = br#"
 puppyposting:
   GameBananaType: Mod
   Version: 1.1.0
   LastUpdate: 1758235322
   Size: 13937408
-  GameBananaId: 619550
-  GameBananaFileId: 1520739
+  GameBananaFileId: '1520739'
   xxHash:
   - 7f4d96733b93c52c
   URL: https://gamebanana.com/mmdl/1520739
@@ -133,8 +138,7 @@ BreezeContest:
   Version: 1.1.2
   LastUpdate: 1760568856
   Size: 234447819
-  GameBananaId: 554453
-  GameBananaFileId: 1539722
+  GameBananaFileId: '1539722'
   xxHash:
   - e4d62f4733631949
   URL: https://gamebanana.com/mmdl/1539722
@@ -143,8 +147,7 @@ BreezeContestAudio:
   Version: 1.0.1
   LastUpdate: 1731192314
   Size: 707675460
-  GameBananaId: 554453
-  GameBananaFileId: 1318934
+  GameBananaFileId: '1318934'
   xxHash:
   - de98a344ea44aea4
   URL: https://gamebanana.com/mmdl/1318934
@@ -160,29 +163,17 @@ BreezeContestAudio:
         let mods = registry.entries;
         let target = mods.get("puppyposting");
         assert!(target.is_some_and(|mod_info| {
-            mod_info.id == 619550 && mod_info.url == "https://gamebanana.com/mmdl/1520739"
+            mod_info.file_id() == 1520739 && mod_info.url == "https://gamebanana.com/mmdl/1520739"
         }));
     }
 
     #[test]
     fn test_get_mod_names_by_id() {
         let registry = load_registry_from_yaml();
-        let ids: HashSet<u32> = HashSet::from_iter([619550]);
+        let ids: HashSet<u32> = HashSet::from_iter([1520739]);
         let names = registry.get_names_by_ids(&ids);
         assert!(!names.is_empty());
         assert!(names.contains("puppyposting"))
-    }
-
-    #[test]
-    fn test_get_mod_names_by_id_multiple() {
-        let registry = load_registry_from_yaml();
-        let ids: HashSet<u32> = HashSet::from_iter([554453]);
-        let result = registry.get_names_by_ids(&ids);
-        assert!(
-            result.len() == 2
-                && result.contains("BreezeContest")
-                && result.contains("BreezeContestAudio")
-        );
     }
 
     #[test]
