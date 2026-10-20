@@ -16,9 +16,9 @@ use super::DownloadOption;
 
 #[derive(Debug, Args, Clone)]
 pub struct InstallArgs {
-    /// URL(s) of mod page on GameBanana.
+    /// Manual download link(s) of the mod file in GameBanana.
     #[arg(required = true, num_args = 1..20)]
-    pub urls: Vec<GamebananaUrl>,
+    pub urls: Vec<GamebananaFileUrl>,
 
     #[command(flatten)]
     pub option: DownloadOption,
@@ -31,25 +31,32 @@ pub enum ArgumentError {
         u32::MAX
     )]
     ParseLastSegAsInt(#[from] std::num::ParseIntError),
-    #[error("it must be starts with 'https://gamebanana.com/mods/'")]
+    #[error(
+        "it must be 'https://gamebanana.com/mods/download/{{mod_id}}#FileInfo_{{file_id}}', see `README.md` for details"
+    )]
     InvalidUrl,
 }
 
+/// Manual download link of the mod file in GameBanana.
+///
+/// Expected input is
+/// <https://gamebanana.com/mods/download/{mod_id}#FileInfo_{file_id}>
 #[derive(Debug, Clone)]
-pub struct GamebananaUrl(String);
+pub struct GamebananaFileUrl(String);
 
-impl FromStr for GamebananaUrl {
+impl FromStr for GamebananaFileUrl {
     type Err = ArgumentError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        s.strip_prefix("https://gamebanana.com/mods/")
+        s.split_once("#FileInfo_")
             .ok_or(ArgumentError::InvalidUrl)?
+            .1
             .parse::<u32>()?;
-        Ok(GamebananaUrl(s.to_string()))
+        Ok(GamebananaFileUrl(s.to_string()))
     }
 }
 
-impl Deref for GamebananaUrl {
+impl Deref for GamebananaFileUrl {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
@@ -57,12 +64,13 @@ impl Deref for GamebananaUrl {
     }
 }
 
-impl GamebananaUrl {
+impl GamebananaFileUrl {
     pub fn extract_id(&self) -> Result<u32, ArgumentError> {
         let id_part = self
             .0
-            .strip_prefix("https://gamebanana.com/mods/")
-            .ok_or(ArgumentError::InvalidUrl)?;
+            .split_once("#FileInfo_")
+            .ok_or(ArgumentError::InvalidUrl)?
+            .1;
         let id = id_part.parse()?;
         Ok(id)
     }
@@ -72,7 +80,7 @@ pub async fn run(args: InstallArgs, config: &AppConfig) -> anyhow::Result<()> {
     // Initialize client
     let shared_client = SharedHttpClient::new();
 
-    // Parse mod page URLs to get mod IDs
+    // Parse mod download page URLs to get mod file IDs
     let ids: HashSet<u32> = args
         .urls
         .iter()
