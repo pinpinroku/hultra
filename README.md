@@ -105,11 +105,17 @@ hultra update
 hultra install URL [URL...]
 
 # install a mod
-hultra install https://gamebanana.com/mods/123456
+hultra install https://gamebanana.com/mods/download/150453#FileInfo_1247390
 
 # install multiple mods at once
-hultra install https://gamebanana.com/mods/123456 https://gamebanana.com/mods/456789
+hultra install https://gamebanana.com/mods/download/150453#FileInfo_1247390 https://gamebanana.com/mods/download/641987#FileInfo_1607057
 ```
+
+Get the mod file URL:
+
+1. Open the page of any mod you want to download in GameBanana.
+2. In the Files section below the description, copy the link behind the `Manual Download` button.
+3. Alternatively, click `Manual Download` and copy the URL of the page it takes you to.
 
 ## Shell Completions
 

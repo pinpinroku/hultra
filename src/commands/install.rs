@@ -16,7 +16,7 @@ use super::DownloadOption;
 
 #[derive(Debug, Args, Clone)]
 pub struct InstallArgs {
-    /// URL(s) of mod page on GameBanana.
+    /// Manual download link(s) of the mod file in GameBanana.
     #[arg(required = true, num_args = 1..20)]
     pub urls: Vec<GamebananaFileUrl>,
 
@@ -31,14 +31,16 @@ pub enum ArgumentError {
         u32::MAX
     )]
     ParseLastSegAsInt(#[from] std::num::ParseIntError),
-    #[error("it must be starts with 'https://gamebanana.com/mods/'")]
+    #[error(
+        "it must be 'https://gamebanana.com/mods/download/{{mod_id}}#FileInfo_{{file_id}}', see `README.md` for details"
+    )]
     InvalidUrl,
 }
 
-/// URL of the mod file downloads in Gamebanana
+/// Manual download link of the mod file in GameBanana.
 ///
 /// Expected input is
-/// <https://gamebanana.com/mods/download/{random_id}#FileInfo_{file_id}>
+/// <https://gamebanana.com/mods/download/{mod_id}#FileInfo_{file_id}>
 #[derive(Debug, Clone)]
 pub struct GamebananaFileUrl(String);
 
