@@ -26,8 +26,8 @@ pub struct DownloadOption {
         value_delimiter = ',',
         long_help = "Comma-separated list of mirror priorities.
         This option allows you to specify the order in which mirrors should be tried when downloading mods.
-        You can specify up to 4 mirrors, but providing fewer will restrict download attempts to only those mirrors.",
-        default_value = "otobot,gb,jade,wegfan"
+        You can specify up to 5 mirrors, but providing fewer will restrict download attempts to only those mirrors.",
+        default_value = "otobot,risingsunlight,gb,jade,wegfan"
     )]
     pub mirror_priority: Vec<Mirror>,
 
@@ -52,6 +52,8 @@ pub enum Mirror {
     Wegfan,
     /// North America.
     Otobot,
+    /// France.
+    RisingSunLight,
 }
 
 impl Mirror {
@@ -76,6 +78,10 @@ impl Mirror {
             Mirror::Otobot => {
                 format!("https://banana-mirror-mods.celestemods.com/{}.zip", gbid)
             }
+            Mirror::RisingSunLight => format!(
+                "https://library.risingsunlight.dev/celeste/mods/{}.zip",
+                gbid
+            ),
         }
     }
 }
