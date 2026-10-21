@@ -81,7 +81,7 @@ impl Mirror {
             }
             Mirror::RisingSunLight => format!(
                 "https://library.risingsunlight.dev/celeste/mods/{}.zip",
-                gbid
+                mirror_name
             ),
         }
     }
