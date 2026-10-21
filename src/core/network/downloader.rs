@@ -1,4 +1,4 @@
-use std::{fmt::Display, path::Path, str::FromStr, sync::Arc, time::Duration};
+use std::{path::Path, str::FromStr, sync::Arc, time::Duration};
 
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar};
@@ -56,8 +56,8 @@ pub async fn download_all(
 /// Metadata of target mod to be downloaded.
 #[derive(Debug, Clone)]
 pub struct DownloadFile {
-    /// Original download URL for the mod.
-    url: DownloadUrl,
+    /// Mirror name of the mod defined in `everest_update.yaml`.
+    mirror_name: String,
     /// A name of the mod. Used for file name.
     name: FileStem,
     /// File size used for the progress bar.
@@ -67,8 +67,8 @@ pub struct DownloadFile {
 }
 
 impl DownloadFile {
-    fn url(&self) -> &DownloadUrl {
-        &self.url
+    fn mirror_name(&self) -> &str {
+        &self.mirror_name
     }
     fn name(&self) -> &str {
         &self.name.0
@@ -84,8 +84,6 @@ impl DownloadFile {
 #[derive(Debug, thiserror::Error)]
 pub enum ParseDownloadFileError {
     #[error(transparent)]
-    Url(#[from] ParseUrlError),
-    #[error(transparent)]
     Name(#[from] ParseNameError),
     #[error(transparent)]
     Checksum(#[from] ParseChecksumError),
@@ -95,11 +93,11 @@ impl TryFrom<&UpdateContext> for DownloadFile {
     type Error = ParseDownloadFileError;
 
     fn try_from(value: &UpdateContext) -> Result<Self, Self::Error> {
-        let url = DownloadUrl::from_str(value.url())?;
+        let mirror_name = value.mirror_name();
         let name = FileStem::from_str(value.name())?;
 
         Ok(Self {
-            url,
+            mirror_name: mirror_name.to_string(),
             name,
             size: value.size(),
             checksums: value.checksums().to_owned(),
@@ -111,7 +109,7 @@ impl TryFrom<(String, Entry)> for DownloadFile {
     type Error = ParseDownloadFileError;
 
     fn try_from((name, entry): (String, Entry)) -> Result<Self, Self::Error> {
-        let url = DownloadUrl::from_str(entry.url())?;
+        let mirror_name = entry.mirror_name();
         let name = FileStem::from_str(&name)?;
         let checksums = entry
             .checksums()
@@ -120,105 +118,11 @@ impl TryFrom<(String, Entry)> for DownloadFile {
             .collect::<Result<Checksums, _>>()?;
 
         Ok(Self {
-            url,
+            mirror_name: mirror_name.to_string(),
             name,
             size: entry.file_size(),
             checksums,
         })
-    }
-}
-
-/// Download URL of the mod. This is the original form used in the GameBanana.
-///
-/// Valid form:
-/// `https://gamebanana.com/mmdl/{ID}`: ID should be parsed as unsigned 32 bit integer.
-#[derive(Debug, Clone)]
-pub(crate) struct DownloadUrl {
-    raw: String,
-    id: u32,
-}
-
-impl DownloadUrl {
-    const PREFIX: &str = "https://gamebanana.com/mmdl/";
-
-    pub fn raw(&self) -> &str {
-        &self.raw
-    }
-
-    pub fn gbid(&self) -> u32 {
-        self.id
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum ParseUrlError {
-    #[error(
-        "last path segment of URL must be a positive integer up to {}",
-        u32::MAX
-    )]
-    InvalidId(#[from] std::num::ParseIntError),
-    #[error(
-        "invalid download URL: must start with `https://gamebanana.com/mmdl/` followed only by a numeric ID"
-    )]
-    InvalidUrl,
-}
-
-impl FromStr for DownloadUrl {
-    type Err = ParseUrlError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let id_str = s
-            .strip_prefix(Self::PREFIX)
-            .ok_or(ParseUrlError::InvalidUrl)?;
-        let id = id_str.parse::<u32>()?;
-
-        Ok(DownloadUrl {
-            raw: s.to_string(),
-            id,
-        })
-    }
-}
-
-impl Display for DownloadUrl {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.raw())
-    }
-}
-
-#[cfg(test)]
-mod tests_download_url {
-    use super::*;
-
-    #[test]
-    fn test_parse_valid_url() {
-        let input = "https://gamebanana.com/mmdl/12345";
-        let result = DownloadUrl::from_str(input);
-
-        assert!(result.is_ok());
-        let download_url = result.unwrap();
-        assert_eq!(download_url.gbid(), 12345);
-        assert_eq!(download_url.raw(), input);
-    }
-
-    #[test]
-    fn test_parse_invalid_prefix() {
-        let input = "https://google.com/12345";
-        let result = DownloadUrl::from_str(input);
-
-        assert!(matches!(result, Err(ParseUrlError::InvalidUrl)));
-    }
-
-    #[test]
-    fn test_parse_invalid_id() {
-        assert!(matches!(
-            DownloadUrl::from_str("https://gamebanana.com/mmdl/abc"),
-            Err(ParseUrlError::InvalidId(_))
-        ));
-
-        assert!(matches!(
-            DownloadUrl::from_str("https://gamebanana.com/mmdl/4294967296"),
-            Err(ParseUrlError::InvalidId(_))
-        ));
     }
 }
 
@@ -289,7 +193,7 @@ impl ModDownloader {
 
         let mut errors = Vec::new();
 
-        let urls = &self.mirror_priority.resolve(item.url());
+        let urls = &self.mirror_priority.resolve(item.mirror_name());
 
         for url in urls {
             match self.download(url, item, dest, pb).await {

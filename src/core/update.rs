@@ -48,7 +48,7 @@ pub struct UpdateContext {
     available_version: String,
     inode: u64,
     name: String,
-    url: String,
+    mirror_name: String,
     size: u64,
     checksums: Checksums,
 }
@@ -71,7 +71,7 @@ impl UpdateContext {
             available_version: entry.version().to_string(),
             inode,
             name,
-            url: entry.url().to_string(),
+            mirror_name: entry.mirror_name().to_string(),
             size: entry.file_size(),
             checksums,
         })
@@ -80,8 +80,8 @@ impl UpdateContext {
     pub fn inode(&self) -> u64 {
         self.inode
     }
-    pub fn url(&self) -> &str {
-        &self.url
+    pub fn mirror_name(&self) -> &str {
+        &self.mirror_name
     }
     pub fn name(&self) -> &str {
         &self.name

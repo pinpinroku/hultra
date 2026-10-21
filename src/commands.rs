@@ -7,8 +7,6 @@ use std::collections::HashSet;
 
 use clap::{Args, ValueEnum};
 
-use crate::core::network::downloader::DownloadUrl;
-
 pub mod everest;
 pub mod install;
 pub mod list;
@@ -57,26 +55,29 @@ pub enum Mirror {
 }
 
 impl Mirror {
-    /// Generates the full mirror URL for a given GameBanana ID.
-    fn url_for_id(&self, gbid: u32) -> String {
+    /// Generates the full mirror URL for a given mirror name.
+    fn url_for_name(&self, mirror_name: &str) -> String {
         match *self {
             Mirror::Gb => {
-                format!("https://gamebanana.com/mmdl/{}", gbid)
+                format!("https://gamebanana.com/mmdl/{}", mirror_name)
             }
             Mirror::Jade => {
                 format!(
                     "https://celestemodupdater.0x0a.de/banana-mirror/{}.zip",
-                    gbid
+                    mirror_name
                 )
             }
             Mirror::Wegfan => {
                 format!(
                     "https://celeste.weg.fan/api/v2/download/gamebanana-files/{}",
-                    gbid
+                    mirror_name
                 )
             }
             Mirror::Otobot => {
-                format!("https://banana-mirror-mods.celestemods.com/{}.zip", gbid)
+                format!(
+                    "https://banana-mirror-mods.celestemods.com/{}.zip",
+                    mirror_name
+                )
             }
             Mirror::RisingSunLight => format!(
                 "https://library.risingsunlight.dev/celeste/mods/{}.zip",
@@ -104,34 +105,30 @@ impl Mirrors {
     ///
     /// ```
     /// let mirrors = vec![Mirror::Gb, Mirror::Jade, Mirror::Wegfan];
-    /// let urls = mirrors.resolve("https://gamebanan.com/mmdl/123456");
+    /// let urls = mirrors.resolve("123456");
     /// for url in urls {
     ///     println!("URL: {}", url)
     /// }
     /// ```
-    pub fn resolve(&self, url: &DownloadUrl) -> Vec<String> {
+    pub fn resolve(&self, mirror_name: &str) -> Vec<String> {
         // NOTE retains order while removing duplicates
         let mut seen = HashSet::new();
         self.0
             .iter()
             .filter(|x| seen.insert(*x))
-            .map(|mirror| mirror.url_for_id(url.gbid()))
+            .map(|mirror| mirror.url_for_name(mirror_name))
             .collect()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
 
     #[test]
     fn test_resolve() {
-        let url = DownloadUrl::from_str("https://gamebanana.com/mmdl/1298450")
-            .expect("should be parsed as this type");
         let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Gb, Mirror::Jade]);
-        let result = mirrors.resolve(&url);
+        let result = mirrors.resolve("1298450");
         assert_eq!(result.len(), 3, "should return three URLs");
         assert_eq!(
             result.first().unwrap(),
@@ -141,10 +138,8 @@ mod tests {
 
     #[test]
     fn test_resolve_duplicate_entries() {
-        let url = DownloadUrl::from_str("https://gamebanana.com/mmdl/1298450")
-            .expect("should be parsed as this type");
         let mirrors: Mirrors = Mirrors(vec![Mirror::Otobot, Mirror::Otobot, Mirror::Jade]);
-        let result = mirrors.resolve(&url);
+        let result = mirrors.resolve("1298450");
         assert_eq!(result.len(), 2, "should return only two URLs");
         assert_eq!(
             result.first().unwrap(),
