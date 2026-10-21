@@ -28,23 +28,20 @@ pub struct Entry {
     /// Version string. This value may not follow any specific versioning scheme. Do not expect it to be SemVer.
     #[serde(rename = "Version")]
     version: String,
-    /// Download link for the mod file.
-    #[serde(rename = "URL")]
-    url: String,
     /// File size of the mod file, a.k.a. `Content-Length`.
     #[serde(rename = "Size")]
     file_size: u64,
     /// XxHash checksums for the file. (e.g. "f437bf0515368130")
     #[serde(rename = "xxHash")]
     checksums: Vec<String>,
+    /// Mirror name of the mod. Same as GameBananaFileId.
+    #[serde(rename = "MirrorName")]
+    mirror_name: String,
 }
 
 impl Entry {
     pub fn version(&self) -> &str {
         &self.version
-    }
-    pub fn url(&self) -> &str {
-        &self.url
     }
     pub fn file_size(&self) -> u64 {
         self.file_size
@@ -55,6 +52,9 @@ impl Entry {
     pub fn file_id(&self) -> u32 {
         // FIXME: Remove `.unwrap()`
         self.file_id.parse::<u32>().unwrap()
+    }
+    pub fn mirror_name(&self) -> &str {
+        &self.mirror_name
     }
 }
 
@@ -123,7 +123,7 @@ mod tests_registry {
 
     use super::*;
 
-    const YAML_BYTES: &[u8; 607] = br#"
+    const YAML_BYTES: &[u8; 550] = br#"
 puppyposting:
   GameBananaType: Mod
   Version: 1.1.0
@@ -132,7 +132,7 @@ puppyposting:
   GameBananaFileId: '1520739'
   xxHash:
   - 7f4d96733b93c52c
-  URL: https://gamebanana.com/mmdl/1520739
+  MirrorName: '1520739'
 BreezeContest:
   GameBananaType: Mod
   Version: 1.1.2
@@ -141,7 +141,7 @@ BreezeContest:
   GameBananaFileId: '1539722'
   xxHash:
   - e4d62f4733631949
-  URL: https://gamebanana.com/mmdl/1539722
+  MirrorName: '1539722'
 BreezeContestAudio:
   GameBananaType: Mod
   Version: 1.0.1
@@ -150,7 +150,7 @@ BreezeContestAudio:
   GameBananaFileId: '1318934'
   xxHash:
   - de98a344ea44aea4
-  URL: https://gamebanana.com/mmdl/1318934
+  MirrorName: '1318934'
 "#;
 
     fn load_registry_from_yaml() -> EverestUpdateYaml {
@@ -163,7 +163,7 @@ BreezeContestAudio:
         let mods = registry.entries;
         let target = mods.get("puppyposting");
         assert!(target.is_some_and(|mod_info| {
-            mod_info.file_id() == 1520739 && mod_info.url == "https://gamebanana.com/mmdl/1520739"
+            mod_info.file_id() == 1520739 && mod_info.mirror_name == "1520739"
         }));
     }
 
