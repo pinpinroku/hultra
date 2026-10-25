@@ -27,7 +27,7 @@ A command-line installer and updater for Celeste mods on Linux.
 - **Seamless Mod Management**: Easily manage mods directly from the terminal.
 - **Comprehensive Mod Listing**: View all installed mods along with their names and versions at a glance.
 - **Blazingly Fast Update**: Update your installed mods more faster than in-game update.
-- **Install Mods by URL**: Just type the URL of the mod page to install the mod. All missing dependencies are resolved automatically.
+- **Install Mods by URL**: Copy & paste the download URL to install the mod. All missing dependencies are resolved automatically.
 - **Asynchronous Downloads**: Experience reduced total download times, lower memory usage, and faster checksum verifications for a smoother experience.
 
 ---
@@ -194,7 +194,7 @@ Options can be used for commands: `install` and `update`.
 
 ### `-p, --mirror-priority` \<MIRROR\>
 
-Mirror priority can be specified by a comma-separated list. Default is "otobot,gb,jade,wegfan".
+Mirror priority can be specified by a comma-separated list. Default is "otobot,risingsunlight,gb,jade,wegfan".
 
 | name    | location                      |
 |---------|-------------------------------|
@@ -202,6 +202,7 @@ Mirror priority can be specified by a comma-separated list. Default is "otobot,g
 | jade    | Germany                       |
 | wegfan  | China                         |
 | otobot  | North America                 |
+| risingsunlight | France                 |
 
 If the download from the current server fails, the application will automatically fall back to the next server in the priority list to retry the download.
 
