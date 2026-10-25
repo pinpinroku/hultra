@@ -111,11 +111,25 @@ hultra install https://gamebanana.com/mods/download/150453#FileInfo_1247390
 hultra install https://gamebanana.com/mods/download/150453#FileInfo_1247390 https://gamebanana.com/mods/download/641987#FileInfo_1607057
 ```
 
-Get the mod file URL:
+Get the mod file URL in GameBanana:
 
 1. Open the page of any mod you want to download in GameBanana.
 2. In the Files section below the description, copy the link behind the `Manual Download` button.
 3. Alternatively, click `Manual Download` and copy the URL of the page it takes you to.
+
+You can also use various download URLs of GameBanana mirrors.
+
+Allowed patterns:
+- `https://celestemodupdater.0x0a.de/banana-mirror/\<id\>.zip`
+- `https://celeste.weg.fan/api/v2/download/gamebanana-files/\<id\>`
+- `https://banana-mirror-mods.celestemods.com/\<id\>.zip`
+- `https://library.risingsunlight.dev/celeste/mods/\<id\>.zip`
+- `https://gamebanana.com/mmdl/\<id\>`
+- `https://gamebanana.com/mods/download/\<gbid\>#FileInfo_\<id\>`
+
+You can get mirror URLs in [Banana Mirror Browser](https://maddie480.ovh/celeste/banana-mirror-browser) maintained by `maddie480`. Click the `Download` button, then in the popup that appears, right-click the `Download` button and copy the link.
+
+> You can also specify a mix of multiple mirror URLs (domains). However, downloads will be prioritized according to the mirror specified by the `--mirror-priority` option. Regardless of which URL is used, all URLs are converted to the priority 1 URL before the download is executed.
 
 ## Shell Completions
 
