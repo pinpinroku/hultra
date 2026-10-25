@@ -147,7 +147,7 @@ $ hultra generate-completion zsh > _hultra
 $ hultra generate-completion fish > hultra.fish
 ```
 
-### Installtion
+### Installation
 To enable completions, move the generated file to the appropriate directory or source it in your shell configuration.
 
 **Bash**

@@ -121,9 +121,9 @@ enum Error {
     #[error("failed to extract Everest to the root directory")]
     Archive(#[from] archive::ExtractError),
     #[error(
-        "downloaded file does not have exepected file size: expected: {expected}, actual: {actual} "
+        "downloaded file does not have expected file size: expected: {expected}, actual: {actual} "
     )]
-    FileSizeMisMatch { expected: u64, actual: u64 },
+    FileSizeMissMatch { expected: u64, actual: u64 },
 }
 
 /// Download client for Everest update.
@@ -178,7 +178,7 @@ impl EverestDownloader {
         file.flush().await?;
 
         if downloaded != resource.filesize() {
-            return Err(Error::FileSizeMisMatch {
+            return Err(Error::FileSizeMissMatch {
                 expected: resource.filesize(),
                 actual: downloaded,
             });
