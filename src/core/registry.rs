@@ -20,11 +20,6 @@ pub struct EverestUpdateYaml {
 /// Metadata of the mod.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Entry {
-    /// The file identifier.
-    ///
-    /// Previously defined as `id`; renamed to `file_id` in new API.
-    #[serde(rename = "GameBananaFileId")]
-    file_id: String,
     /// Version string. This value may not follow any specific versioning scheme. Do not expect it to be SemVer.
     #[serde(rename = "Version")]
     version: String,
@@ -49,12 +44,8 @@ impl Entry {
     pub fn checksums(&self) -> &[String] {
         &self.checksums
     }
-    pub fn file_id(&self) -> u32 {
-        // FIXME: Remove `.unwrap()`
-        self.file_id.parse::<u32>().unwrap()
-    }
-    pub fn mirror_name(&self) -> &str {
-        &self.mirror_name
+    pub fn mirror_name(&self) -> u32 {
+        self.mirror_name.parse::<u32>().unwrap()
     }
 }
 
@@ -66,7 +57,7 @@ impl EverestUpdateYaml {
     pub fn get_names_by_ids(&self, ids: &HashSet<u32>) -> HashSet<String> {
         self.entries
             .iter()
-            .filter(|(_, e)| ids.contains(&e.file_id()))
+            .filter(|(_, e)| ids.contains(&e.mirror_name()))
             .map(|(n, _)| n.to_owned())
             .collect()
     }
@@ -123,31 +114,25 @@ mod tests_registry {
 
     use super::*;
 
-    const YAML_BYTES: &[u8; 550] = br#"
+    const YAML_BYTES: &[u8; 394] = br#"
 puppyposting:
-  GameBananaType: Mod
   Version: 1.1.0
   LastUpdate: 1758235322
   Size: 13937408
-  GameBananaFileId: '1520739'
   xxHash:
   - 7f4d96733b93c52c
   MirrorName: '1520739'
 BreezeContest:
-  GameBananaType: Mod
   Version: 1.1.2
   LastUpdate: 1760568856
   Size: 234447819
-  GameBananaFileId: '1539722'
   xxHash:
   - e4d62f4733631949
   MirrorName: '1539722'
 BreezeContestAudio:
-  GameBananaType: Mod
   Version: 1.0.1
   LastUpdate: 1731192314
   Size: 707675460
-  GameBananaFileId: '1318934'
   xxHash:
   - de98a344ea44aea4
   MirrorName: '1318934'
@@ -163,7 +148,7 @@ BreezeContestAudio:
         let mods = registry.entries;
         let target = mods.get("puppyposting");
         assert!(target.is_some_and(|mod_info| {
-            mod_info.file_id() == 1520739 && mod_info.mirror_name == "1520739"
+            mod_info.mirror_name() == 1520739 && mod_info.mirror_name == "1520739"
         }));
     }
 
