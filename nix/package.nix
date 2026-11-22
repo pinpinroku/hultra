@@ -17,12 +17,15 @@ rustPlatform.buildRustPackage {
 
   src = lib.fileset.toSource {
     root = ../.;
-    fileset = lib.fileset.unions [
-      ../Cargo.toml
-      ../Cargo.lock
-      ../src
-      ../zip-finder
-    ];
+    fileset = lib.fileset.difference ../. (lib.fileset.unions [
+      ../.github
+      ../nix
+      ../flake.nix
+      ../flake.lock
+      ../.gitignore
+      ../CHANGELOG.md
+      ../CONTRIBUTING.md
+    ]);
   };
 
   cargoLock.lockFile = ../Cargo.lock;
