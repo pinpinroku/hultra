@@ -55,7 +55,65 @@ If you have rust installed on your machine, just run following command:
 cargo install --locked --git https://github.com/pinpinroku/hultra
 ```
 
-This will automatically install the binary in ~/.cargo/bin, so you can use it immediately without hussle.
+This will automatically install the binary in ~/.cargo/bin, so you can use it immediately without hustle.
+
+### Using Nix
+
+#### Try without installing
+
+```bash
+nix run github:pinpinroku/hultra -- --help
+nix run  github:pinpinroku/hultra -- list
+```
+
+#### Add to your profile
+
+```bash
+nix profile add github:pinpinroku/hultra
+```
+
+#### Add to your own flake
+
+Add hultra as an input. Making it follow your nixpkgs is optional but avoids pulling in a second copy:
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    hultra = {
+      url = "github:pinpinroku/hultra";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
+}
+```
+Then use the package in your NixOS configuration:
+
+```nix
+{ pkgs, inputs, ... }:
+{
+  environment.systemPackages = [
+    inputs.hultra.packages.${pkgs.stdenv.hostPlatform.system}.default
+  ];
+}
+```
+
+To use in home-manager replace "environment.systemPackages" with "home.packages"
+
+#### Using the overlay
+
+The flake also exports an overlay that adds hultra to pkgs. It builds hultra with your own nixpkgs, so no "follows" is needed.
+
+```nix
+{ pkgs, inputs, ... }:
+{
+  nixpkgs.overlays = [ inputs.hultra.overlays.default ];
+
+  environment.systemPackages = [ pkgs.hultra ];
+}
+```
+
+To use in home-manager replace "environment.systemPackages" with "home.packages"
 
 ### Build yourself
 
@@ -127,7 +185,7 @@ Allowed patterns:
 - `https://gamebanana.com/mmdl/\<id\>`
 - `https://gamebanana.com/mods/download/\<gbid\>#FileInfo_\<id\>`
 
-You can get mirror URLs in [Banana Mirror Browser](https://maddie480.ovh/celeste/banana-mirror-browser) maintained by `maddie480`. Click the `Download` button, then in the popup that appears, right-click the `Download` button and copy the link.
+You can get mirror URLs in [Banana Mirror Browser](https://maddie480.ovh/celeste/banana-mirror-browser) maintained by `maddie480`. Click the `Download` button, then in the pop-up that appears, right-click the `Download` button and copy the link.
 
 > You can also specify a mix of multiple mirror URLs (domains). However, downloads will be prioritized according to the mirror specified by the `--mirror-priority` option. Regardless of which URL is used, all URLs are converted to the priority 1 URL before the download is executed.
 
@@ -229,7 +287,7 @@ Limit concurrent downloads by specifying number from 1 to 6. Default to 4.
 **Memory Usage & Privacy**
 
 By default, this tool buffers downloads in memory to ensure:
-1. **Performance:** Avoiding slow I/O overhead on filesystems, especially when `tmpfs` and `zram` are available.
+1. **Performance:** Avoiding slow I/O overhead on file systems, especially when `tmpfs` and `zram` are available.
 2. **Security/Privacy:** Minimizing the trace of sensitive data on physical storage.
 
 In the worst-case scenario (specific file combinations; especially audio files), memory usage can peak at ~2.2 GiB. If you want to keep memory usage low, please use the `--jobs 1` (or `-j 1`) flag to reduce the memory footprint.
