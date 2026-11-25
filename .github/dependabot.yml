@@ -16,3 +16,9 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
+
+# Enable version updates for the Nix flake
+  - package-ecosystem: "nix"
+    directory: "/"
+    schedule:
+      interval: "weekly"
